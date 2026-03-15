@@ -45,32 +45,34 @@ class PosterCard extends StatelessWidget {
               duration: const Duration(milliseconds: 150),
               child: Container(
                 width: 140,
+                height: 230,
                 margin: const EdgeInsets.only(right: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        height: 210,
-                        width: 140,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[900],
-                          border: Border.all(
-                            color: hasFocus ? const Color(0xFFDC2626) : Colors.transparent,
-                            width: 3,
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          width: 140,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[900],
+                            border: Border.all(
+                              color: hasFocus ? const Color(0xFFDC2626) : Colors.transparent,
+                              width: 3,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          borderRadius: BorderRadius.circular(8),
+                          child: _imageUrl.isEmpty
+                              ? const Center(child: Icon(Icons.movie, color: Colors.white38, size: 48))
+                              : CachedNetworkImage(
+                                  imageUrl: _imageUrl,
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+                                  errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.white38),
+                                ),
                         ),
-                        child: _imageUrl.isEmpty
-                            ? const Center(child: Icon(Icons.movie, color: Colors.white38, size: 48))
-                            : CachedNetworkImage(
-                                imageUrl: _imageUrl,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                                errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.white38),
-                              ),
                       ),
                     ),
                     const SizedBox(height: 8),

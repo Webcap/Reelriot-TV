@@ -1,6 +1,6 @@
 import 'package:caffeine_tv/env.dart';
-import 'package:caffeine_tv/screens/pairing_screen.dart';
 import 'package:caffeine_tv/screens/home_screen.dart';
+import 'package:caffeine_tv/screens/pairing_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -39,15 +39,17 @@ class CaffeineTvApp extends StatelessWidget {
   }
 }
 
+/// Login is optional by default. Set REQUIRE_LOGIN=true in .env to require pairing before home.
 class _AuthGate extends StatelessWidget {
   const _AuthGate();
 
   @override
   Widget build(BuildContext context) {
-    final session = Supabase.instance.client.auth.currentSession;
-    if (session != null) {
-      return const HomeScreen();
+    if (requireLogin) {
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session != null) return const HomeScreen();
+      return const PairingScreen();
     }
-    return const PairingScreen();
+    return const HomeScreen();
   }
 }
