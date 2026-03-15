@@ -2,10 +2,17 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:caffeine_tv/env.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+void _log(String message, [Object? detail]) {
+  if (kDebugMode) {
+    debugPrint('[Pairing] $message${detail != null ? ': $detail' : ''}');
+  }
+}
 
 class PairingScreen extends StatefulWidget {
   const PairingScreen({super.key});
@@ -39,14 +46,20 @@ class _PairingScreenState extends State<PairingScreen> {
       _code = null;
     });
     final base = caffeineApiUrl.replaceFirst(RegExp(r'/$'), '');
+    final url = '$base/tv/pair';
+    _log('Requesting pairing code', url);
     try {
       final res = await http.post(
-        Uri.parse('$base/tv/pair'),
+        Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
+        body: '{}',
       ).timeout(const Duration(seconds: 10));
+      _log('POST /tv/pair response', 'status=${res.statusCode} body=${res.body.length} chars');
       if (res.statusCode != 200) {
+        final body = res.body.length > 80 ? '${res.body.substring(0, 80)}…' : res.body;
+        _log('Code request failed', '${res.statusCode} $body');
         setState(() {
-          _error = 'Could not get code';
+          _error = 'Could not get code (${res.statusCode})${body.isNotEmpty ? ': $body' : ''}';
           _loading = false;
         });
         return;
@@ -54,21 +67,25 @@ class _PairingScreenState extends State<PairingScreen> {
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       final code = data['code'] as String?;
       if (code == null || code.isEmpty) {
+        _log('Invalid response', 'missing or empty code, keys=${data.keys.toList()}');
         setState(() {
           _error = 'Invalid response';
           _loading = false;
         });
         return;
       }
+      _log('Code received', code);
       setState(() {
         _code = code;
         _loading = false;
         _error = null;
       });
       _startPolling(code);
-    } catch (e) {
+    } catch (e, stack) {
+      _log('Network/request error', e);
+      if (kDebugMode) debugPrint(stack.toString());
       setState(() {
-        _error = 'Network error';
+        _error = 'Network error: ${e is Exception ? e.toString().replaceFirst('Exception: ', '') : e}';
         _loading = false;
       });
     }
@@ -77,30 +94,42 @@ class _PairingScreenState extends State<PairingScreen> {
   void _startPolling(String code) {
     _pollTimer?.cancel();
     final base = caffeineApiUrl.replaceFirst(RegExp(r'/$'), '');
+    _log('Started polling for code', code);
     void poll() async {
       try {
         final res = await http.get(
           Uri.parse('$base/tv/pair?code=${Uri.encodeComponent(code)}'),
         ).timeout(const Duration(seconds: 8));
-        if (res.statusCode != 200) return;
+        if (res.statusCode != 200) {
+          _log('Poll non-200', res.statusCode);
+          return;
+        }
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         if (data['linked'] == true) {
+          _log('Linked', 'received tokens');
           _pollTimer?.cancel();
           final refreshToken = data['refresh_token'] as String?;
           if (refreshToken != null && refreshToken.isNotEmpty && mounted) {
             try {
               await Supabase.instance.client.auth.setSession(refreshToken);
               if (mounted) _onLinked();
-            } catch (_) {}
+            } catch (e) {
+              _log('setSession failed', e);
+            }
+          } else {
+            _log('Linked but no refresh_token in response');
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        _log('Poll error', e);
+      }
     }
     poll();
     _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) => poll());
   }
 
   void _onLinked() {
+    _log('Navigating to home');
     Navigator.of(context).pushReplacementNamed('/home');
   }
 
@@ -124,22 +153,88 @@ class _PairingScreenState extends State<PairingScreen> {
               ),
               const SizedBox(height: 24),
               if (_loading)
-                const CircularProgressIndicator(color: Colors.white54)
+                Column(
+                  children: [
+                    const Text(
+                      'Connecting to sign-in service…',
+                      style: TextStyle(color: Colors.white70, fontSize: 18),
+                    ),
+                    const SizedBox(height: 16),
+                    const CircularProgressIndicator(color: Colors.white54),
+                  ],
+                )
               else if (_error != null)
                 Column(
                   children: [
-                    Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 18)),
+                    Text(
+                      _error!,
+                      style: const TextStyle(color: Colors.red, fontSize: 18),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Make sure the Caffeine API is reachable. If using the production API, check your connection.',
+                      style: TextStyle(color: Colors.white54, fontSize: 14),
+                      textAlign: TextAlign.center,
+                    ),
                     const SizedBox(height: 16),
                     _buildButton('Try again', _createCode),
                   ],
                 )
               else if (_code != null) ...[
                 const Text(
-                  'Enter this code on your phone or computer:',
-                  style: TextStyle(color: Colors.white70, fontSize: 18),
-                  textAlign: TextAlign.center,
+                  'How to sign in',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    '1. On your phone or computer, open the Caffeine pairing page (link below).\n'
+                    '2. Sign in with your Caffeine account if you aren’t already.\n'
+                    '3. Enter the code shown below on that page.',
+                    style: TextStyle(color: Colors.white70, fontSize: 16),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
                 const SizedBox(height: 20),
+                if (pairingPageUrl.isNotEmpty) ...[
+                  const Text(
+                    'Open this link:',
+                    style: TextStyle(color: Colors.white54, fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: SelectableText(
+                      pairingPageUrl,
+                      style: const TextStyle(
+                        color: Color(0xFF60A5FA),
+                        fontSize: 16,
+                        decoration: TextDecoration.underline,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ] else
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 24),
+                    child: Text(
+                      'Pairing page URL not set. Add PAIRING_PAGE_URL to .env with the page where you enter the code (e.g. your caffeine-admin tv-pair page).',
+                      style: TextStyle(color: Colors.white54, fontSize: 14),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                const Text(
+                  'Your code:',
+                  style: TextStyle(color: Colors.white70, fontSize: 18),
+                ),
+                const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
                   decoration: BoxDecoration(
@@ -157,25 +252,6 @@ class _PairingScreenState extends State<PairingScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
-                if (pairingPageUrl.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: Text(
-                      'Go to: $pairingPageUrl',
-                      style: const TextStyle(color: Colors.white54, fontSize: 16),
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                else
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 32),
-                    child: Text(
-                      'Open the Caffeine pairing page on your phone or computer and enter this code.',
-                      style: TextStyle(color: Colors.white54, fontSize: 16),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
                 const SizedBox(height: 24),
                 _buildButton('Get new code', _createCode),
               ],
