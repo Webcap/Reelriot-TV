@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:better_player/better_player.dart';
 import 'package:caffeine_tv/services/watch_history_service.dart';
 import 'package:caffeine_tv/widgets/player_settings_overlay.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:async';
 
 class PlayerScreen extends StatefulWidget {
@@ -37,6 +38,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    WakelockPlus.enable(); // Keep screen awake during playback
     _setupController();
     _startProgressTimer();
   }
@@ -131,6 +133,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _saveTimer?.cancel();
     _saveCurrentProgress();
     _controller.dispose();
+    WakelockPlus.disable(); // Allow screen to sleep again
     super.dispose();
   }
 

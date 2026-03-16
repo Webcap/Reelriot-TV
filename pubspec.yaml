@@ -41,6 +41,7 @@ dependencies:
   supabase_flutter: ^2.3.2
   flutter_dotenv: ^6.0.0
   shared_preferences: ^2.0.15
+  wakelock_plus: ^1.5.1
 
 dev_dependencies:
   flutter_test:
