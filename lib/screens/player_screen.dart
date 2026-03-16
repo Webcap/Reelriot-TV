@@ -21,20 +21,38 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _controller = BetterPlayerController(
       BetterPlayerConfiguration(
         autoPlay: true,
-        aspectRatio: 16 / 9,
-        controlsConfiguration: const BetterPlayerControlsConfiguration(
+        fit: BoxFit.contain,
+        expandToFill: true,
+        controlsConfiguration: BetterPlayerControlsConfiguration(
           enablePlayPause: true,
           enableMute: true,
           enableFullscreen: true,
           enableProgressBar: true,
           enableSkips: false,
+          name: widget.title,
         ),
       ),
       betterPlayerDataSource: BetterPlayerDataSource(
         BetterPlayerDataSourceType.network,
         widget.url,
+        videoFormat: widget.url.contains('m3u8') || widget.url.contains('playlist') 
+            ? BetterPlayerVideoFormat.hls 
+            : null,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': _getReferer(widget.url),
+        },
       ),
     );
+  }
+
+  String _getReferer(String url) {
+    try {
+      final uri = Uri.parse(url);
+      return '${uri.scheme}://${uri.host}/';
+    } catch (_) {
+      return '';
+    }
   }
 
   @override
@@ -60,36 +78,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                    Expanded(
-                      child: Text(
-                        widget.title,
-                        style: const TextStyle(color: Colors.white, fontSize: 18),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: BetterPlayer(controller: _controller),
-                ),
-              ),
-            ],
-          ),
-        ),
+        body: BetterPlayer(controller: _controller),
       ),
     );
   }

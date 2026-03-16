@@ -40,6 +40,18 @@ class ApiService {
     return _fetchMovieList(url);
   }
 
+  Future<core.MovieListResponse> fetchMovieRecommendations(int movieId, {int page = 1}) async {
+    final url = core.Endpoints.movieRecommendationsUrl(tmdbBaseUrl, _tmdbKey, movieId, page, language);
+    return _fetchMovieList(url);
+  }
+
+  Future<core.CreditsResponse> fetchMovieCredits(int movieId) async {
+    final url = core.Endpoints.movieCreditsUrl(tmdbBaseUrl, _tmdbKey, movieId, language);
+    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) throw Exception('Failed to load movie credits');
+    return core.CreditsResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
   Future<core.MovieDetail> fetchMovieDetail(int movieId) async {
     final url = core.Endpoints.movieDetailsUrl(tmdbBaseUrl, _tmdbKey, movieId, language);
     final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
@@ -60,6 +72,18 @@ class ApiService {
   Future<core.TvListResponse> fetchTopRatedTv() async {
     final url = core.Endpoints.topRatedTvUrl(tmdbBaseUrl, _tmdbKey, language);
     return _fetchTvList(url);
+  }
+
+  Future<core.TvListResponse> fetchTvRecommendations(int tvId, {int page = 1}) async {
+    final url = core.Endpoints.tvRecommendationsUrl(tmdbBaseUrl, _tmdbKey, tvId, page, language);
+    return _fetchTvList(url);
+  }
+
+  Future<core.CreditsResponse> fetchTvCredits(int tvId) async {
+    final url = core.Endpoints.tvCreditsUrl(tmdbBaseUrl, _tmdbKey, tvId, language);
+    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) throw Exception('Failed to load TV credits');
+    return core.CreditsResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
   Future<core.TvShowDetail> fetchTvDetail(int tvId) async {

@@ -1,6 +1,6 @@
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:caffeine_tv/constants.dart';
-import 'package:caffeine_tv/screens/player_screen.dart';
+import 'package:caffeine_tv/screens/video_loader_screen.dart';
 import 'package:caffeine_tv/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -18,6 +18,8 @@ class MovieDetailScreen extends StatefulWidget {
 class _MovieDetailScreenState extends State<MovieDetailScreen> {
   final ApiService _api = ApiService();
   MovieDetail? _movie;
+  List<MovieListItem>? _recommendations;
+  CreditsResponse? _credits;
   String? _error;
 
   @override
@@ -29,7 +31,22 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   Future<void> _load() async {
     try {
       final m = await _api.fetchMovieDetail(widget.movieId);
-      if (mounted) setState(() => _movie = m);
+      List<MovieListItem>? recs;
+      CreditsResponse? credits;
+      
+      // Fetch recommendations and credits in parallel
+      await Future.wait([
+        _api.fetchMovieRecommendations(widget.movieId).then((r) => recs = r.results).catchError((_) => recs = []),
+        _api.fetchMovieCredits(widget.movieId).then((c) => credits = c).catchError((_) => credits = CreditsResponse(id: widget.movieId, cast: [])),
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _movie = m;
+          _recommendations = recs;
+          _credits = credits;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     }
@@ -114,10 +131,11 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                     ),
                   const SizedBox(width: 32),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                         Text(
                           m.title ?? 'Movie',
                           style: const TextStyle(
@@ -138,8 +156,6 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                           Text(
                             m.overview!,
                             style: const TextStyle(color: Colors.white70, fontSize: 16, height: 1.4),
-                            maxLines: 6,
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                         const SizedBox(height: 32),
@@ -164,7 +180,166 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                             ),
                           ),
                         ),
+                        if (_credits != null && _credits!.cast.isNotEmpty) ...[
+                          const SizedBox(height: 32),
+                          const Text(
+                            'Cast',
+                            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            height: 180,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: _credits!.cast.length,
+                              itemBuilder: (context, index) {
+                                final actor = _credits!.cast[index];
+                                return Container(
+                                  width: 100,
+                                  margin: const EdgeInsets.only(right: 16),
+                                  child: Column(
+                                    children: [
+                                      ClipOval(
+                                        child: actor.profilePath != null
+                                            ? CachedNetworkImage(
+                                                imageUrl: '$tmdbImageBaseUrl/w185${actor.profilePath}',
+                                                width: 80,
+                                                height: 80,
+                                                fit: BoxFit.cover,
+                                                placeholder: (context, url) => Container(color: Colors.white12),
+                                                errorWidget: (context, url, error) => Container(
+                                                  color: Colors.white12,
+                                                  child: const Icon(Icons.person, color: Colors.white54),
+                                                ),
+                                              )
+                                            : Container(
+                                                width: 80,
+                                                height: 80,
+                                                color: Colors.white12,
+                                                child: const Icon(Icons.person, color: Colors.white54),
+                                              ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        actor.name,
+                                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                        textAlign: TextAlign.center,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      if (actor.character != null)
+                                        Text(
+                                          actor.character!,
+                                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                          textAlign: TextAlign.center,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                        if (_recommendations != null && _recommendations!.isNotEmpty) ...[
+                          const SizedBox(height: 32),
+                          const Text(
+                            'Recommendations',
+                            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            height: 200,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: _recommendations!.length,
+                              itemBuilder: (context, index) {
+                                final rec = _recommendations![index];
+                                return Focus(
+                                  onKeyEvent: (_, event) {
+                                    if (event is KeyDownEvent &&
+                                        (event.logicalKey == LogicalKeyboardKey.enter ||
+                                         event.logicalKey == LogicalKeyboardKey.select)) {
+                                      Navigator.of(context).pushReplacement(
+                                        MaterialPageRoute(
+                                          builder: (context) => MovieDetailScreen(movieId: rec.id),
+                                        ),
+                                      );
+                                      return KeyEventResult.handled;
+                                    }
+                                    return KeyEventResult.ignored;
+                                  },
+                                  child: Builder(
+                                    builder: (context) {
+                                      final focused = Focus.of(context).hasFocus;
+                                      return Container(
+                                        width: 120,
+                                        margin: const EdgeInsets.only(right: 16),
+                                        child: Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            onTap: () {
+                                              Navigator.of(context).pushReplacement(
+                                                MaterialPageRoute(
+                                                  builder: (context) => MovieDetailScreen(movieId: rec.id),
+                                                ),
+                                              );
+                                            },
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Expanded(
+                                                  child: Container(
+                                                    decoration: BoxDecoration(
+                                                      borderRadius: BorderRadius.circular(8),
+                                                      border: Border.all(
+                                                        color: focused ? Colors.white : Colors.transparent,
+                                                        width: 3,
+                                                      ),
+                                                      boxShadow: focused
+                                                          ? [const BoxShadow(color: Colors.white38, blurRadius: 8)]
+                                                          : [],
+                                                    ),
+                                                    child: ClipRRect(
+                                                      borderRadius: BorderRadius.circular(5),
+                                                      child: rec.posterPath != null && rec.posterPath!.isNotEmpty
+                                                          ? CachedNetworkImage(
+                                                              imageUrl: '$tmdbImageBaseUrl/w500${rec.posterPath}',
+                                                              fit: BoxFit.cover,
+                                                              width: double.infinity,
+                                                              placeholder: (context, url) => const ColoredBox(color: Colors.white12),
+                                                              errorWidget: (context, url, error) => const ColoredBox(color: Colors.white12, child: Center(child: Icon(Icons.image, color: Colors.white54))),
+                                                            )
+                                                          : const ColoredBox(color: Colors.white12, child: Center(child: Icon(Icons.movie, color: Colors.white54))),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Text(
+                                                  rec.title ?? 'Movie',
+                                                  style: TextStyle(
+                                                    color: focused ? Colors.white : Colors.white70,
+                                                    fontSize: 14,
+                                                    fontWeight: focused ? FontWeight.bold : FontWeight.normal,
+                                                  ),
+                                                  maxLines: 2,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       ],
+                    ),
                     ),
                   ),
                 ],
@@ -176,35 +351,14 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     );
   }
 
-  void _play() async {
+  void _play() {
     if (_movie == null) return;
-    try {
-      final response = await _api.fetchMovieStream(_movie!.id);
-      if (!response.success || response.links == null || response.links!.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No stream available')),
-          );
-        }
-        return;
-      }
-      final link = response.links!.first;
-      if (mounted) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => PlayerScreen(
-              url: link.url,
-              title: _movie!.title ?? 'Movie',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Playback error: $e')),
-        );
-      }
-    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => VideoLoaderScreen(
+          movie: _movie,
+        ),
+      ),
+    );
   }
 }
