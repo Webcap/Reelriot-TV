@@ -102,7 +102,7 @@ class ApiService {
 
   Future<core.ProviderStreamResponse> fetchMovieStream(int movieId, {String provider = 'vixsrc'}) async {
     final url = core.Endpoints.streamMovieUrl(caffeineBaseUrl, provider, movieId.toString());
-    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
     if (res.statusCode != 200) throw Exception('Stream failed');
     return core.ProviderStreamResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
@@ -110,7 +110,7 @@ class ApiService {
   Future<core.ProviderStreamResponse> fetchTvStream(
       int tmdbId, int season, int episode, {String provider = 'vixsrc'}) async {
     final url = core.Endpoints.streamTvUrl(caffeineBaseUrl, provider, tmdbId.toString(), season, episode);
-    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
     if (res.statusCode != 200) throw Exception('Stream failed');
     return core.ProviderStreamResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
