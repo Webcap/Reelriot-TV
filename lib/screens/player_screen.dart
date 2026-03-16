@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:better_player/better_player.dart';
+import 'package:caffeine_tv/services/settings_service.dart';
 import 'package:caffeine_tv/services/watch_history_service.dart';
 import 'package:caffeine_tv/widgets/player_settings_overlay.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -104,6 +105,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         videoFormat: widget.url.contains('m3u8') || widget.url.contains('playlist') 
             ? BetterPlayerVideoFormat.hls 
             : null,
+        useAsmsTracks: true,
+        useAsmsAudioTracks: true,
+        useAsmsSubtitles: true,
+        preferredAudioLanguage: SettingsService().language,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Referer': _getReferer(widget.url),
