@@ -159,26 +159,32 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                           ),
                         ],
                         const SizedBox(height: 32),
-                        Focus(
-                          onKeyEvent: (_, event) {
-                            if (event is KeyDownEvent &&
-                                (event.logicalKey == LogicalKeyboardKey.enter ||
-                                    event.logicalKey == LogicalKeyboardKey.select)) {
-                              _play();
-                              return KeyEventResult.handled;
-                            }
-                            return KeyEventResult.ignored;
-                          },
-                          child: ElevatedButton.icon(
-                            onPressed: _play,
-                            icon: const Icon(Icons.play_arrow, size: 28),
-                            label: const Text('Play', style: TextStyle(fontSize: 18)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFDC2626),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                            ),
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final focused = Focus.of(context).hasFocus;
+                            return Focus(
+                              onKeyEvent: (_, event) {
+                                if (event is KeyDownEvent &&
+                                    (event.logicalKey == LogicalKeyboardKey.enter ||
+                                        event.logicalKey == LogicalKeyboardKey.select)) {
+                                  _play();
+                                  return KeyEventResult.handled;
+                                }
+                                return KeyEventResult.ignored;
+                              },
+                              child: ElevatedButton.icon(
+                                onPressed: _play,
+                                icon: const Icon(Icons.play_arrow, size: 28),
+                                label: const Text('Play', style: TextStyle(fontSize: 18)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: focused ? Colors.white : const Color(0xFFDC2626),
+                                  foregroundColor: focused ? Colors.black : Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                                  side: focused ? const BorderSide(color: Colors.white, width: 2) : BorderSide.none,
+                                ),
+                              ),
+                            );
+                          }
                         ),
                         if (_credits != null && _credits!.cast.isNotEmpty) ...[
                           const SizedBox(height: 32),
@@ -194,48 +200,60 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                               itemCount: _credits!.cast.length,
                               itemBuilder: (context, index) {
                                 final actor = _credits!.cast[index];
-                                return Container(
-                                  width: 100,
-                                  margin: const EdgeInsets.only(right: 16),
-                                  child: Column(
-                                    children: [
-                                      ClipOval(
-                                        child: actor.profilePath != null
-                                            ? CachedNetworkImage(
-                                                imageUrl: '$tmdbImageBaseUrl/w185${actor.profilePath}',
-                                                width: 80,
-                                                height: 80,
-                                                fit: BoxFit.cover,
-                                                placeholder: (context, url) => Container(color: Colors.white12),
-                                                errorWidget: (context, url, error) => Container(
-                                                  color: Colors.white12,
-                                                  child: const Icon(Icons.person, color: Colors.white54),
-                                                ),
-                                              )
-                                            : Container(
-                                                width: 80,
-                                                height: 80,
-                                                color: Colors.white12,
-                                                child: const Icon(Icons.person, color: Colors.white54),
-                                              ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        actor.name,
-                                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                                        textAlign: TextAlign.center,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      if (actor.character != null)
-                                        Text(
-                                          actor.character!,
-                                          style: const TextStyle(color: Colors.white70, fontSize: 11),
-                                          textAlign: TextAlign.center,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                return Focus(
+                                  child: Builder(
+                                    builder: (context) {
+                                      final focused = Focus.of(context).hasFocus;
+                                      return Container(
+                                        width: 100,
+                                        margin: const EdgeInsets.only(right: 16),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: focused ? Colors.white : Colors.transparent,
+                                            width: 2,
+                                          ),
+                                          color: focused ? Colors.white12 : Colors.transparent,
                                         ),
-                                    ],
+                                        padding: const EdgeInsets.all(4),
+                                        child: Column(
+                                          children: [
+                                            ClipOval(
+                                              child: actor.profilePath != null
+                                                  ? CachedNetworkImage(
+                                                      imageUrl: '$tmdbImageBaseUrl/w185${actor.profilePath}',
+                                                      width: 80,
+                                                      height: 80,
+                                                      fit: BoxFit.cover,
+                                                      placeholder: (context, url) => Container(color: Colors.white12),
+                                                      errorWidget: (context, url, error) => Container(
+                                                        color: Colors.white12,
+                                                        child: const Icon(Icons.person, color: Colors.white54),
+                                                      ),
+                                                    )
+                                                  : Container(
+                                                      width: 80,
+                                                      height: 80,
+                                                      color: Colors.white12,
+                                                      child: const Icon(Icons.person, color: Colors.white54),
+                                                    ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              actor.name,
+                                              style: TextStyle(
+                                                color: focused ? Colors.white : Colors.white70,
+                                                fontSize: 13,
+                                                fontWeight: focused ? FontWeight.bold : FontWeight.normal,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }
                                   ),
                                 );
                               },

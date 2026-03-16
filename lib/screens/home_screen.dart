@@ -55,14 +55,18 @@ class _HomeScreenState extends State<HomeScreen> {
           final tab = _tabs[i];
           final selected = _selectedIndex == i;
           return Focus(
-            onKeyEvent: (_, event) {
+            onKeyEvent: (node, event) {
               if (event is! KeyDownEvent) return KeyEventResult.ignored;
               if (event.logicalKey == LogicalKeyboardKey.arrowUp && i > 0) {
-                setState(() => _selectedIndex = i - 1);
+                FocusScope.of(context).focusInDirection(TraversalDirection.up);
                 return KeyEventResult.handled;
               }
               if (event.logicalKey == LogicalKeyboardKey.arrowDown && i < _tabs.length - 1) {
-                setState(() => _selectedIndex = i + 1);
+                FocusScope.of(context).focusInDirection(TraversalDirection.down);
+                return KeyEventResult.handled;
+              }
+              if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                FocusScope.of(context).focusInDirection(TraversalDirection.right);
                 return KeyEventResult.handled;
               }
               if (event.logicalKey == LogicalKeyboardKey.enter ||
@@ -72,28 +76,52 @@ class _HomeScreenState extends State<HomeScreen> {
               }
               return KeyEventResult.ignored;
             },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Material(
-                color: selected ? const Color(0xFFDC2626).withValues(alpha: 0.3) : Colors.transparent,
-                child: InkWell(
-                  onTap: () => setState(() => _selectedIndex = i),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(tab.icon, color: selected ? const Color(0xFFDC2626) : Colors.white70, size: 32),
-                      const SizedBox(height: 4),
-                      Text(
-                        tab.label,
-                        style: TextStyle(
-                          color: selected ? Colors.white : Colors.white70,
-                          fontSize: 12,
+            child: Builder(
+              builder: (context) {
+                final focused = Focus.of(context).hasFocus;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    decoration: BoxDecoration(
+                      color: focused 
+                        ? Colors.white12 
+                        : (selected ? const Color(0xFFDC2626).withValues(alpha: 0.1) : Colors.transparent),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: focused ? Colors.white : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                    child: InkWell(
+                      onTap: () => setState(() => _selectedIndex = i),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              tab.icon, 
+                              color: focused ? Colors.white : (selected ? const Color(0xFFDC2626) : Colors.white70), 
+                              size: 32
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              tab.label,
+                              style: TextStyle(
+                                color: focused || selected ? Colors.white : Colors.white70,
+                                fontSize: 13,
+                                fontWeight: focused || selected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
+                );
+              }
             ),
           );
         }),

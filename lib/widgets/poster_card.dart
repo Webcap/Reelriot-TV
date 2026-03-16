@@ -59,7 +59,7 @@ class PosterCard extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: Colors.grey[900],
                             border: Border.all(
-                              color: hasFocus ? const Color(0xFFDC2626) : Colors.transparent,
+                              color: hasFocus ? Colors.white : Colors.transparent,
                               width: 3,
                             ),
                             borderRadius: BorderRadius.circular(8),

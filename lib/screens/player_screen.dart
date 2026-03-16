@@ -18,11 +18,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    _setupController();
+  }
+
+  void _setupController() {
+    // We'll use a placeholder for context-dependent values initially,
+    // though BetterPlayer usually builds its own UI.
     _controller = BetterPlayerController(
       BetterPlayerConfiguration(
         autoPlay: true,
         fit: BoxFit.contain,
         expandToFill: true,
+        subtitlesConfiguration: const BetterPlayerSubtitlesConfiguration(
+          fontSize: 24, // Optimized for distance
+          fontColor: Colors.white,
+          outlineColor: Colors.black,
+        ),
         controlsConfiguration: BetterPlayerControlsConfiguration(
           enablePlayPause: true,
           enableMute: true,
@@ -30,6 +41,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
           enableProgressBar: true,
           enableSkips: false,
           name: widget.title,
+          // Marvel Red brand color from design.json
+          progressBarPlayedColor: const Color(0xFFE60000),
+          progressBarHandleColor: Colors.white,
+          progressBarBufferedColor: Colors.white30,
+          progressBarBackgroundColor: Colors.white10,
+          loadingColor: const Color(0xFFE60000),
+          controlBarColor: Colors.black45,
+          playerTheme: BetterPlayerTheme.material,
         ),
       ),
       betterPlayerDataSource: BetterPlayerDataSource(
@@ -63,17 +82,58 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Subtitles are already set to a TV-friendly size (24) in initState.
+    
     return Focus(
       autofocus: true,
-      onKeyEvent: (_, event) {
-        if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+        final key = event.logicalKey;
+
+        // Wake up controls on any remote interaction
+        _controller.setControlsVisibility(true);
+
+        // Exit keys
+        if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
           Navigator.of(context).pop();
           return KeyEventResult.handled;
         }
-        if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.goBack) {
-          Navigator.of(context).pop();
+
+        // Play / Pause
+        if (key == LogicalKeyboardKey.select ||
+            key == LogicalKeyboardKey.enter ||
+            key == LogicalKeyboardKey.space ||
+            key == LogicalKeyboardKey.mediaPlayPause) {
+          if (_controller.isPlaying() == true) {
+            _controller.pause();
+          } else {
+            _controller.play();
+          }
           return KeyEventResult.handled;
         }
+
+        // Fast Forward / Rewind (10 seconds)
+        if (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.mediaFastForward) {
+          final current = _controller.videoPlayerController?.value.position ?? Duration.zero;
+          _controller.seekTo(current + const Duration(seconds: 10));
+          return KeyEventResult.handled;
+        }
+
+        if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.mediaRewind) {
+          final current = _controller.videoPlayerController?.value.position ?? Duration.zero;
+          _controller.seekTo(current - const Duration(seconds: 10));
+          return KeyEventResult.handled;
+        }
+
+        // Show Options / Settings on Arrow Up
+        if (key == LogicalKeyboardKey.arrowUp) {
+          _controller.setControlsVisibility(true);
+          // BetterPlayer doesn't have a public 'openSettings' method easy to trigger, 
+          // but showing controls allows user to navigate to the settings icon.
+          return KeyEventResult.handled;
+        }
+
         return KeyEventResult.ignored;
       },
       child: Scaffold(

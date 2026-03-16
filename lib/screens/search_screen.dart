@@ -85,24 +85,31 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
               ),
               const SizedBox(width: 16),
-              Focus(
-                onKeyEvent: (_, event) {
-                  if (event is KeyDownEvent &&
-                      (event.logicalKey == LogicalKeyboardKey.enter ||
-                          event.logicalKey == LogicalKeyboardKey.select)) {
-                    _search();
-                    return KeyEventResult.handled;
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: ElevatedButton(
-                  onPressed: _loading ? null : _search,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFDC2626),
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Text(_loading ? 'Searching…' : 'Search'),
-                ),
+              Builder(
+                builder: (context) {
+                  final focused = Focus.of(context).hasFocus;
+                  return Focus(
+                    onKeyEvent: (_, event) {
+                      if (event is KeyDownEvent &&
+                          (event.logicalKey == LogicalKeyboardKey.enter ||
+                              event.logicalKey == LogicalKeyboardKey.select)) {
+                        _search();
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: ElevatedButton(
+                      onPressed: _loading ? null : _search,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: focused ? Colors.white : const Color(0xFFDC2626),
+                        foregroundColor: focused ? Colors.black : Colors.white,
+                        side: focused ? const BorderSide(color: Colors.white, width: 2) : BorderSide.none,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      ),
+                      child: Text(_loading ? 'Searching…' : 'Search'),
+                    ),
+                  );
+                }
               ),
             ],
           ),
