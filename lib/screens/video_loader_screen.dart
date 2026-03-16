@@ -2,6 +2,7 @@ import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'package:caffeine_tv/models/provider_load_state.dart';
 import 'package:caffeine_tv/screens/player_screen.dart';
 import 'package:caffeine_tv/services/api_service.dart';
+import 'package:caffeine_tv/services/watch_history_service.dart';
 import 'package:caffeine_tv/widgets/provider_loading_widget.dart';
 import 'package:flutter/material.dart';
 
@@ -25,6 +26,7 @@ class VideoLoaderScreen extends StatefulWidget {
 
 class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   final ApiService _api = ApiService();
+  final WatchHistoryService _historyService = WatchHistoryService();
   
   final List<Map<String, String>> _providers = [
     {'code': 'vixsrc', 'name': 'Vixsrc'},
@@ -58,6 +60,18 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
 
     for (int i = 0; i < _providers.length; i++) {
       if (!mounted) return;
+
+      // Check for existing progress before launching first provider
+      Duration? startPos;
+      if (i == 0) {
+        startPos = await _historyService.getSavedProgress(
+          mediaId!, 
+          widget.movie != null,
+          season: widget.season,
+          episode: widget.episode,
+        );
+      }
+
       final providerCode = _providers[i]['code']!;
       final providerName = _providers[i]['name']!;
 
@@ -96,6 +110,11 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
               builder: (context) => PlayerScreen(
                 url: response.links!.first.url,
                 title: widget.movie?.title ?? widget.tvShow?.name ?? 'Video',
+                item: widget.movie ?? widget.tvShow,
+                isMovie: widget.movie != null,
+                season: widget.season,
+                episode: widget.episode,
+                startPosition: startPos,
               ),
             ),
           );

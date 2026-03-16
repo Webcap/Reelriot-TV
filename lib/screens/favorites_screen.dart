@@ -6,13 +6,14 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class FavoritesScreen extends StatefulWidget {
-  const FavoritesScreen({super.key});
+  final GlobalKey<FavoritesScreenState>? favoritesKey;
+  const FavoritesScreen({super.key, this.favoritesKey});
 
   @override
-  State<FavoritesScreen> createState() => _FavoritesScreenState();
+  State<FavoritesScreen> createState() => FavoritesScreenState();
 }
 
-class _FavoritesScreenState extends State<FavoritesScreen> {
+class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliveClientMixin {
   final _supabase = Supabase.instance.client;
   List<MovieListItem> _bookmarkedMovies = [];
   List<TvListItem> _bookmarkedTv = [];
@@ -20,8 +21,15 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   String? _error;
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
+    _fetchBookmarks();
+  }
+
+  void refresh() {
     _fetchBookmarks();
   }
 
@@ -64,6 +72,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final user = _supabase.auth.currentUser;
 
     if (user == null) {

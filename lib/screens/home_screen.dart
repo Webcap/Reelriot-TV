@@ -5,6 +5,8 @@ import 'package:caffeine_tv/screens/search_screen.dart';
 import 'package:caffeine_tv/screens/favorites_screen.dart';
 import 'package:caffeine_tv/screens/settings_screen.dart';
 import 'package:caffeine_tv/services/api_service.dart';
+import 'package:caffeine_tv/services/watch_history_service.dart';
+import 'package:caffeine_tv/screens/video_loader_screen.dart';
 import 'package:caffeine_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 1;
+  final GlobalKey<FavoritesScreenState> _favoritesKey = GlobalKey<FavoritesScreenState>();
 
   static const _tabs = [
     _Tab(label: 'Search', icon: Icons.search),
@@ -41,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SearchScreen(),
                 const _MainHomeView(),
                 const SettingsScreen(),
-                const FavoritesScreen(),
+                FavoritesScreen(key: _favoritesKey),
               ],
             ),
           ),
@@ -98,6 +101,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (event.logicalKey == LogicalKeyboardKey.enter ||
                           event.logicalKey == LogicalKeyboardKey.select) {
                         setState(() => _selectedIndex = i);
+                        if (i == 3) {
+                          _favoritesKey.currentState?.refresh();
+                        }
                         return KeyEventResult.handled;
                       }
                       return KeyEventResult.ignored;
@@ -155,10 +161,13 @@ class _MainHomeView extends StatefulWidget {
 
 class _MainHomeViewState extends State<_MainHomeView> {
   final ApiService _api = ApiService();
+  final WatchHistoryService _historyService = WatchHistoryService();
   String _selectedCategory = 'Movies';
   MovieDetail? _focusedMovie;
   List<MovieListItem>? _trending;
+  List<MovieListItem>? _weeklyTrending;
   List<MovieListItem>? _popular;
+  List<Map<String, dynamic>>? _history;
   bool _loading = true;
   Timer? _autoSlideTimer;
   int _trendingIndex = 0;
@@ -219,6 +228,14 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 backdropPath: t.backdropPath,
                 overview: t.overview,
               )).toList();
+
+              _weeklyTrending = trending.results.map((t) => MovieListItem(
+                id: t.id,
+                title: t.name,
+                posterPath: t.posterPath,
+                backdropPath: t.backdropPath,
+                overview: t.overview,
+              )).toList();
               
               _popular = popular.results.map((t) => MovieListItem(
                 id: t.id,
@@ -227,6 +244,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 backdropPath: t.backdropPath,
                 overview: t.overview,
               )).toList();
+              
+              _historyService.getHistory().then((h) {
+                if (mounted) setState(() => _history = h);
+              });
               
               _loading = false;
             });
@@ -243,7 +264,11 @@ class _MainHomeViewState extends State<_MainHomeView> {
             setState(() {
               _focusedMovie = hero;
               _trending = trending.results.take(5).toList();
+              _weeklyTrending = trending.results;
               _popular = popular.results;
+              _historyService.getHistory().then((h) {
+                if (mounted) setState(() => _history = h);
+              });
               _loading = false;
             });
             _startAutoSlide();
@@ -285,7 +310,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
     super.dispose();
   }
 
-  void _updateFocusedMovie(int id, {bool isAuto = false}) async {
+  void _updateFocusedMovie(int id, {bool isAuto = false, bool? isMovie}) async {
+    final effectiveIsMovie = isMovie ?? (_selectedCategory != 'TV Shows');
     // If user interacts manually, reset the timer to avoid jumping
     if (!isAuto) {
       _resetAutoSlide();
@@ -295,8 +321,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     }
     
     try {
-      final isTv = _selectedCategory == 'TV Shows';
-      if (isTv) {
+      if (!effectiveIsMovie) {
         final detail = await _api.fetchTvDetail(id);
         if (mounted) {
           setState(() {
@@ -495,8 +520,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
                       ],
                     ),
               ),
+              _buildContinueWatchingRow(context, s),
               SizedBox(height: s(96)),
-              _buildRow(context, 'Trending Now', _trending),
+              _buildRow(context, _selectedCategory == 'TV Shows' ? 'Popular shows this week' : 'Popular movies this week', _weeklyTrending),
               SizedBox(height: s(72)),
               _buildRow(context, _selectedCategory == 'TV Shows' ? 'Popular TV' : 'Popular Movies', _popular),
               SizedBox(height: s(150)),
@@ -613,6 +639,75 @@ class _MainHomeViewState extends State<_MainHomeView> {
           ),
         );
       }).toList(),
+    );
+  }
+
+  Widget _buildContinueWatchingRow(BuildContext context, double Function(double) s) {
+    if (_history == null) return const SizedBox.shrink();
+    final validHistory = _history!.where((h) => h['media_id'] != null && h['title'] != null).toList();
+    if (validHistory.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(height: s(72)),
+        Text(
+          'Continue Watching',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: s(48),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        SizedBox(height: s(42)),
+        SizedBox(
+          height: s(480),
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            primary: false,
+            itemCount: validHistory.length,
+            itemBuilder: (context, index) {
+              final h = validHistory[index];
+              final isMovie = h['type'] == 'movie';
+              final mediaId = h['media_id'] as int;
+              
+              return Padding(
+                padding: EdgeInsets.only(right: s(36)),
+                child: PosterCard(
+                  posterPath: h['poster_path'],
+                  title: h['title'] ?? '',
+                  onFocus: () => _updateFocusedMovie(mediaId, isMovie: isMovie),
+                  onTap: () async {
+                    if (isMovie) {
+                      final detail = await _api.fetchMovieDetail(mediaId);
+                      if (!mounted) return;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => VideoLoaderScreen(movie: detail),
+                        ),
+                      );
+                    } else {
+                      final detail = await _api.fetchTvDetail(h['media_id']);
+                      if (!mounted) return;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => VideoLoaderScreen(
+                            tvShow: detail,
+                            season: h['season'],
+                            episode: h['episode'],
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 

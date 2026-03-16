@@ -100,6 +100,20 @@ class ApiService {
     return core.TvSeasonDetailResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
+  Future<core.PersonDetail> fetchPersonDetail(int personId) async {
+    final url = core.Endpoints.personDetailsUrl(tmdbBaseUrl, _tmdbKey, personId, language);
+    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) throw Exception('Failed to load person details');
+    return core.PersonDetail.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
+  Future<core.CombinedCreditsResponse> fetchPersonCombinedCredits(int personId) async {
+    final url = core.Endpoints.personCombinedCreditsUrl(tmdbBaseUrl, _tmdbKey, personId, language);
+    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) throw Exception('Failed to load combined credits');
+    return core.CombinedCreditsResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
   Future<core.ProviderStreamResponse> fetchMovieStream(int movieId, {String provider = 'vixsrc'}) async {
     final url = core.Endpoints.streamMovieUrl(caffeineBaseUrl, provider, movieId.toString());
     final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));

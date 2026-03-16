@@ -61,7 +61,7 @@ class _TvShowsScreenState extends State<TvShowsScreen> {
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 32),
       children: [
         _buildSection('Popular TV', _popular),
-        _buildSection('Trending TV', _trending),
+        _buildSection('Popular Shows This Week', _trending),
         _buildSection('Top Rated TV', _topRated),
       ],
     );

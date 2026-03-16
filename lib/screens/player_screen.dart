@@ -1,12 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:better_player/better_player.dart';
+import 'package:caffeine_tv/services/watch_history_service.dart';
+import 'dart:async';
 
 class PlayerScreen extends StatefulWidget {
-  const PlayerScreen({super.key, required this.url, required this.title});
+  const PlayerScreen({
+    super.key, 
+    required this.url, 
+    required this.title,
+    required this.item,
+    required this.isMovie,
+    this.season,
+    this.episode,
+    this.startPosition,
+  });
 
   final String url;
   final String title;
+  final dynamic item;
+  final bool isMovie;
+  final int? season;
+  final int? episode;
+  final Duration? startPosition;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -14,11 +30,38 @@ class PlayerScreen extends StatefulWidget {
 
 class _PlayerScreenState extends State<PlayerScreen> {
   late BetterPlayerController _controller;
+  final WatchHistoryService _historyService = WatchHistoryService();
+  Timer? _saveTimer;
 
   @override
   void initState() {
     super.initState();
     _setupController();
+    _startProgressTimer();
+  }
+
+  void _startProgressTimer() {
+    _saveTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      _saveCurrentProgress();
+    });
+  }
+
+  Future<void> _saveCurrentProgress() async {
+    if (_controller.videoPlayerController == null) return;
+    
+    final position = _controller.videoPlayerController!.value.position;
+    final duration = _controller.videoPlayerController!.value.duration;
+    
+    if (duration == Duration.zero) return;
+
+    await _historyService.saveProgress(
+      item: widget.item,
+      isMovie: widget.isMovie,
+      season: widget.season,
+      episode: widget.episode,
+      position: position,
+      duration: duration ?? Duration.zero,
+    );
   }
 
   void _setupController() {
@@ -50,6 +93,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           controlBarColor: Colors.black45,
           playerTheme: BetterPlayerTheme.material,
         ),
+        startAt: widget.startPosition ?? Duration.zero,
       ),
       betterPlayerDataSource: BetterPlayerDataSource(
         BetterPlayerDataSourceType.network,
@@ -76,6 +120,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    _saveTimer?.cancel();
+    _saveCurrentProgress();
     _controller.dispose();
     super.dispose();
   }

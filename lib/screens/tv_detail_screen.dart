@@ -1,7 +1,9 @@
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:caffeine_tv/constants.dart';
 import 'package:caffeine_tv/screens/video_loader_screen.dart';
+import 'package:caffeine_tv/screens/actor_screen.dart';
 import 'package:caffeine_tv/services/api_service.dart';
+import 'package:caffeine_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -93,6 +95,19 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
         SnackBar(content: Text('Failed to update favorites: $e')),
       );
     }
+  }
+
+  void _playEpisode(int season, int episode) {
+    if (_show == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => VideoLoaderScreen(
+          tvShow: _show!,
+          season: season,
+          episode: episode,
+        ),
+      ),
+    );
   }
 
   @override
@@ -477,52 +492,74 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                   itemBuilder: (context, index) {
                                     final actor = _credits!.cast[index];
                                     return Focus(
+                                      onKeyEvent: (_, event) {
+                                        if (event is KeyDownEvent &&
+                                            (event.logicalKey == LogicalKeyboardKey.enter ||
+                                             event.logicalKey == LogicalKeyboardKey.select)) {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (context) => ActorScreen(personId: actor.id),
+                                            ),
+                                          );
+                                          return KeyEventResult.handled;
+                                        }
+                                        return KeyEventResult.ignored;
+                                      },
                                       child: Builder(
                                         builder: (context) {
                                           final focused = Focus.of(context).hasFocus;
-                                          return AnimatedContainer(
-                                            duration: const Duration(milliseconds: 200),
-                                            width: s(160),
-                                            margin: EdgeInsets.only(right: s(32)),
-                                            decoration: BoxDecoration(
-                                              borderRadius: BorderRadius.circular(s(16)),
-                                              border: Border.all(
-                                                color: focused ? Colors.white : Colors.white.withOpacity(0.05),
-                                                width: s(2),
+                                          return GestureDetector(
+                                            onTap: () {
+                                              Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                  builder: (context) => ActorScreen(personId: actor.id),
+                                                ),
+                                              );
+                                            },
+                                            child: AnimatedContainer(
+                                              duration: const Duration(milliseconds: 200),
+                                              width: s(160),
+                                              margin: EdgeInsets.only(right: s(32)),
+                                              decoration: BoxDecoration(
+                                                borderRadius: BorderRadius.circular(s(16)),
+                                                border: Border.all(
+                                                  color: focused ? Colors.white : Colors.white.withOpacity(0.05),
+                                                  width: s(2),
+                                                ),
+                                                color: focused ? Colors.white.withOpacity(0.1) : Colors.transparent,
                                               ),
-                                              color: focused ? Colors.white.withOpacity(0.1) : Colors.transparent,
-                                            ),
-                                            padding: EdgeInsets.all(s(8)),
-                                            child: Column(
-                                              children: [
-                                                ClipOval(
-                                                  child: actor.profilePath != null
-                                                      ? CachedNetworkImage(
-                                                          imageUrl: '$tmdbImageBaseUrl/w185${actor.profilePath}',
-                                                          width: s(110),
-                                                          height: s(110),
-                                                          fit: BoxFit.cover,
-                                                        )
-                                                      : Container(
-                                                          width: s(110),
-                                                          height: s(110),
-                                                          color: Colors.white12,
-                                                          child: Icon(Icons.person, color: Colors.white54, size: s(48)),
-                                                        ),
-                                                ),
-                                                SizedBox(height: s(12)),
-                                                Text(
-                                                  actor.name,
-                                                  style: TextStyle(
-                                                    color: focused ? Colors.white : Colors.white.withOpacity(0.8),
-                                                    fontSize: s(16),
-                                                    fontWeight: focused ? FontWeight.bold : FontWeight.w500,
+                                              padding: EdgeInsets.all(s(8)),
+                                              child: Column(
+                                                children: [
+                                                  ClipOval(
+                                                    child: actor.profilePath != null
+                                                        ? CachedNetworkImage(
+                                                            imageUrl: '$tmdbImageBaseUrl/w185${actor.profilePath}',
+                                                            width: s(110),
+                                                            height: s(110),
+                                                            fit: BoxFit.cover,
+                                                          )
+                                                        : Container(
+                                                            width: s(110),
+                                                            height: s(110),
+                                                            color: Colors.white12,
+                                                            child: Icon(Icons.person, color: Colors.white54, size: s(48)),
+                                                          ),
                                                   ),
-                                                  textAlign: TextAlign.center,
-                                                  maxLines: 2,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ],
+                                                  SizedBox(height: s(12)),
+                                                  Text(
+                                                    actor.name,
+                                                    style: TextStyle(
+                                                      color: focused ? Colors.white : Colors.white.withOpacity(0.8),
+                                                      fontSize: s(16),
+                                                      fontWeight: focused ? FontWeight.bold : FontWeight.w500,
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                    maxLines: 2,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                           );
                                         },
@@ -532,7 +569,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                 ),
                               ),
                             ],
-                            if (_recommendations != null && _recommendations!.isNotEmpty) ...[
+                             if (_recommendations != null && _recommendations!.isNotEmpty) ...[
                               SizedBox(height: s(64)),
                               _SectionHeader(title: 'MORE LIKE THIS', s: s),
                               SizedBox(height: s(24)),
@@ -543,102 +580,26 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                   itemCount: _recommendations!.length,
                                   itemBuilder: (context, index) {
                                     final rec = _recommendations![index];
-                                    return Focus(
-                                      onKeyEvent: (_, event) {
-                                        if (event is KeyDownEvent &&
-                                            (event.logicalKey == LogicalKeyboardKey.enter ||
-                                             event.logicalKey == LogicalKeyboardKey.select)) {
-                                          Navigator.of(context).pushReplacement(
-                                            MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: rec.id)),
-                                          );
-                                          return KeyEventResult.handled;
-                                        }
-                                        return KeyEventResult.ignored;
+                                    return PosterCard(
+                                      posterPath: rec.posterPath,
+                                      title: rec.name ?? '',
+                                      onTap: () {
+                                        Navigator.of(context).pushReplacement(
+                                          MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: rec.id)),
+                                        );
                                       },
-                                      child: Builder(
-                                        builder: (context) {
-                                          final focused = Focus.of(context).hasFocus;
-                                          return AnimatedScale(
-                                            scale: focused ? 1.05 : 1.0,
-                                            duration: const Duration(milliseconds: 200),
-                                            child: Container(
-                                              width: s(200),
-                                              margin: EdgeInsets.only(right: s(32), bottom: s(10)),
-                                              child: GestureDetector(
-                                                onTap: () {
-                                                  Navigator.of(context).pushReplacement(
-                                                    MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: rec.id)),
-                                                  );
-                                                },
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Expanded(
-                                                      child: Container(
-                                                        decoration: BoxDecoration(
-                                                          borderRadius: BorderRadius.circular(s(12)),
-                                                          border: Border.all(
-                                                            color: focused ? Colors.white : Colors.transparent,
-                                                            width: s(4),
-                                                          ),
-                                                          boxShadow: focused
-                                                              ? [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 10)]
-                                                              : [],
-                                                        ),
-                                                        child: ClipRRect(
-                                                          borderRadius: BorderRadius.circular(s(8)),
-                                                          child: rec.posterPath != null
-                                                              ? CachedNetworkImage(
-                                                                  imageUrl: '$tmdbImageBaseUrl/w500${rec.posterPath}',
-                                                                  fit: BoxFit.cover,
-                                                                )
-                                                              : const ColoredBox(color: Colors.white12),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    SizedBox(height: s(12)),
-                                                    Text(
-                                                      rec.name ?? '',
-                                                      style: TextStyle(
-                                                        color: focused ? Colors.white : Colors.white70,
-                                                        fontSize: s(18),
-                                                        fontWeight: focused ? FontWeight.bold : FontWeight.normal,
-                                                      ),
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
                                     );
                                   },
                                 ),
                               ),
                             ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _playEpisode(int season, int episode) {
-    if (_show == null) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => VideoLoaderScreen(
-          tvShow: _show,
-          season: season,
-          episode: episode,
-        ),
-      ),
     );
   }
 }
@@ -646,6 +607,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
 class _SectionHeader extends StatelessWidget {
   final String title;
   final double Function(double) s;
+
   const _SectionHeader({required this.title, required this.s});
 
   @override
