@@ -1,11 +1,14 @@
 import 'package:caffeine_core/caffeine_core.dart';
+import 'package:caffeine_tv/screens/tv_detail_screen.dart';
 import 'package:caffeine_tv/screens/movie_detail_screen.dart';
 import 'package:caffeine_tv/screens/search_screen.dart';
+import 'package:caffeine_tv/screens/favorites_screen.dart';
 import 'package:caffeine_tv/screens/settings_screen.dart';
 import 'package:caffeine_tv/services/api_service.dart';
 import 'package:caffeine_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,11 +23,8 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _tabs = [
     _Tab(label: 'Search', icon: Icons.search),
     _Tab(label: 'Home', icon: Icons.home_filled),
-    _Tab(label: 'Trending', icon: Icons.arrow_outward),
-    _Tab(label: 'TV', icon: Icons.tv),
-    _Tab(label: 'Movie', icon: Icons.movie_outlined),
-    _Tab(label: 'Add', icon: Icons.add_box_outlined),
     _Tab(label: 'Profile', icon: Icons.person_outline),
+    _Tab(label: 'Favorites', icon: Icons.favorite_border),
   ];
 
   @override
@@ -40,11 +40,8 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 const SearchScreen(),
                 const _MainHomeView(),
-                const Center(child: Text('Trending', style: TextStyle(color: Colors.white))),
-                const Center(child: Text('TV', style: TextStyle(color: Colors.white))),
-                const Center(child: Text('Movies', style: TextStyle(color: Colors.white))),
-                const Center(child: Text('Add', style: TextStyle(color: Colors.white))),
-                const SettingsScreen(), // Profile goes to settings
+                const SettingsScreen(),
+                const FavoritesScreen(),
               ],
             ),
           ),
@@ -109,7 +106,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       builder: (context) {
                         final focused = Focus.of(context).hasFocus;
                         return Padding(
-                          padding: EdgeInsets.symmetric(vertical: s(12)),
+                          padding: EdgeInsets.symmetric(vertical: s(24)),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
                             width: s(85),
@@ -158,31 +155,99 @@ class _MainHomeView extends StatefulWidget {
 
 class _MainHomeViewState extends State<_MainHomeView> {
   final ApiService _api = ApiService();
+  String _selectedCategory = 'Movies';
   MovieDetail? _focusedMovie;
   List<MovieListItem>? _trending;
   List<MovieListItem>? _popular;
   bool _loading = true;
+  Timer? _autoSlideTimer;
+  int _trendingIndex = 0;
+  late ScrollController _scrollController;
+  bool _isHeroInView = true;
 
   @override
   void initState() {
     super.initState();
+    _scrollController = ScrollController()..addListener(_onScroll);
     _loadContent();
   }
 
+  void _onScroll() {
+    if (!mounted) return;
+    final offset = _scrollController.offset;
+    final inView = offset < 400; // Threshold for hero visibility
+    if (inView != _isHeroInView) {
+      if (inView) {
+        _isHeroInView = true;
+        _startAutoSlide();
+      } else {
+        _isHeroInView = false;
+        _autoSlideTimer?.cancel();
+        debugPrint('[HomeScreen] ⏸️ Hero out of view, pausing auto-slide');
+      }
+    }
+  }
+
   Future<void> _loadContent() async {
+    setState(() => _loading = true);
     try {
-      final trending = await _api.fetchTrendingMovies();
-      final popular = await _api.fetchPopularMovies();
+      final isTv = _selectedCategory == 'TV Shows';
       
-      if (trending.results.isNotEmpty) {
-        final hero = await _api.fetchMovieDetail(trending.results.first.id);
-        if (mounted) {
-          setState(() {
-            _focusedMovie = hero;
-            _trending = trending.results;
-            _popular = popular.results;
-            _loading = false;
-          });
+      if (isTv) {
+        final trending = await _api.fetchTrendingTv();
+        final popular = await _api.fetchPopularTv();
+        
+        if (trending.results.isNotEmpty) {
+          final hero = await _api.fetchTvDetail(trending.results.first.id);
+          if (mounted) {
+            setState(() {
+              // Map TvShowDetail to a shared-like structure for the UI
+              _focusedMovie = MovieDetail(
+                id: hero.id,
+                title: hero.name, // Map name to title
+                overview: hero.overview,
+                posterPath: hero.posterPath,
+                backdropPath: hero.backdropPath,
+                voteAverage: hero.voteAverage,
+              );
+              
+              // Normalize TvListItem to MovieListItem for components
+              _trending = trending.results.take(5).map((t) => MovieListItem(
+                id: t.id,
+                title: t.name,
+                posterPath: t.posterPath,
+                backdropPath: t.backdropPath,
+                overview: t.overview,
+              )).toList();
+              
+              _popular = popular.results.map((t) => MovieListItem(
+                id: t.id,
+                title: t.name,
+                posterPath: t.posterPath,
+                backdropPath: t.backdropPath,
+                overview: t.overview,
+              )).toList();
+              
+              _loading = false;
+            });
+            _startAutoSlide();
+          }
+        }
+      } else {
+        final trending = await _api.fetchTrendingMovies();
+        final popular = await _api.fetchPopularMovies();
+        
+        if (trending.results.isNotEmpty) {
+          final hero = await _api.fetchMovieDetail(trending.results.first.id);
+          if (mounted) {
+            setState(() {
+              _focusedMovie = hero;
+              _trending = trending.results.take(5).toList();
+              _popular = popular.results;
+              _loading = false;
+            });
+            _startAutoSlide();
+          }
         }
       }
     } catch (e) {
@@ -190,15 +255,70 @@ class _MainHomeViewState extends State<_MainHomeView> {
     }
   }
 
-  void _updateFocusedMovie(int movieId) async {
-    try {
-      final detail = await _api.fetchMovieDetail(movieId);
-      if (mounted) {
-        setState(() => _focusedMovie = detail);
+  void _startAutoSlide() {
+    _autoSlideTimer?.cancel();
+    if (!_isHeroInView) return; // Don't start if not in view
+    
+    _autoSlideTimer = Timer.periodic(const Duration(seconds: 8), (timer) {
+      if (!mounted || _trending == null || _trending!.isEmpty || _loading || !_isHeroInView) {
+        if (!_isHeroInView) timer.cancel();
+        return;
       }
-    } catch (e) {
-      // Ignore
+      
+      setState(() {
+        _trendingIndex = (_trendingIndex + 1) % _trending!.length;
+        final nextId = _trending![_trendingIndex].id;
+        _updateFocusedMovie(nextId, isAuto: true);
+      });
+    });
+  }
+
+  void _resetAutoSlide() {
+    _startAutoSlide();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    _autoSlideTimer?.cancel();
+    super.dispose();
+  }
+
+  void _updateFocusedMovie(int id, {bool isAuto = false}) async {
+    // If user interacts manually, reset the timer to avoid jumping
+    if (!isAuto) {
+      _resetAutoSlide();
+      // Also update _trendingIndex to match manual selection if possible
+      final idx = _trending?.indexWhere((m) => m.id == id) ?? -1;
+      if (idx != -1) _trendingIndex = idx;
     }
+    
+    try {
+      final isTv = _selectedCategory == 'TV Shows';
+      if (isTv) {
+        final detail = await _api.fetchTvDetail(id);
+        if (mounted) {
+          setState(() {
+            _focusedMovie = MovieDetail(
+              id: detail.id,
+              title: detail.name,
+              overview: detail.overview,
+              posterPath: detail.posterPath,
+              backdropPath: detail.backdropPath,
+              voteAverage: detail.voteAverage,
+            );
+          });
+        }
+      } else {
+        final detail = await _api.fetchMovieDetail(id);
+        if (mounted) {
+          setState(() {
+            _focusedMovie = detail;
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   double _scale(BuildContext context, double value) {
@@ -261,89 +381,124 @@ class _MainHomeViewState extends State<_MainHomeView> {
         ),
         // Content
         SingleChildScrollView(
-          primary: true, 
+          controller: _scrollController,
+          primary: false, // Must be false if controller is provided
           padding: EdgeInsets.symmetric(horizontal: s(96), vertical: s(60)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildTopNav(context),
               SizedBox(height: s(150)),
-              if (_focusedMovie != null) ...[
-                // Brand Label
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEC1D24), // brand red
-                    borderRadius: BorderRadius.circular(s(4)),
-                  ),
-                  child: Text(
-                    'TRENDING', 
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: s(15),
-                      fontWeight: FontWeight.bold,
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 600),
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0.0, 0.05),
+                        end: Offset.zero,
+                      ).animate(CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                      )),
+                      child: child,
                     ),
-                  ),
-                ),
-                SizedBox(height: s(18)),
-                Text(
-                  _focusedMovie?.title?.toUpperCase() ?? '',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: s(130),
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: s(-4),
-                    height: 0.9,
-                  ),
-                ),
-                SizedBox(height: s(24)),
-                SizedBox(
-                  width: s(780),
-                  child: Text(
-                    _focusedMovie?.overview ?? '',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: s(30),
-                      height: 1.4,
+                  );
+                },
+                child: _focusedMovie == null 
+                  ? const SizedBox.shrink()
+                  : Column(
+                      key: ValueKey('hero_content_${_focusedMovie!.id}'),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Brand Label
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEC1D24), // brand red
+                            borderRadius: BorderRadius.circular(s(4)),
+                          ),
+                          child: Text(
+                            'TRENDING', 
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: s(15),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: s(18)),
+                        Text(
+                          _focusedMovie?.title?.toUpperCase() ?? '',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: s(130),
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: s(-4),
+                            height: 0.9,
+                          ),
+                        ),
+                        SizedBox(height: s(24)),
+                        SizedBox(
+                          width: s(780),
+                          child: Text(
+                            _focusedMovie?.overview ?? '',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.8),
+                              fontSize: s(22),
+                              fontWeight: FontWeight.w400,
+                              height: 1.4,
+                            ),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        SizedBox(height: s(72)),
+                        Row(
+                          children: [
+                            _HeroButton(
+                              label: 'Watch Now',
+                              icon: Icons.play_arrow_outlined,
+                              style: HeroButtonStyle.primary,
+                              onTap: () {
+                                // Handle both Movies and TV Shows
+                                if (_selectedCategory == 'TV Shows') {
+                                   Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: _focusedMovie!.id)),
+                                  );
+                                } else {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: _focusedMovie!.id)),
+                                  );
+                                }
+                              },
+                            ),
+                            SizedBox(width: s(36)),
+                            _HeroButton(
+                              label: 'Favourite',
+                              icon: Icons.favorite_border,
+                              style: HeroButtonStyle.secondaryRed,
+                              onTap: () {},
+                            ),
+                            SizedBox(width: s(36)),
+                            _HeroButton(
+                              label: 'Share',
+                              icon: Icons.share_outlined,
+                              style: HeroButtonStyle.secondaryWhite,
+                              onTap: () {},
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: s(48)),
+                        _buildSliderIndicators(context),
+                      ],
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                SizedBox(height: s(72)),
-                Row(
-                  children: [
-                    _HeroButton(
-                      label: 'Watch Now',
-                      icon: Icons.play_arrow_outlined,
-                      style: HeroButtonStyle.primary,
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: _focusedMovie!.id)),
-                        );
-                      },
-                    ),
-                    SizedBox(width: s(36)),
-                    _HeroButton(
-                      label: 'Favourite',
-                      icon: Icons.favorite_border,
-                      style: HeroButtonStyle.secondaryRed,
-                      onTap: () {},
-                    ),
-                    SizedBox(width: s(36)),
-                    _HeroButton(
-                      label: 'Share',
-                      icon: Icons.share_outlined,
-                      style: HeroButtonStyle.secondaryWhite,
-                      onTap: () {},
-                    ),
-                  ],
-                ),
-              ],
+              ),
               SizedBox(height: s(96)),
               _buildRow(context, 'Trending Now', _trending),
               SizedBox(height: s(72)),
-              _buildRow(context, 'Popular Movies', _popular),
+              _buildRow(context, _selectedCategory == 'TV Shows' ? 'Popular TV' : 'Popular Movies', _popular),
               SizedBox(height: s(150)),
             ],
           ),
@@ -352,16 +507,70 @@ class _MainHomeViewState extends State<_MainHomeView> {
     );
   }
 
+  Widget _buildSliderIndicators(BuildContext context) {
+    if (_trending == null || _trending!.isEmpty) return const SizedBox.shrink();
+    final s = (double v) => _scale(context, v);
+    
+    // Limits the number of dots to show if trending list is long
+    final displayCount = _trending!.length > 10 ? 10 : _trending!.length;
+    
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(displayCount, (i) {
+        final isActive = i == _trendingIndex;
+        return Padding(
+          padding: EdgeInsets.only(right: s(12)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: isActive ? s(80) : s(40),
+                height: s(4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(isActive ? 0.3 : 0.1),
+                  borderRadius: BorderRadius.circular(s(2)),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: isActive 
+                  ? TweenAnimationBuilder<double>(
+                      key: ValueKey('indicator_${_focusedMovie?.id}'),
+                      tween: Tween<double>(begin: 0.0, end: 1.0),
+                      duration: const Duration(seconds: 8),
+                      builder: (context, value, _) {
+                        return FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: value,
+                          child: Container(
+                            color: const Color(0xFFEC1D24), // brand red
+                          ),
+                        );
+                      },
+                    )
+                  : null,
+              ),
+              const SizedBox(height: 4),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+
   Widget _buildTopNav(BuildContext context) {
     final s = (double v) => _scale(context, v);
     final categories = ['Movies', 'TV Shows', 'Sports', 'Live (Beta)'];
     return Row(
       children: categories.map((cat) {
-        final isSelected = cat == 'Movi';
+        final isSelected = cat == _selectedCategory;
         return Focus(
           onKeyEvent: (node, event) {
             if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select)) {
-              // Handle category selection
+              if (_selectedCategory != cat) {
+                setState(() {
+                  _selectedCategory = cat;
+                });
+                _loadContent();
+              }
               return KeyEventResult.handled;
             }
             return KeyEventResult.ignored;
@@ -369,27 +578,35 @@ class _MainHomeViewState extends State<_MainHomeView> {
           child: Builder(
             builder: (context) {
               final focused = Focus.of(context).hasFocus;
-              return Padding(
-                padding: EdgeInsets.only(right: s(96)),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      cat,
-                      style: TextStyle(
-                        color: focused ? Colors.white : (isSelected ? Colors.white : Colors.white38),
-                        fontSize: s(48),
-                        fontWeight: isSelected || focused ? FontWeight.w600 : FontWeight.w400,
+              return GestureDetector(
+                onTap: () {
+                  if (_selectedCategory != cat) {
+                    setState(() => _selectedCategory = cat);
+                    _loadContent();
+                  }
+                },
+                child: Padding(
+                  padding: EdgeInsets.only(right: s(96)),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        cat,
+                        style: TextStyle(
+                          color: focused ? Colors.white : (isSelected ? Colors.white : Colors.white38),
+                          fontSize: s(48),
+                          fontWeight: isSelected || focused ? FontWeight.w600 : FontWeight.w400,
+                        ),
                       ),
-                    ),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      margin: EdgeInsets.only(top: s(4)),
-                      height: s(4),
-                      width: focused ? s(64) : (isSelected ? s(42) : 0),
-                      color: focused || isSelected ? const Color(0xFFEC1D24) : Colors.transparent,
-                    ),
-                  ],
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        margin: EdgeInsets.only(top: s(4)),
+                        height: s(4),
+                        width: focused ? s(64) : (isSelected ? s(42) : 0),
+                        color: focused || isSelected ? const Color(0xFFEC1D24) : Colors.transparent,
+                      ),
+                    ],
+                  ),
                 ),
               );
             }
@@ -429,9 +646,15 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   title: m.title ?? '',
                   onFocus: () => _updateFocusedMovie(m.id),
                   onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
-                    );
+                    if (_selectedCategory == 'TV Shows') {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: m.id)),
+                      );
+                    } else {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
+                      );
+                    }
                   },
                 ),
               );

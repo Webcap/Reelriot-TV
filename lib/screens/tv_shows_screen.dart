@@ -60,9 +60,9 @@ class _TvShowsScreenState extends State<TvShowsScreen> {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 32),
       children: [
-        _buildSection('Popular', _popular),
-        _buildSection('Trending', _trending),
-        _buildSection('Top Rated', _topRated),
+        _buildSection('Popular TV', _popular),
+        _buildSection('Trending TV', _trending),
+        _buildSection('Top Rated TV', _topRated),
       ],
     );
   }

@@ -4,6 +4,8 @@ import 'package:caffeine_tv/screens/video_loader_screen.dart';
 import 'package:caffeine_tv/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:caffeine_tv/services/bookmark_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class MovieDetailScreen extends StatefulWidget {
@@ -20,6 +22,8 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   MovieDetail? _movie;
   List<MovieListItem>? _recommendations;
   CreditsResponse? _credits;
+  final BookmarkService _bookmarkService = BookmarkService();
+  bool _isFavorite = false;
   String? _error;
 
   @override
@@ -46,9 +50,33 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
           _recommendations = recs;
           _credits = credits;
         });
+        _checkFavorite();
       }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
+  Future<void> _checkFavorite() async {
+    final isFav = await _bookmarkService.isBookmarked(widget.movieId, true);
+    if (mounted) setState(() => _isFavorite = isFav);
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (Supabase.instance.client.auth.currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to favorite')),
+      );
+      return;
+    }
+    
+    try {
+      await _bookmarkService.toggleBookmark(_movie!, true);
+      setState(() => _isFavorite = !_isFavorite);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update favorites: $e')),
+      );
     }
   }
 
@@ -88,27 +116,51 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
         ? '$tmdbImageBaseUrl/w780${m.backdropPath}'
         : null;
 
+    final s = (double v) => (v * MediaQuery.of(context).size.width) / 1920;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0F14),
+      backgroundColor: const Color(0xFF000000), // secondary.dark.background
       body: Stack(
         fit: StackFit.expand,
         children: [
+          // Background Backdrop
           if (backdropUrl != null)
             Positioned.fill(
-              child: CachedNetworkImage(
-                imageUrl: backdropUrl,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => const ColoredBox(color: Color(0xFF1a1a2e)),
-                errorWidget: (context, url, error) => const ColoredBox(color: Color(0xFF1a1a2e)),
+              child: Opacity(
+                opacity: 0.6,
+                child: CachedNetworkImage(
+                  imageUrl: backdropUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => const ColoredBox(color: Colors.black),
+                  errorWidget: (context, url, error) => const ColoredBox(color: Colors.black),
+                ),
               ),
             ),
+          // Accent.heroOverlay Gradient
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Colors.black.withOpacity(0.95),
+                    const Color(0xFF7F1D1D).withOpacity(0.6), // primary.900
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.45, 1.0],
+                ),
+              ),
+            ),
+          ),
+          // Vertical Fade
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.black87],
+                  colors: [Colors.black.withOpacity(0.1), Colors.black.withOpacity(0.8)],
                 ),
               ),
             ),
@@ -132,230 +184,276 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                   const SizedBox(width: 32),
                   Expanded(
                     child: SingleChildScrollView(
+                      padding: EdgeInsets.symmetric(vertical: s(60)),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
                         children: [
-                        Text(
-                          m.title ?? 'Movie',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        if (m.releaseDate != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            m.releaseDate!,
-                            style: const TextStyle(color: Colors.white70, fontSize: 18),
-                          ),
-                        ],
-                        if (m.overview != null && m.overview!.isNotEmpty) ...[
-                          const SizedBox(height: 16),
-                          Text(
-                            m.overview!,
-                            style: const TextStyle(color: Colors.white70, fontSize: 16, height: 1.4),
-                          ),
-                        ],
-                        const SizedBox(height: 32),
-                        Builder(
-                          builder: (context) {
-                            final focused = Focus.of(context).hasFocus;
-                            return Focus(
-                              onKeyEvent: (_, event) {
-                                if (event is KeyDownEvent &&
-                                    (event.logicalKey == LogicalKeyboardKey.enter ||
-                                        event.logicalKey == LogicalKeyboardKey.select)) {
-                                  _play();
-                                  return KeyEventResult.handled;
-                                }
-                                return KeyEventResult.ignored;
-                              },
-                              child: ElevatedButton.icon(
-                                onPressed: _play,
-                                icon: const Icon(Icons.play_arrow, size: 28),
-                                label: const Text('Play', style: TextStyle(fontSize: 18)),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: focused ? Colors.white : const Color(0xFFDC2626),
-                                  foregroundColor: focused ? Colors.black : Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                                  side: focused ? const BorderSide(color: Colors.white, width: 2) : BorderSide.none,
+                          Focus(
+                            descendantsAreFocusable: false,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Title (h1 equivalent)
+                                Text(
+                                  m.title?.toUpperCase() ?? 'MOVIE',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: s(100),
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: s(-2),
+                                    height: 0.9,
+                                  ),
                                 ),
+                                SizedBox(height: s(24)),
+                                // Meta Row: Rating, Year, Duration
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEC1D24), // brand red
+                                        borderRadius: BorderRadius.circular(s(4)),
+                                      ),
+                                      child: Text(
+                                        'IMDb ${(m.voteAverage ?? 0.0).toStringAsFixed(1)}',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: s(18),
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(width: s(24)),
+                                    Text(
+                                      m.releaseDate?.split('-').first ?? '',
+                                      style: TextStyle(color: Colors.white70, fontSize: s(20)),
+                                    ),
+                                    if (m.runtime != null) ...[
+                                      SizedBox(width: s(24)),
+                                      Text(
+                                        '${m.runtime} m',
+                                        style: TextStyle(color: Colors.white70, fontSize: s(20)),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                SizedBox(height: s(32)),
+                                // Plot
+                                SizedBox(
+                                  width: s(850),
+                                  child: Text(
+                                    m.overview ?? '',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.8),
+                                      fontSize: s(22),
+                                      fontWeight: FontWeight.w400,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(height: s(48)),
+                          // Action Buttons
+                          Row(
+                            children: [
+                              _ActionBtn(
+                                label: 'WATCH NOW',
+                                icon: Icons.play_arrow,
+                                isPrimary: true,
+                                onTap: _play,
+                                s: s,
+                                autofocus: true,
                               ),
-                            );
-                          }
-                        ),
-                        if (_credits != null && _credits!.cast.isNotEmpty) ...[
-                          const SizedBox(height: 32),
-                          const Text(
-                            'Cast',
-                            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                              SizedBox(width: s(24)),
+                              _ActionBtn(
+                                label: _isFavorite ? 'FAVOURITED' : 'FAVOURITE',
+                                icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
+                                isPrimary: _isFavorite,
+                                onTap: _toggleFavorite,
+                                s: s,
+                              ),
+                              SizedBox(width: s(24)),
+                              _ActionBtn(
+                                label: 'SHARE',
+                                icon: Icons.share_outlined,
+                                isPrimary: false,
+                                onTap: () {},
+                                s: s,
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            height: 180,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: _credits!.cast.length,
-                              itemBuilder: (context, index) {
-                                final actor = _credits!.cast[index];
-                                return Focus(
-                                  child: Builder(
-                                    builder: (context) {
-                                      final focused = Focus.of(context).hasFocus;
-                                      return Container(
-                                        width: 100,
-                                        margin: const EdgeInsets.only(right: 16),
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(
-                                            color: focused ? Colors.white : Colors.transparent,
-                                            width: 2,
+                          if (_credits != null && _credits!.cast.isNotEmpty) ...[
+                            SizedBox(height: s(64)),
+                            Text(
+                              'CAST',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: s(28),
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: s(1.2),
+                              ),
+                            ),
+                            SizedBox(height: s(24)),
+                            SizedBox(
+                              height: s(220),
+                              child: ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: _credits!.cast.length,
+                                itemBuilder: (context, index) {
+                                  final actor = _credits!.cast[index];
+                                  return Focus(
+                                    child: Builder(
+                                      builder: (context) {
+                                        final focused = Focus.of(context).hasFocus;
+                                        return AnimatedContainer(
+                                          duration: const Duration(milliseconds: 200),
+                                          width: s(160),
+                                          margin: EdgeInsets.only(right: s(32)),
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(s(16)),
+                                            border: Border.all(
+                                              color: focused ? Colors.white : Colors.white.withOpacity(0.05),
+                                              width: s(2),
+                                            ),
+                                            color: focused ? Colors.white.withOpacity(0.1) : Colors.transparent,
                                           ),
-                                          color: focused ? Colors.white12 : Colors.transparent,
-                                        ),
-                                        padding: const EdgeInsets.all(4),
-                                        child: Column(
-                                          children: [
-                                            ClipOval(
-                                              child: actor.profilePath != null
-                                                  ? CachedNetworkImage(
-                                                      imageUrl: '$tmdbImageBaseUrl/w185${actor.profilePath}',
-                                                      width: 80,
-                                                      height: 80,
-                                                      fit: BoxFit.cover,
-                                                      placeholder: (context, url) => Container(color: Colors.white12),
-                                                      errorWidget: (context, url, error) => Container(
+                                          padding: EdgeInsets.all(s(8)),
+                                          child: Column(
+                                            children: [
+                                              ClipOval(
+                                                child: actor.profilePath != null
+                                                    ? CachedNetworkImage(
+                                                        imageUrl: '$tmdbImageBaseUrl/w185${actor.profilePath}',
+                                                        width: s(110),
+                                                        height: s(110),
+                                                        fit: BoxFit.cover,
+                                                      )
+                                                    : Container(
+                                                        width: s(110),
+                                                        height: s(110),
                                                         color: Colors.white12,
-                                                        child: const Icon(Icons.person, color: Colors.white54),
+                                                        child: Icon(Icons.person, color: Colors.white54, size: s(48)),
                                                       ),
-                                                    )
-                                                  : Container(
-                                                      width: 80,
-                                                      height: 80,
-                                                      color: Colors.white12,
-                                                      child: const Icon(Icons.person, color: Colors.white54),
-                                                    ),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              actor.name,
-                                              style: TextStyle(
-                                                color: focused ? Colors.white : Colors.white70,
-                                                fontSize: 13,
-                                                fontWeight: focused ? FontWeight.bold : FontWeight.normal,
                                               ),
-                                              textAlign: TextAlign.center,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    }
-                                  ),
-                                );
-                              },
+                                              SizedBox(height: s(12)),
+                                              Text(
+                                                actor.name,
+                                                style: TextStyle(
+                                                  color: focused ? Colors.white : Colors.white.withOpacity(0.8),
+                                                  fontSize: s(16),
+                                                  fontWeight: focused ? FontWeight.bold : FontWeight.w500,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
-                          ),
-                        ],
-                        if (_recommendations != null && _recommendations!.isNotEmpty) ...[
-                          const SizedBox(height: 32),
-                          const Text(
-                            'Recommendations',
-                            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            height: 200,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: _recommendations!.length,
-                              itemBuilder: (context, index) {
-                                final rec = _recommendations![index];
-                                return Focus(
-                                  onKeyEvent: (_, event) {
-                                    if (event is KeyDownEvent &&
-                                        (event.logicalKey == LogicalKeyboardKey.enter ||
-                                         event.logicalKey == LogicalKeyboardKey.select)) {
-                                      Navigator.of(context).pushReplacement(
-                                        MaterialPageRoute(
-                                          builder: (context) => MovieDetailScreen(movieId: rec.id),
-                                        ),
-                                      );
-                                      return KeyEventResult.handled;
-                                    }
-                                    return KeyEventResult.ignored;
-                                  },
-                                  child: Builder(
-                                    builder: (context) {
-                                      final focused = Focus.of(context).hasFocus;
-                                      return Container(
-                                        width: 120,
-                                        margin: const EdgeInsets.only(right: 16),
-                                        child: Material(
-                                          color: Colors.transparent,
-                                          child: InkWell(
-                                            onTap: () {
-                                              Navigator.of(context).pushReplacement(
-                                                MaterialPageRoute(
-                                                  builder: (context) => MovieDetailScreen(movieId: rec.id),
-                                                ),
-                                              );
-                                            },
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Expanded(
-                                                  child: Container(
-                                                    decoration: BoxDecoration(
-                                                      borderRadius: BorderRadius.circular(8),
-                                                      border: Border.all(
-                                                        color: focused ? Colors.white : Colors.transparent,
-                                                        width: 3,
+                          ],
+                          if (_recommendations != null && _recommendations!.isNotEmpty) ...[
+                            SizedBox(height: s(64)),
+                            Text(
+                              'MORE LIKE THIS',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: s(28),
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: s(1.2),
+                              ),
+                            ),
+                            SizedBox(height: s(24)),
+                            SizedBox(
+                              height: s(300),
+                              child: ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: _recommendations!.length,
+                                itemBuilder: (context, index) {
+                                  final rec = _recommendations![index];
+                                  return Focus(
+                                    onKeyEvent: (_, event) {
+                                      if (event is KeyDownEvent &&
+                                          (event.logicalKey == LogicalKeyboardKey.enter ||
+                                           event.logicalKey == LogicalKeyboardKey.select)) {
+                                        Navigator.of(context).pushReplacement(
+                                          MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: rec.id)),
+                                        );
+                                        return KeyEventResult.handled;
+                                      }
+                                      return KeyEventResult.ignored;
+                                    },
+                                    child: Builder(
+                                      builder: (context) {
+                                        final focused = Focus.of(context).hasFocus;
+                                        return AnimatedScale(
+                                          scale: focused ? 1.05 : 1.0,
+                                          duration: const Duration(milliseconds: 200),
+                                          child: Container(
+                                            width: s(200),
+                                            margin: EdgeInsets.only(right: s(32), bottom: s(10)),
+                                            child: GestureDetector(
+                                              onTap: () {
+                                                Navigator.of(context).pushReplacement(
+                                                  MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: rec.id)),
+                                                );
+                                              },
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Expanded(
+                                                    child: Container(
+                                                      decoration: BoxDecoration(
+                                                        borderRadius: BorderRadius.circular(s(12)),
+                                                        border: Border.all(
+                                                          color: focused ? Colors.white : Colors.transparent,
+                                                          width: s(4),
+                                                        ),
+                                                        boxShadow: focused
+                                                            ? [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 10)]
+                                                            : [],
                                                       ),
-                                                      boxShadow: focused
-                                                          ? [const BoxShadow(color: Colors.white38, blurRadius: 8)]
-                                                          : [],
-                                                    ),
-                                                    child: ClipRRect(
-                                                      borderRadius: BorderRadius.circular(5),
-                                                      child: rec.posterPath != null && rec.posterPath!.isNotEmpty
-                                                          ? CachedNetworkImage(
-                                                              imageUrl: '$tmdbImageBaseUrl/w500${rec.posterPath}',
-                                                              fit: BoxFit.cover,
-                                                              width: double.infinity,
-                                                              placeholder: (context, url) => const ColoredBox(color: Colors.white12),
-                                                              errorWidget: (context, url, error) => const ColoredBox(color: Colors.white12, child: Center(child: Icon(Icons.image, color: Colors.white54))),
-                                                            )
-                                                          : const ColoredBox(color: Colors.white12, child: Center(child: Icon(Icons.movie, color: Colors.white54))),
+                                                      child: ClipRRect(
+                                                        borderRadius: BorderRadius.circular(s(8)),
+                                                        child: rec.posterPath != null
+                                                            ? CachedNetworkImage(
+                                                                imageUrl: '$tmdbImageBaseUrl/w500${rec.posterPath}',
+                                                                fit: BoxFit.cover,
+                                                              )
+                                                            : const ColoredBox(color: Colors.white12),
+                                                      ),
                                                     ),
                                                   ),
-                                                ),
-                                                const SizedBox(height: 8),
-                                                Text(
-                                                  rec.title ?? 'Movie',
-                                                  style: TextStyle(
-                                                    color: focused ? Colors.white : Colors.white70,
-                                                    fontSize: 14,
-                                                    fontWeight: focused ? FontWeight.bold : FontWeight.normal,
+                                                  SizedBox(height: s(12)),
+                                                  Text(
+                                                    rec.title ?? '',
+                                                    style: TextStyle(
+                                                      color: focused ? Colors.white : Colors.white70,
+                                                      fontSize: s(18),
+                                                      fontWeight: focused ? FontWeight.bold : FontWeight.normal,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
                                                   ),
-                                                  maxLines: 2,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ],
+                                                ],
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      );
-                                    }
-                                  ),
-                                );
-                              },
+                                        );
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
                       ],
                     ),
                     ),
@@ -375,6 +473,104 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
       MaterialPageRoute(
         builder: (context) => VideoLoaderScreen(
           movie: _movie,
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionBtn extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final bool isPrimary;
+  final VoidCallback onTap;
+  final double Function(double) s;
+  final bool autofocus;
+
+  const _ActionBtn({
+    required this.label,
+    required this.icon,
+    required this.isPrimary,
+    required this.onTap,
+    required this.s,
+    this.autofocus = false,
+  });
+
+  @override
+  State<_ActionBtn> createState() => _ActionBtnState();
+}
+
+class _ActionBtnState extends State<_ActionBtn> {
+  double _scale = 1.0;
+
+  void _handleTap() {
+    setState(() => _scale = 1.3);
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (mounted) setState(() => _scale = 1.0);
+    });
+    widget.onTap();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      scale: _scale,
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOutBack,
+      child: Focus(
+        autofocus: widget.autofocus,
+        onKeyEvent: (_, event) {
+          if (event is KeyDownEvent &&
+              (event.logicalKey == LogicalKeyboardKey.enter ||
+                  event.logicalKey == LogicalKeyboardKey.select)) {
+            _handleTap();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Builder(
+          builder: (context) {
+            final focused = Focus.of(context).hasFocus;
+            return GestureDetector(
+              onTap: _handleTap,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: EdgeInsets.symmetric(horizontal: widget.s(32), vertical: widget.s(16)),
+                decoration: BoxDecoration(
+                  color: widget.isPrimary 
+                      ? (focused ? Colors.white : const Color(0xFFEC1D24))
+                      : (focused ? Colors.white.withOpacity(0.2) : Colors.transparent),
+                  borderRadius: BorderRadius.circular(widget.s(8)),
+                  border: widget.isPrimary 
+                      ? Border.all(color: Colors.white, width: widget.s(focused ? 4 : 0))
+                      : Border.all(color: Colors.white, width: widget.s(1)),
+                  boxShadow: (widget.isPrimary && focused) 
+                      ? [BoxShadow(color: Colors.white.withOpacity(0.4), blurRadius: 15)]
+                      : [],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      widget.icon, 
+                      color: widget.isPrimary ? (focused ? Colors.black : Colors.white) : Colors.white,
+                      size: widget.s(28),
+                    ),
+                    SizedBox(width: widget.s(12)),
+                    Text(
+                      widget.label,
+                      style: TextStyle(
+                        color: widget.isPrimary ? (focused ? Colors.black : Colors.white) : Colors.white,
+                        fontSize: widget.s(18),
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: widget.s(1.1),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
         ),
       ),
     );

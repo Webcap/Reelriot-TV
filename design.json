@@ -1,5 +1,5 @@
 {
-  "project": "Marvel Smart TV Movie App",
+  "project": "Caffeine Smart TV Movie App",
   "description": "A TV-optimized media browsing interface featuring a side navigation bar, a featured hero banner, and horizontal scrolling media carousels.",
   "designTokens": {
     "breakpoints": {

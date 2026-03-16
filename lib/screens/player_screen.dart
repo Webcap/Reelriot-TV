@@ -94,8 +94,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // Wake up controls on any remote interaction
         _controller.setControlsVisibility(true);
 
-        // Exit keys
-        if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
+        // Exit keys (Escape only, system handles GoBack/Back naturally)
+        if (key == LogicalKeyboardKey.escape) {
           Navigator.of(context).pop();
           return KeyEventResult.handled;
         }
