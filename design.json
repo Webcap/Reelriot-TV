@@ -1,337 +1,130 @@
 {
-  "meta": {
-    "productType": "TV / Living Room Streaming Application",
-    "platform": "Smart TV / Set-Top Box / Console",
-    "designIntent": [
-      "cinematic",
-      "lean-back viewing experience",
-      "large typography and oversized targets",
-      "focus-based navigation (remote control)",
-      "poster-driven browsing"
-    ],
-    "visualSummary": "The UI is a widescreen cinematic streaming interface optimized for TV viewing distance. It features a large full-bleed hero background with strong red theming, a left vertical navigation rail, a top content category navigation, large poster cards, and prominent action buttons. The interface prioritizes remote-control focus states and uses oversized typography, generous spacing, and high contrast to maintain readability from a distance."
-  },
-
-  "layoutModel": {
-    "viewport": {
-      "aspectRatio": "16:9 widescreen",
-      "safeMargins": {
-        "top": "5%",
-        "bottom": "5%",
-        "left": "4%",
-        "right": "4%"
-      },
-      "viewingDistanceOptimization": "UI optimized for 8–12 feet viewing distance"
-    },
-    "layoutZones": [
-      "Left Navigation Rail",
-      "Top Category Navigation",
-      "Hero Content Section",
-      "Action Button Row",
-      "Content Carousel Rows"
-    ],
-    "structure": {
-      "leftRailWidth": "72–96px",
-      "heroHeight": "50–60% of viewport height",
-      "carouselArea": "lower half of viewport"
-    }
-  },
-
-  "responsiveBreakpoints": {
-    "tailwindDefaults": {
+  "project": "Marvel Smart TV Movie App",
+  "description": "A TV-optimized media browsing interface featuring a side navigation bar, a featured hero banner, and horizontal scrolling media carousels.",
+  "designTokens": {
+    "breakpoints": {
       "sm": "640px",
       "md": "768px",
       "lg": "1024px",
       "xl": "1280px",
       "2xl": "1536px"
     },
-    "behavior": {
-      "base": {
-        "target": "small embedded screens",
-        "layout": "stacked content with minimal rail"
+    "colors": {
+      "primary": {
+        "50": "#fef2f2",
+        "100": "#fee2e2",
+        "200": "#fecaca",
+        "300": "#fca5a5",
+        "400": "#f87171",
+        "500": "#ef4444",
+        "600": "#dc2626",
+        "700": "#b91c1c",
+        "800": "#991b1b",
+        "900": "#7f1d1d",
+        "brand": "#ec1d24"
       },
-      "sm": {
-        "target": "small TV interfaces",
-        "posterSize": "180x270"
+      "secondary": {
+        "light": {
+          "background": "#ffffff",
+          "surface": "#f3f4f6",
+          "text": "#111827",
+          "textMuted": "#4b5563"
+        },
+        "dark": {
+          "background": "#000000",
+          "surface": "#111111",
+          "text": "#ffffff",
+          "textMuted": "#9ca3af"
+        }
       },
-      "md": {
-        "target": "HD 720p screens",
-        "posterSize": "200x300"
+      "gray": {
+        "50": "#f9fafb",
+        "100": "#f3f4f6",
+        "200": "#e5e7eb",
+        "300": "#d1d5db",
+        "400": "#9ca3af",
+        "500": "#6b7280",
+        "600": "#4b5563",
+        "700": "#374151",
+        "800": "#1f2937",
+        "900": "#111827"
       },
-      "lg": {
-        "target": "Full HD 1080p",
-        "posterSize": "220x330",
-        "carouselVisibleItems": 5
+      "accent": {
+        "heroOverlay": "linear-gradient(to right, rgba(0,0,0,0.9) 0%, rgba(127,29,29,0.6) 50%, rgba(0,0,0,0) 100%)",
+        "focusRing": "#ffffff",
+        "glass": "rgba(255, 255, 255, 0.1)"
+      }
+    },
+    "typography": {
+      "fontFamily": "Inter, system-ui, sans-serif",
+      "weights": {
+        "regular": 400,
+        "medium": 500,
+        "semibold": 600,
+        "bold": 700
       },
-      "xl": {
-        "target": "1440p displays",
-        "posterSize": "240x360",
-        "carouselVisibleItems": 6
-      },
-      "2xl": {
-        "target": "4K UHD TVs",
-        "posterSize": "280x420",
-        "carouselVisibleItems": 7
+      "sizes": {
+        "nav": "1.25rem",
+        "h1": "4rem",
+        "h2": "1.75rem",
+        "body": "1rem",
+        "button": "1.125rem"
       }
     }
   },
-
-  "colorSystem": {
-    "strategy": "Use two main palettes: a red primary palette for cinematic brand identity and actions, and a neutral dark palette for surfaces. Poster artwork provides most visual variation.",
-    "primaryPalette": {
-      "name": "Marvel Red",
-      "tokens": {
-        "primary-50": "#FFE5E5",
-        "primary-100": "#FFB3B3",
-        "primary-200": "#FF8080",
-        "primary-300": "#FF4D4D",
-        "primary-400": "#FF1A1A",
-        "primary-500": "#E60000",
-        "primary-600": "#CC0000",
-        "primary-700": "#990000",
-        "primary-800": "#660000",
-        "primary-900": "#330000"
-      },
-      "usage": [
-        "hero overlays",
-        "active navigation state",
-        "focus rings",
-        "brand identity"
-      ]
-    },
-    "secondaryPalette": {
-      "name": "Neutral Dark",
-      "tokens": {
-        "secondary-50": "#F8FAFC",
-        "secondary-100": "#F1F5F9",
-        "secondary-200": "#E2E8F0",
-        "secondary-300": "#CBD5F5",
-        "secondary-400": "#94A3B8",
-        "secondary-500": "#64748B",
-        "secondary-600": "#475569",
-        "secondary-700": "#334155",
-        "secondary-800": "#1E293B",
-        "secondary-900": "#0F172A"
-      },
-      "usage": [
-        "background surfaces",
-        "navigation rail",
-        "inactive buttons",
-        "typography contrast"
-      ]
-    },
-    "accentColors": {
-      "focus": "#FFFFFF",
-      "success": "#22C55E",
-      "warning": "#F59E0B"
-    },
-    "mediaOverlays": {
-      "heroOverlay": "linear-gradient(90deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.0) 75%)",
-      "heroTint": "rgba(200,0,0,0.65)"
-    }
-  },
-
-  "theming": {
-    "darkMode": {
-      "background": "#000000",
-      "surface": "#0F172A",
-      "textPrimary": "#FFFFFF",
-      "textSecondary": "#CBD5E1",
-      "interactivePrimary": "primary-500"
-    },
-    "lightMode": {
-      "background": "#FFFFFF",
-      "surface": "#F8FAFC",
-      "textPrimary": "#111827",
-      "textSecondary": "#475569",
-      "interactivePrimary": "primary-600"
-    }
-  },
-
-  "typography": {
-    "tone": "Bold cinematic sans-serif designed for TV readability",
-    "scale": {
-      "heroTitle": {
-        "size": "72–96px",
-        "weight": 800
-      },
-      "sectionTitle": {
-        "size": "28–36px",
-        "weight": 600
-      },
-      "body": {
-        "size": "20–24px",
-        "weight": 400
-      },
-      "buttonText": {
-        "size": "22–24px",
-        "weight": 600
-      }
-    }
-  },
-
   "components": {
-    "leftNavigationRail": {
-      "width": "80px",
-      "background": "secondary-900",
-      "items": [
-        "logo",
-        "search",
-        "home",
-        "trending",
-        "library",
-        "downloads",
-        "add",
-        "profile"
-      ],
-      "style": {
-        "iconSize": "28–32px",
-        "itemSpacing": "32px vertical",
-        "activeItem": {
-          "background": "secondary-700",
-          "borderRadius": "12px"
-        }
-      }
-    },
-
-    "topCategoryNav": {
-      "position": "top-left after rail",
-      "items": [
-        "Movies",
-        "TV Show",
-        "Podcast",
-        "News"
-      ],
-      "style": {
-        "fontSize": "24–28px",
-        "spacing": "48px between items",
-        "activeState": {
-          "underline": "primary-500",
-          "fontWeight": "600"
-        }
-      }
-    },
-
-    "heroSection": {
-      "background": "full-screen cinematic poster artwork",
-      "contentPlacement": "left aligned block",
+    "sidebar": {
+      "layout": "Fixed left, full height, flex column.",
+      "width": "8rem",
+      "background": "secondary.dark.surface",
       "elements": [
-        "brand label",
-        "movie title",
-        "description",
-        "action buttons"
-      ],
-      "heroImageBehavior": {
-        "crop": "full bleed background",
-        "overlayGradient": "left side dark fade",
-        "tint": "primary red tone"
+        "Marvel Logo (Top, centered)",
+        "Icon Navigation (Search, Home, Trending, Live TV, Monitor, Add, Profile)",
+        "Active State: gray.800 background, rounded corners, white icon."
+      ]
+    },
+    "topNavigation": {
+      "layout": "Flex row, horizontal, spaced evenly, aligned left.",
+      "items": ["Movies", "TV Show", "Podcast", "News"],
+      "typography": "typography.sizes.nav, regular weight",
+      "color": "secondary.dark.text"
+    },
+    "heroSection": {
+      "layout": "Relative container, full width (minus sidebar), top area of screen.",
+      "background": "Full cover image with accent.heroOverlay applied to ensure text legibility.",
+      "content": {
+        "title": "Marvel Studio logo + 'BLADE' logotype",
+        "description": "Max width 50%, left-aligned below title.",
+        "actions": [
+          {
+            "type": "Primary Button",
+            "label": "Watch Now",
+            "icon": "Play",
+            "style": "White background, black text, rounded-md, flex row, centered."
+          },
+          {
+            "type": "Secondary Button",
+            "label": "Favourite",
+            "icon": "Heart",
+            "style": "Transparent background, white 1px border, white text, rounded-md."
+          },
+          {
+            "type": "Secondary Button",
+            "label": "Share",
+            "icon": "Share Nodes",
+            "style": "Transparent background, white 1px border, white text, rounded-md."
+          }
+        ]
       }
     },
-
-    "heroTitle": {
-      "text": "BLADE",
-      "style": {
-        "fontWeight": "900",
-        "letterSpacing": "wide",
-        "color": "white"
-      }
-    },
-
-    "description": {
-      "maxWidth": "480px",
-      "textStyle": {
-        "fontSize": "22px",
-        "lineHeight": "1.5",
-        "color": "secondary-200"
-      }
-    },
-
-    "actionButtons": {
-      "layout": "horizontal row",
-      "gap": "20px",
-      "buttons": [
-        "Watch Now",
-        "Favourite",
-        "Share"
-      ],
-      "style": {
-        "height": "56px",
-        "paddingX": "32px",
-        "borderRadius": "12px"
-      },
-      "primaryButton": {
-        "background": "white",
-        "textColor": "black",
-        "icon": "play"
-      },
-      "secondaryButtons": {
-        "background": "transparent",
-        "border": "2px solid rgba(255,255,255,0.5)",
-        "textColor": "white"
-      }
-    },
-
     "carouselSection": {
       "title": "Trending Now",
-      "layout": "horizontal scroll row",
-      "cardSpacing": "24px",
-      "posterRatio": "2:3",
-      "posterStyle": {
-        "borderRadius": "16px",
-        "shadow": "0 12px 30px rgba(0,0,0,0.4)"
-      }
-    },
-
-    "posterCard": {
-      "states": {
-        "default": {
-          "scale": 1
-        },
-        "focused": {
-          "scale": 1.08,
-          "shadow": "strong glow",
-          "border": "2px solid primary-400"
-        }
+      "layout": "Horizontal scrolling flex container, gap 1.5rem, overflow-x visible.",
+      "cards": {
+        "aspectRatio": "approx 3:4 or 16:9 depending on poster type (posters shown are roughly 1:1.2)",
+        "borderRadius": "rounded-xl",
+        "focusState": "Scale up (1.05x), apply 4px solid accent.focusRing (White), elevate z-index."
       }
     }
-  },
-
-  "interactionPatterns": {
-    "navigation": "remote directional pad",
-    "focusSystem": {
-      "activeElement": "highlighted with scale, glow, and border",
-      "transition": "smooth scale and shadow"
-    },
-    "carouselBehavior": {
-      "scrollDirection": "horizontal",
-      "snap": "poster centers when focused"
-    },
-    "heroUpdate": {
-      "trigger": "poster focus change",
-      "effect": "hero background crossfade to selected movie"
-    }
-  },
-
-  "spacingAndSizing": {
-    "baseUnit": 8,
-    "contentPadding": "64px",
-    "carouselGap": "24px",
-    "sectionSpacing": "48px"
-  },
-
-  "accessibility": {
-    "contrast": "minimum 4.5:1",
-    "focusIndicator": "bright border + glow",
-    "textMinimumSize": "20px for readability at distance"
-  },
-
-  "screenStructure": {
-    "mainHome": [
-      "Left navigation rail",
-      "Top category navigation",
-      "Hero feature movie section",
-      "Primary action buttons",
-      "Trending carousel row"
-    ]
   }
 }
