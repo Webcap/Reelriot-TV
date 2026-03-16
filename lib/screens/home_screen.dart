@@ -642,10 +642,94 @@ class _MainHomeViewState extends State<_MainHomeView> {
     );
   }
 
+  /// Shows a dialog asking the user to resume from their saved position or start over.
+  /// Returns the Duration to start at, or null if the dialog was dismissed.
+  Future<Duration?> _showResumeDialog(BuildContext context, Duration saved, int durationMs) {
+    final pos = _formatDuration(saved);
+    final total = durationMs > 0 ? ' / ${_formatDuration(Duration(milliseconds: durationMs))}' : '';
+
+    return showDialog<Duration>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Resume Playback',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'You watched up to $pos$total.',
+          style: const TextStyle(color: Colors.white70, fontSize: 16),
+        ),
+        actions: [
+          Focus(
+            autofocus: true,
+            onKeyEvent: (_, event) {
+              if (event is KeyDownEvent &&
+                  (event.logicalKey == LogicalKeyboardKey.enter ||
+                      event.logicalKey == LogicalKeyboardKey.select)) {
+                Navigator.of(ctx).pop(saved);
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: TextButton(
+              onPressed: () => Navigator.of(ctx).pop(saved),
+              style: TextButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: Text('Continue from $pos'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Focus(
+            onKeyEvent: (_, event) {
+              if (event is KeyDownEvent &&
+                  (event.logicalKey == LogicalKeyboardKey.enter ||
+                      event.logicalKey == LogicalKeyboardKey.select)) {
+                Navigator.of(ctx).pop(Duration.zero);
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: TextButton(
+              onPressed: () => Navigator.of(ctx).pop(Duration.zero),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.white54,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              child: const Text('Start Over'),
+            ),
+          ),
+        ],
+      ),
+    ).then((v) => v); // returns null if dismissed via back button
+  }
+
+  String _formatDuration(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes % 60;
+    final s = d.inSeconds % 60;
+    if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
   Widget _buildContinueWatchingRow(BuildContext context, double Function(double) s) {
     if (_history == null) return const SizedBox.shrink();
     final validHistory = _history!.where((h) => h['media_id'] != null && h['title'] != null).toList();
     if (validHistory.isEmpty) return const SizedBox.shrink();
+
+    // Deduplicate by media_id — keep only the most recent entry per title.
+    // (Results are already sorted newest-first from getHistory().)
+    final seenIds = <int>{};
+    final dedupedHistory = validHistory.where((h) {
+      final id = h['media_id'] as int;
+      return seenIds.add(id); // add returns false if already present
+    }).toList();
+    if (dedupedHistory.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -665,9 +749,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             primary: false,
-            itemCount: validHistory.length,
+            itemCount: dedupedHistory.length,
             itemBuilder: (context, index) {
-              final h = validHistory[index];
+              final h = dedupedHistory[index];
               final isMovie = h['type'] == 'movie';
               final mediaId = h['media_id'] as int;
               
@@ -678,13 +762,27 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   title: h['title'] ?? '',
                   onFocus: () => _updateFocusedMovie(mediaId, isMovie: isMovie),
                   onTap: () async {
+                    final positionMs = h['position_ms'] as int? ?? 0;
+                    final durationMs = h['duration_ms'] as int? ?? 0;
+                    final savedPosition = Duration(milliseconds: positionMs);
+
+                    // Show resume dialog if there's a saved position
+                    Duration? startAt;
+                    if (positionMs > 0) {
+                      startAt = await _showResumeDialog(context, savedPosition, durationMs);
+                      if (startAt == null) return; // user dismissed
+                    }
+
                     if (isMovie) {
                       final detail = await _api.fetchMovieDetail(mediaId);
                       if (!mounted) return;
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => VideoLoaderScreen(movie: detail),
+                          builder: (context) => VideoLoaderScreen(
+                            movie: detail,
+                            startPosition: startAt,
+                          ),
                         ),
                       );
                     } else {
@@ -697,6 +795,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                             tvShow: detail,
                             season: h['season'],
                             episode: h['episode'],
+                            startPosition: startAt,
                           ),
                         ),
                       );

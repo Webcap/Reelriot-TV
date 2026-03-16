@@ -1,6 +1,7 @@
 import 'package:caffeine_tv/env.dart';
 import 'package:caffeine_tv/screens/home_screen.dart';
 import 'package:caffeine_tv/screens/pairing_screen.dart';
+import 'package:caffeine_tv/services/settings_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -14,6 +15,9 @@ void main() async {
   if (url.isNotEmpty && anonKey.isNotEmpty) {
     await Supabase.initialize(url: url, anonKey: anonKey);
   }
+
+  // Initialize SettingsService
+  await SettingsService().init();
 
   runApp(const CaffeineTvApp());
 }

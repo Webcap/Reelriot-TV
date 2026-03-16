@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:better_player/better_player.dart';
 import 'package:caffeine_tv/services/watch_history_service.dart';
+import 'package:caffeine_tv/widgets/player_settings_overlay.dart';
 import 'dart:async';
 
 class PlayerScreen extends StatefulWidget {
@@ -118,6 +119,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  void _showSettings() {
+    showDialog(
+      context: context,
+      builder: (context) => PlayerSettingsOverlay(controller: _controller),
+    );
+  }
+
   @override
   void dispose() {
     _saveTimer?.cancel();
@@ -174,9 +182,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         // Show Options / Settings on Arrow Up
         if (key == LogicalKeyboardKey.arrowUp) {
-          _controller.setControlsVisibility(true);
-          // BetterPlayer doesn't have a public 'openSettings' method easy to trigger, 
-          // but showing controls allows user to navigate to the settings icon.
+          _showSettings();
           return KeyEventResult.handled;
         }
 

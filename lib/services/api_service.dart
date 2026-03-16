@@ -3,13 +3,14 @@ import 'dart:convert';
 import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'package:caffeine_tv/constants.dart';
 import 'package:caffeine_tv/env.dart';
+import 'package:caffeine_tv/services/settings_service.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {
   String get _tmdbKey => tmdbApiKey;
   String get tmdbBaseUrl => tmdbApiBaseUrl;
   String get caffeineBaseUrl => caffeineApiUrl.replaceFirst(RegExp(r'/$'), '');
-  String get language => 'en';
+  String get language => SettingsService().language;
 
   Future<Map<String, dynamic>> loadConfig() async {
     return core.fetchConfig(caffeineBaseUrl);

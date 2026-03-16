@@ -1,3 +1,4 @@
+import 'package:caffeine_tv/services/settings_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,21 +11,35 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _supabase = Supabase.instance.client;
+  final _settings = SettingsService();
   bool _loading = false;
   String? _name;
   String? _email;
   int _movieWatchTimeMs = 0;
   int _tvWatchTimeMs = 0;
+  late String _currentLanguage;
+
+  final List<Map<String, String>> _languages = [
+    {'name': 'English', 'code': 'en'},
+    {'name': 'Spanish', 'code': 'es'},
+    {'name': 'French', 'code': 'fr'},
+    {'name': 'German', 'code': 'de'},
+    {'name': 'Portuguese', 'code': 'pt'},
+    {'name': 'Italian', 'code': 'it'},
+    {'name': 'Japanese', 'code': 'ja'},
+    {'name': 'Korean', 'code': 'ko'},
+    {'name': 'Chinese', 'code': 'zh'},
+  ];
 
   @override
   void initState() {
     super.initState();
+    _currentLanguage = _settings.language;
     _loadUserData();
   }
 
   Future<void> _loadUserData() async {
-    final session = _supabase.auth.currentSession;
+    final session = Supabase.instance.client.auth.currentSession;
     if (session == null) return;
 
     setState(() => _loading = true);
@@ -34,7 +49,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _email = user.email;
 
       // 1. Fetch profile name
-      final profileRes = await _supabase
+      final profileRes = await Supabase.instance.client
           .from('profiles')
           .select('name')
           .eq('id', user.id)
@@ -47,7 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
 
       // 2. Fetch watch history and aggregate time
-      final historyRes = await _supabase
+      final historyRes = await Supabase.instance.client
           .from('watch_history')
           .select('movies, tv_shows')
           .eq('user_id', user.id)
@@ -101,7 +116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final session = _supabase.auth.currentSession;
+    final session = Supabase.instance.client.auth.currentSession;
     final isSignedIn = session != null;
 
     return Center(
@@ -182,6 +197,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 32),
+                // Language Section
+                Text(
+                  'Language',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.symmetric(horizontal: 48),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: _languages.map((lang) {
+                      final isSelected = _currentLanguage == lang['code'];
+                      return Focus(
+                        onKeyEvent: (_, event) {
+                          if (event is KeyDownEvent &&
+                              (event.logicalKey == LogicalKeyboardKey.enter ||
+                                  event.logicalKey == LogicalKeyboardKey.select)) {
+                            _updateLanguage(lang['code']!);
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: Builder(builder: (context) {
+                          final focused = Focus.of(context).hasFocus;
+                          return ChoiceChip(
+                            label: Text(lang['name']!),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              if (selected) _updateLanguage(lang['code']!);
+                            },
+                            backgroundColor: focused ? Colors.white24 : Colors.transparent,
+                            selectedColor: const Color(0xFFDC2626),
+                            labelStyle: TextStyle(
+                              color: isSelected || focused ? Colors.white : Colors.white70,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          );
+                        }),
+                      );
+                    }).toList(),
+                  ),
+                ),
               ],
               const SizedBox(height: 48),
               Builder(builder: (context) {
@@ -242,8 +311,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _signOut(BuildContext context) {
-    _supabase.auth.signOut();
+    Supabase.instance.client.auth.signOut();
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+  }
+
+  Future<void> _updateLanguage(String code) async {
+    await _settings.setLanguage(code);
+    setState(() {
+      _currentLanguage = code;
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Language updated to ${_languages.firstWhere((l) => l['code'] == code)['name']}'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 }
 

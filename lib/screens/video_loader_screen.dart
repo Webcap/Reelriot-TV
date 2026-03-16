@@ -11,12 +11,14 @@ class VideoLoaderScreen extends StatefulWidget {
   final core.TvShowDetail? tvShow;
   final int? season;
   final int? episode;
+  final Duration? startPosition;
 
   const VideoLoaderScreen({
     this.movie,
     this.tvShow,
     this.season,
     this.episode,
+    this.startPosition,
     super.key,
   });
 
@@ -61,15 +63,19 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     for (int i = 0; i < _providers.length; i++) {
       if (!mounted) return;
 
-      // Check for existing progress before launching first provider
+      // Use passed-in start position; otherwise look up from DB
       Duration? startPos;
       if (i == 0) {
-        startPos = await _historyService.getSavedProgress(
-          mediaId!, 
-          widget.movie != null,
-          season: widget.season,
-          episode: widget.episode,
-        );
+        if (widget.startPosition != null) {
+          startPos = widget.startPosition;
+        } else {
+          startPos = await _historyService.getSavedProgress(
+            mediaId!,
+            widget.movie != null,
+            season: widget.season,
+            episode: widget.episode,
+          );
+        }
       }
 
       final providerCode = _providers[i]['code']!;
