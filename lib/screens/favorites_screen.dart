@@ -47,11 +47,11 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
           .from('bookmarks')
           .select('movies, tv_shows')
           .eq('user_id', user.id)
-          .maybeSingle();
+          .limit(1);
 
-      if (res != null) {
-        final moviesRaw = res['movies'] as List<dynamic>? ?? [];
-        final tvRaw = res['tv_shows'] as List<dynamic>? ?? [];
+      if (res.isNotEmpty) {
+        final moviesRaw = res[0]['movies'] as List<dynamic>? ?? [];
+        final tvRaw = res[0]['tv_shows'] as List<dynamic>? ?? [];
 
         setState(() {
           _bookmarkedMovies = moviesRaw

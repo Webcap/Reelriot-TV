@@ -14,10 +14,10 @@ class BookmarkService {
           .from('bookmarks')
           .select(isMovie ? 'movies' : 'tv_shows')
           .eq('user_id', user.id)
-          .maybeSingle();
+          .limit(1);
 
-      if (res == null) return false;
-      final List<dynamic> items = res[isMovie ? 'movies' : 'tv_shows'] ?? [];
+      if (res.isEmpty) return false;
+      final List<dynamic> items = res[0][isMovie ? 'movies' : 'tv_shows'] ?? [];
       return items.any((item) => item['id'] == id);
     } catch (e) {
       debugPrint('Error checking bookmark: $e');
@@ -34,9 +34,9 @@ class BookmarkService {
           .from('bookmarks')
           .select('movies, tv_shows')
           .eq('user_id', user.id)
-          .maybeSingle();
+          .limit(1);
 
-      Map<String, dynamic>? data = res;
+      Map<String, dynamic>? data = res.isNotEmpty ? res[0] : null;
       List<dynamic> movies = data?['movies'] ?? [];
       List<dynamic> tv = data?['tv_shows'] ?? [];
 

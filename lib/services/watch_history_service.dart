@@ -122,9 +122,12 @@ class WatchHistoryService {
         query = query.eq('season', season as Object).eq('episode', episode as Object);
       }
 
-      final res = await query.maybeSingle();
-      if (res != null && res['position_ms'] != null) {
-        return Duration(milliseconds: res['position_ms'] as int);
+      final res = await query
+          .order('updated_at', ascending: false)
+          .limit(1);
+
+      if (res.isNotEmpty && res[0]['position_ms'] != null) {
+        return Duration(milliseconds: res[0]['position_ms'] as int);
       }
     } catch (e) {
       debugPrint('Error fetching saved progress: $e');

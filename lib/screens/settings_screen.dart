@@ -53,35 +53,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
           .from('profiles')
           .select('name')
           .eq('id', user.id)
-          .maybeSingle();
+          .limit(1);
       
       if (mounted) {
         setState(() {
-          _name = profileRes?['name'] as String?;
+          _name = profileRes.isNotEmpty ? profileRes[0]['name'] as String? : null;
         });
       }
 
       // 2. Fetch watch history and aggregate time
       final historyRes = await Supabase.instance.client
           .from('watch_history')
-          .select('movies, tv_shows')
-          .eq('user_id', user.id)
-          .maybeSingle();
+          .select('position_ms, type')
+          .eq('user_id', user.id);
 
-      if (historyRes != null) {
+      if ((historyRes as List).isNotEmpty) {
         int movieTime = 0;
-        final movies = historyRes['movies'] as List<dynamic>? ?? [];
-        for (var m in movies) {
-          if (m is Map && m['elapsed'] != null) {
-            movieTime += (m['elapsed'] as num).toInt();
-          }
-        }
-
         int tvTime = 0;
-        final tvShows = historyRes['tv_shows'] as List<dynamic>? ?? [];
-        for (var t in tvShows) {
-          if (t is Map && t['elapsed'] != null) {
-            tvTime += (t['elapsed'] as num).toInt();
+        
+        for (var row in (historyRes as List)) {
+          final ms = row['position_ms'] as int? ?? 0;
+          if (row['type'] == 'movie') {
+            movieTime += ms;
+          } else {
+            tvTime += ms;
           }
         }
 
