@@ -4,6 +4,7 @@ import 'package:caffeine_tv/screens/movie_detail_screen.dart';
 import 'package:caffeine_tv/screens/search_screen.dart';
 import 'package:caffeine_tv/screens/favorites_screen.dart';
 import 'package:caffeine_tv/screens/settings_screen.dart';
+import 'package:caffeine_tv/screens/sports_screen.dart';
 import 'package:caffeine_tv/services/api_service.dart';
 import 'package:caffeine_tv/services/watch_history_service.dart';
 import 'package:caffeine_tv/screens/video_loader_screen.dart';
@@ -26,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _tabs = [
     _Tab(label: 'Search', icon: Icons.search),
     _Tab(label: 'Home', icon: Icons.home_filled),
+    _Tab(label: 'Sports', icon: Icons.sports_soccer),
     _Tab(label: 'Profile', icon: Icons.person_outline),
     _Tab(label: 'Favorites', icon: Icons.favorite_border),
   ];
@@ -43,6 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 const SearchScreen(),
                 const _MainHomeView(),
+                const SportsScreen(),
                 const SettingsScreen(),
                 FavoritesScreen(key: _favoritesKey),
               ],
@@ -101,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (event.logicalKey == LogicalKeyboardKey.enter ||
                           event.logicalKey == LogicalKeyboardKey.select) {
                         setState(() => _selectedIndex = i);
-                        if (i == 3) {
+                        if (i == 4) {
                           _favoritesKey.currentState?.refresh();
                         }
                         return KeyEventResult.handled;
@@ -257,15 +260,29 @@ class _MainHomeViewState extends State<_MainHomeView> {
       } else {
         final trending = await _api.fetchTrendingMovies();
         final popular = await _api.fetchPopularMovies();
+
+        // Keep only movies with a past/present release date (in theaters or digital).
+        final today = DateTime.now();
+        bool isReleased(MovieListItem m) {
+          if (m.releaseDate == null || m.releaseDate!.isEmpty) return false;
+          try {
+            return DateTime.parse(m.releaseDate!).isBefore(today.add(const Duration(days: 1)));
+          } catch (_) {
+            return false;
+          }
+        }
+
+        final releasedTrending = trending.results.where(isReleased).toList();
+        final releasedPopular = popular.results.where(isReleased).toList();
         
-        if (trending.results.isNotEmpty) {
-          final hero = await _api.fetchMovieDetail(trending.results.first.id);
+        if (releasedTrending.isNotEmpty) {
+          final hero = await _api.fetchMovieDetail(releasedTrending.first.id);
           if (mounted) {
             setState(() {
               _focusedMovie = hero;
-              _trending = trending.results.take(5).toList();
-              _weeklyTrending = trending.results;
-              _popular = popular.results;
+              _trending = releasedTrending.take(5).toList();
+              _weeklyTrending = releasedTrending;
+              _popular = releasedPopular;
               _historyService.getHistory().then((h) {
                 if (mounted) setState(() => _history = h);
               });
@@ -584,7 +601,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
   Widget _buildTopNav(BuildContext context) {
     final s = (double v) => _scale(context, v);
-    final categories = ['Movies', 'TV Shows', 'Sports', 'Live (Beta)'];
+    final categories = ['Movies', 'TV Shows'];
     return Row(
       children: categories.map((cat) {
         final isSelected = cat == _selectedCategory;

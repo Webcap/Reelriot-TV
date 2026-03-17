@@ -22,9 +22,14 @@ class WatchHistoryService {
     final backdropPath = isMovie ? (item as MovieDetail).backdropPath : (item as TvShowDetail).backdropPath;
     final overview = isMovie ? (item as MovieDetail).overview : (item as TvShowDetail).overview;
 
+    // Mark as completed when >= 90% watched
+    final pct = duration.inMilliseconds > 0
+        ? position.inMilliseconds / duration.inMilliseconds
+        : 0.0;
+    final completed = pct >= 0.9;
+
     try {
-      debugPrint('[WatchHistory] 💾 Saving progress for $title (ID: $mediaId) at ${position.inSeconds}s');
-      // We use upsert on user_id + media_id + type + season + episode
+      debugPrint('[WatchHistory] 💾 Saving progress for $title (ID: $mediaId) at ${position.inSeconds}s${completed ? ' [COMPLETED]' : ''}');
       await _supabase.from('watch_history').upsert({
         'user_id': user.id,
         'media_id': mediaId,
@@ -37,6 +42,7 @@ class WatchHistoryService {
         'episode': episode,
         'position_ms': position.inMilliseconds,
         'duration_ms': duration.inMilliseconds,
+        'completed': completed,
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'user_id, media_id, type, season, episode');
       debugPrint('[WatchHistory] ✅ Progress saved successfully');
@@ -54,6 +60,7 @@ class WatchHistoryService {
           .from('watch_history')
           .select()
           .eq('user_id', user.id)
+          .neq('completed', true)   // exclude fully-watched items
           .order('updated_at', ascending: false)
           .limit(20);
 
