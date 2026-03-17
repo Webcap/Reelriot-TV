@@ -253,19 +253,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
               const SizedBox(height: 48),
-              Builder(builder: (context) {
-                final focused = Focus.of(context).hasFocus;
-                return Focus(
-                  onKeyEvent: (_, event) {
-                    if (event is KeyDownEvent &&
-                        (event.logicalKey == LogicalKeyboardKey.enter ||
-                            event.logicalKey == LogicalKeyboardKey.select)) {
-                      _signOut(context);
-                      return KeyEventResult.handled;
-                    }
-                    return KeyEventResult.ignored;
-                  },
-                  child: ElevatedButton.icon(
+              Focus(
+                onKeyEvent: (_, event) {
+                  if (event is KeyDownEvent &&
+                      (event.logicalKey == LogicalKeyboardKey.enter ||
+                          event.logicalKey == LogicalKeyboardKey.select)) {
+                    _signOut(context);
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: Builder(builder: (context) {
+                  final focused = Focus.of(context).hasFocus;
+                  return ElevatedButton.icon(
                     onPressed: () => _signOut(context),
                     icon: const Icon(Icons.logout),
                     label: const Text('Sign out'),
@@ -275,23 +275,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       side: focused ? const BorderSide(color: Colors.white, width: 2) : BorderSide.none,
                       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                     ),
-                  ),
-                );
-              }),
+                  );
+                }),
+              ),
             ] else
-              Builder(builder: (context) {
-                final focused = Focus.of(context).hasFocus;
-                return Focus(
-                  onKeyEvent: (_, event) {
-                    if (event is KeyDownEvent &&
-                        (event.logicalKey == LogicalKeyboardKey.enter ||
-                            event.logicalKey == LogicalKeyboardKey.select)) {
-                      Navigator.of(context).pushNamed('/pairing');
-                      return KeyEventResult.handled;
-                    }
-                    return KeyEventResult.ignored;
-                  },
-                  child: ElevatedButton.icon(
+              Focus(
+                onKeyEvent: (_, event) {
+                  if (event is KeyDownEvent &&
+                      (event.logicalKey == LogicalKeyboardKey.enter ||
+                          event.logicalKey == LogicalKeyboardKey.select)) {
+                    Navigator.of(context).pushNamed('/pairing');
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: Builder(builder: (context) {
+                  final focused = Focus.of(context).hasFocus;
+                  return ElevatedButton.icon(
                     onPressed: () => Navigator.of(context).pushNamed('/pairing'),
                     icon: const Icon(Icons.login),
                     label: const Text('Sign in'),
@@ -301,9 +301,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       side: focused ? const BorderSide(color: Colors.white, width: 2) : BorderSide.none,
                       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                     ),
-                  ),
-                );
-              }),
+                  );
+                }),
+              ),
           ],
         ),
       ),

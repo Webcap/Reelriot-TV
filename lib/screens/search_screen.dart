@@ -71,34 +71,58 @@ class _SearchScreenState extends State<SearchScreen> {
           Row(
             children: [
               Expanded(
-                child: TextField(
-                  controller: _queryController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'Movies and TV shows',
-                    hintStyle: TextStyle(color: Colors.grey[600]),
-                    filled: true,
-                    fillColor: const Color(0xFF1a1a2e),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                child: Focus(
+                  child: Builder(
+                    builder: (context) {
+                      final focused = Focus.of(context).hasFocus;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: focused ? const Color(0xFFEC1D24) : Colors.transparent,
+                            width: 2,
+                          ),
+                          boxShadow: focused
+                              ? [BoxShadow(color: const Color(0xFFEC1D24).withOpacity(0.3), blurRadius: 12, spreadRadius: 1)]
+                              : [],
+                        ),
+                        child: TextField(
+                          controller: _queryController,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: 'Movies and TV shows',
+                            hintStyle: TextStyle(color: Colors.grey[600]),
+                            filled: true,
+                            fillColor: const Color(0xFF1a1a2e),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                          onSubmitted: (_) => _search(),
+                        ),
+                      );
+                    },
                   ),
-                  onSubmitted: (_) => _search(),
                 ),
               ),
               const SizedBox(width: 16),
-              Builder(
-                builder: (context) {
-                  final focused = Focus.of(context).hasFocus;
-                  return Focus(
-                    onKeyEvent: (_, event) {
-                      if (event is KeyDownEvent &&
-                          (event.logicalKey == LogicalKeyboardKey.enter ||
-                              event.logicalKey == LogicalKeyboardKey.select)) {
-                        _search();
-                        return KeyEventResult.handled;
-                      }
-                      return KeyEventResult.ignored;
-                    },
-                    child: ElevatedButton(
+              Focus(
+                onKeyEvent: (_, event) {
+                  if (event is KeyDownEvent &&
+                      (event.logicalKey == LogicalKeyboardKey.enter ||
+                          event.logicalKey == LogicalKeyboardKey.select)) {
+                    _search();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: Builder(
+                  builder: (context) {
+                    final focused = Focus.of(context).hasFocus;
+                    return ElevatedButton(
                       onPressed: _loading ? null : _search,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: focused ? Colors.white : const Color(0xFFDC2626),
@@ -107,9 +131,9 @@ class _SearchScreenState extends State<SearchScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                       ),
                       child: Text(_loading ? 'Searching…' : 'Search'),
-                    ),
-                  );
-                }
+                    );
+                  },
+                ),
               ),
             ],
           ),

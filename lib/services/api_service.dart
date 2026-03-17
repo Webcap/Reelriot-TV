@@ -75,6 +75,11 @@ class ApiService {
     return _fetchTvList(url);
   }
 
+  Future<core.TvListResponse> fetchAiringToday() async {
+    final url = '$tmdbBaseUrl/tv/airing_today?api_key=$_tmdbKey&language=$language';
+    return _fetchTvList(url);
+  }
+
   Future<core.TvListResponse> fetchTvRecommendations(int tvId, {int page = 1}) async {
     final url = core.Endpoints.tvRecommendationsUrl(tmdbBaseUrl, _tmdbKey, tvId, page, language);
     return _fetchTvList(url);

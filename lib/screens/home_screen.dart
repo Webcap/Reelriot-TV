@@ -116,23 +116,28 @@ class _HomeScreenState extends State<HomeScreen> {
                         final focused = Focus.of(context).hasFocus;
                         return Padding(
                           padding: EdgeInsets.symmetric(vertical: s(24)),
-                          child: AnimatedContainer(
+                          child: AnimatedScale(
+                            scale: selected || focused ? 1.08 : 1.0,
                             duration: const Duration(milliseconds: 200),
-                            width: s(85),
-                            height: s(85),
-                            decoration: BoxDecoration(
-                              // gray.800 (#1f2937) for active sidebar item
-                              color: selected ? const Color(0xFF1F2937) : (focused ? Colors.white.withOpacity(0.05) : Colors.transparent),
-                              borderRadius: BorderRadius.circular(s(18)),
-                              border: Border.all(
-                                color: focused ? Colors.white24 : Colors.transparent,
-                                width: s(2),
+                            curve: Curves.easeOutCubic,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              width: s(85),
+                              height: s(85),
+                              decoration: BoxDecoration(
+                                // gray.800 (#1f2937) for active sidebar item
+                                color: selected ? const Color(0xFF1F2937) : (focused ? Colors.white.withOpacity(0.05) : Colors.transparent),
+                                borderRadius: BorderRadius.circular(s(18)),
+                                border: Border.all(
+                                  color: focused ? Colors.white24 : Colors.transparent,
+                                  width: s(2),
+                                ),
                               ),
-                            ),
-                            child: Icon(
-                              tab.icon, 
-                              color: Colors.white, 
-                              size: s(42)
+                              child: Icon(
+                                tab.icon, 
+                                color: Colors.white, 
+                                size: s(42)
+                              ),
                             ),
                           ),
                         );
@@ -170,6 +175,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
   List<MovieListItem>? _trending;
   List<MovieListItem>? _weeklyTrending;
   List<MovieListItem>? _popular;
+  List<MovieListItem>? _airingToday;
   List<Map<String, dynamic>>? _history;
   bool _loading = true;
   Timer? _autoSlideTimer;
@@ -208,6 +214,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
       if (isTv) {
         final trending = await _api.fetchTrendingTv();
         final popular = await _api.fetchPopularTv();
+        final airingToday = await _api.fetchAiringToday();
         
         if (trending.results.isNotEmpty) {
           final hero = await _api.fetchTvDetail(trending.results.first.id);
@@ -247,8 +254,16 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 backdropPath: t.backdropPath,
                 overview: t.overview,
               )).toList();
+
+              _airingToday = airingToday.results.map((t) => MovieListItem(
+                id: t.id,
+                title: t.name,
+                posterPath: t.posterPath,
+                backdropPath: t.backdropPath,
+                overview: t.overview,
+              )).toList();
               
-              _historyService.getHistory().then((h) {
+              _historyService.getHistory(mediaType: 'tv').then((h) {
                 if (mounted) setState(() => _history = h);
               });
               
@@ -283,7 +298,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
               _trending = releasedTrending.take(5).toList();
               _weeklyTrending = releasedTrending;
               _popular = releasedPopular;
-              _historyService.getHistory().then((h) {
+              _historyService.getHistory(mediaType: 'movie').then((h) {
                 if (mounted) setState(() => _history = h);
               });
               _loading = false;
@@ -295,6 +310,12 @@ class _MainHomeViewState extends State<_MainHomeView> {
     } catch (e) {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _reloadHistory() async {
+    final mediaType = _selectedCategory == 'TV Shows' ? 'tv' : 'movie';
+    final h = await _historyService.getHistory(mediaType: mediaType);
+    if (mounted) setState(() => _history = h);
   }
 
   void _startAutoSlide() {
@@ -538,6 +559,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
                     ),
               ),
               _buildContinueWatchingRow(context, s),
+              if (_selectedCategory == 'TV Shows') ...[
+                SizedBox(height: s(96)),
+                _buildAiringTodayRow(context, s),
+              ],
               SizedBox(height: s(96)),
               _buildRow(context, _selectedCategory == 'TV Shows' ? 'Popular shows this week' : 'Popular movies this week', _weeklyTrending),
               SizedBox(height: s(72)),
@@ -602,8 +627,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
   Widget _buildTopNav(BuildContext context) {
     final s = (double v) => _scale(context, v);
     final categories = ['Movies', 'TV Shows'];
-    return Row(
-      children: categories.map((cat) {
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: categories.map((cat) {
         final isSelected = cat == _selectedCategory;
         return Focus(
           onKeyEvent: (node, event) {
@@ -629,7 +656,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   }
                 },
                 child: Padding(
-                  padding: EdgeInsets.only(right: s(96)),
+                  padding: EdgeInsets.symmetric(horizontal: s(48)),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -655,7 +682,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
             }
           ),
         );
-      }).toList(),
+        }).toList(),
+      ),
     );
   }
 
@@ -793,7 +821,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                     if (isMovie) {
                       final detail = await _api.fetchMovieDetail(mediaId);
                       if (!mounted) return;
-                      Navigator.push(
+                      await Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => VideoLoaderScreen(
@@ -805,7 +833,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                     } else {
                       final detail = await _api.fetchTvDetail(h['media_id']);
                       if (!mounted) return;
-                      Navigator.push(
+                      await Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => VideoLoaderScreen(
@@ -817,6 +845,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
                         ),
                       );
                     }
+
+                    // Refresh history so completed items disappear immediately
+                    if (mounted) _reloadHistory();
                   },
                 ),
               );
@@ -825,6 +856,70 @@ class _MainHomeViewState extends State<_MainHomeView> {
         ),
       ],
     );
+  }
+
+  Widget _buildAiringTodayRow(BuildContext context, double Function(double) s) {
+    if (_airingToday == null || _airingToday!.isEmpty) return const SizedBox.shrink();
+    final now = DateTime.now();
+    final dateLabel = '${_monthName(now.month)} ${now.day}, ${now.year}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              'Airing Today',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: s(48),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            SizedBox(width: s(24)),
+            Padding(
+              padding: EdgeInsets.only(bottom: s(6)),
+              child: Text(
+                dateLabel,
+                style: TextStyle(
+                  color: Colors.white38,
+                  fontSize: s(22),
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: s(42)),
+        SizedBox(
+          height: s(480),
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            primary: false,
+            itemCount: _airingToday!.length,
+            itemBuilder: (context, index) {
+              final m = _airingToday![index];
+              return Padding(
+                padding: EdgeInsets.only(right: s(36)),
+                child: PosterCard(
+                  posterPath: m.posterPath,
+                  title: m.title ?? '',
+                  onFocus: () => _updateFocusedMovie(m.id),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: m.id)),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _monthName(int month) {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return months[month - 1];
   }
 
   Widget _buildRow(BuildContext context, String title, List<MovieListItem>? items) {

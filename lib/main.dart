@@ -1,6 +1,7 @@
 import 'package:caffeine_tv/env.dart';
 import 'package:caffeine_tv/screens/home_screen.dart';
 import 'package:caffeine_tv/screens/pairing_screen.dart';
+import 'package:caffeine_tv/screens/splash_screen.dart';
 import 'package:caffeine_tv/services/settings_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -49,11 +50,13 @@ class _AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Widget destination;
     if (requireLogin) {
       final session = Supabase.instance.client.auth.currentSession;
-      if (session != null) return const HomeScreen();
-      return const PairingScreen();
+      destination = session != null ? const HomeScreen() : const PairingScreen();
+    } else {
+      destination = const HomeScreen();
     }
-    return const HomeScreen();
+    return SplashScreen(destination: destination);
   }
 }

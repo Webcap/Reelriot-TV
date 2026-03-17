@@ -57,7 +57,7 @@ class PosterCard extends StatelessWidget {
             onTap: onTap,
             child: AnimatedScale(
               scale: hasFocus ? 1.05 : 1.0, // 1.05x focus scaling
-              duration: const Duration(milliseconds: 150),
+              duration: const Duration(milliseconds: 200),
               child: Container(
                 width: cardWidth,
                 height: cardHeight,
@@ -79,9 +79,9 @@ class PosterCard extends StatelessWidget {
                             ),
                             boxShadow: hasFocus ? [
                               BoxShadow(
-                                color: Colors.white.withOpacity(0.3),
-                                blurRadius: s(25),
-                                spreadRadius: s(2),
+                                color: const Color(0xFFEC1D24).withOpacity(0.45),
+                                blurRadius: s(28),
+                                spreadRadius: s(3),
                               )
                             ] : null,
                           ),

@@ -457,7 +457,7 @@ class _ActionBtnState extends State<_ActionBtn> {
   double _scale = 1.0;
 
   void _handleTap() {
-    setState(() => _scale = 1.3);
+    setState(() => _scale = 1.08);
     Future.delayed(const Duration(milliseconds: 150), () {
       if (mounted) setState(() => _scale = 1.0);
     });

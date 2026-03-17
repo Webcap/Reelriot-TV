@@ -51,16 +51,22 @@ class WatchHistoryService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getHistory() async {
+  Future<List<Map<String, dynamic>>> getHistory({String? mediaType}) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return [];
 
     try {
-      final res = await _supabase
+      var query = _supabase
           .from('watch_history')
           .select()
           .eq('user_id', user.id)
-          .neq('completed', true)   // exclude fully-watched items
+          .eq('completed', false); // only incomplete items
+
+      if (mediaType != null) {
+        query = query.eq('type', mediaType);
+      }
+
+      final res = await query
           .order('updated_at', ascending: false)
           .limit(20);
 

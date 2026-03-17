@@ -377,12 +377,8 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                             if (episodes.isEmpty)
                               Center(child: Padding(padding: EdgeInsets.symmetric(vertical: s(48)), child: Text('Select a season to view episodes', style: TextStyle(color: Colors.white54, fontSize: s(20)))))
                             else
-                              ListView.builder(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: episodes.length,
-                                itemBuilder: (context, index) {
-                                  final ep = episodes[index];
+                              Column(
+                                children: episodes.map((ep) {
                                   return Padding(
                                     padding: EdgeInsets.only(bottom: s(16)),
                                     child: Focus(
@@ -412,7 +408,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                                   width: s(2),
                                                 ),
                                                 boxShadow: focused
-                                                    ? [BoxShadow(color: Colors.black54, blurRadius: 10)]
+                                                    ? [BoxShadow(color: const Color(0xFFEC1D24).withOpacity(0.25), blurRadius: 16)]
                                                     : [],
                                               ),
                                               child: Row(
@@ -479,6 +475,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                     ),
                                   );
                                 },
+                              ).toList(),
                               ),
                             if (_credits != null && _credits!.cast.isNotEmpty) ...[
                               SizedBox(height: s(64)),
@@ -649,7 +646,7 @@ class _ActionBtnState extends State<_ActionBtn> {
   double _scale = 1.0;
 
   void _handleTap() {
-    setState(() => _scale = 1.3);
+    setState(() => _scale = 1.08);
     Future.delayed(const Duration(milliseconds: 150), () {
       if (mounted) setState(() => _scale = 1.0);
     });
