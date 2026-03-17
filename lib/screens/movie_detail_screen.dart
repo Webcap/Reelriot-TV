@@ -267,15 +267,21 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                           SizedBox(height: s(48)),
                           Row(
                             children: [
-                              _ActionBtn(
-                                label: 'WATCH NOW',
-                                icon: Icons.play_arrow,
-                                isPrimary: true,
-                                onTap: _play,
-                                s: s,
-                                autofocus: true,
-                              ),
-                              SizedBox(width: s(24)),
+                              if (m.releaseDate == null || 
+                                  m.releaseDate!.isEmpty || 
+                                  DateTime.tryParse(m.releaseDate!)?.isBefore(DateTime.now()) == true)
+                                _ActionBtn(
+                                  label: 'WATCH NOW',
+                                  icon: Icons.play_arrow,
+                                  isPrimary: true,
+                                  onTap: _play,
+                                  s: s,
+                                  autofocus: true,
+                                ),
+                              if (m.releaseDate == null || 
+                                  m.releaseDate!.isEmpty || 
+                                  DateTime.tryParse(m.releaseDate!)?.isBefore(DateTime.now()) == true)
+                                SizedBox(width: s(24)),
                               _ActionBtn(
                                 label: _isFavorite ? 'FAVORITED' : 'FAVORITE',
                                 icon: _isFavorite ? Icons.favorite : Icons.favorite_border,

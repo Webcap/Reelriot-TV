@@ -387,7 +387,11 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                         if (event is! KeyDownEvent) return KeyEventResult.ignored;
                                         if (event.logicalKey == LogicalKeyboardKey.enter ||
                                             event.logicalKey == LogicalKeyboardKey.select) {
-                                          _playEpisode(ep.seasonNumber, ep.episodeNumber);
+                                          if (ep.airDate == null || 
+                                              ep.airDate!.isEmpty || 
+                                              DateTime.tryParse(ep.airDate!)?.isBefore(DateTime.now()) == true) {
+                                            _playEpisode(ep.seasonNumber, ep.episodeNumber);
+                                          }
                                           return KeyEventResult.handled;
                                         }
                                         return KeyEventResult.ignored;
@@ -396,7 +400,13 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                         builder: (context) {
                                           final focused = Focus.of(context).hasFocus;
                                           return GestureDetector(
-                                            onTap: () => _playEpisode(ep.seasonNumber, ep.episodeNumber),
+                                            onTap: () {
+                                              if (ep.airDate == null || 
+                                                  ep.airDate!.isEmpty || 
+                                                  DateTime.tryParse(ep.airDate!)?.isBefore(DateTime.now()) == true) {
+                                                _playEpisode(ep.seasonNumber, ep.episodeNumber);
+                                              }
+                                            },
                                             child: AnimatedContainer(
                                               duration: const Duration(milliseconds: 200),
                                               padding: EdgeInsets.all(s(16)),
@@ -461,7 +471,9 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                                       ],
                                                     ),
                                                   ),
-                                                  if (focused)
+                                                  if (focused && (ep.airDate == null || 
+                                                      ep.airDate!.isEmpty || 
+                                                      DateTime.tryParse(ep.airDate!)?.isBefore(DateTime.now()) == true))
                                                     Padding(
                                                       padding: EdgeInsets.only(right: s(16)),
                                                       child: Icon(Icons.play_circle_fill, color: Colors.white, size: s(48)),
