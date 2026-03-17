@@ -28,23 +28,52 @@ class WatchHistoryService {
         : 0.0;
     final completed = pct >= 0.9;
 
+    final type = isMovie ? 'movie' : 'tv';
+    final data = {
+      'user_id': user.id,
+      'media_id': mediaId,
+      'type': type,
+      'title': title,
+      'poster_path': posterPath,
+      'backdrop_path': backdropPath,
+      'overview': overview,
+      'season': season,
+      'episode': episode,
+      'position_ms': position.inMilliseconds,
+      'duration_ms': duration.inMilliseconds,
+      'completed': completed,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+
     try {
       debugPrint('[WatchHistory] 💾 Saving progress for $title (ID: $mediaId) at ${position.inSeconds}s${completed ? ' [COMPLETED]' : ''}');
-      await _supabase.from('watch_history').upsert({
-        'user_id': user.id,
-        'media_id': mediaId,
-        'type': isMovie ? 'movie' : 'tv',
-        'title': title,
-        'poster_path': posterPath,
-        'backdrop_path': backdropPath,
-        'overview': overview,
-        'season': season,
-        'episode': episode,
-        'position_ms': position.inMilliseconds,
-        'duration_ms': duration.inMilliseconds,
-        'completed': completed,
-        'updated_at': DateTime.now().toIso8601String(),
-      }, onConflict: 'user_id, media_id, type, season, episode');
+
+      // Build the UPDATE query — match nulls explicitly with isFilter
+      var updateQuery = _supabase
+          .from('watch_history')
+          .update(data)
+          .eq('user_id', user.id)
+          .eq('media_id', mediaId)
+          .eq('type', type);
+
+      if (season != null) {
+        updateQuery = updateQuery.eq('season', season);
+      } else {
+        updateQuery = updateQuery.isFilter('season', null);
+      }
+      if (episode != null) {
+        updateQuery = updateQuery.eq('episode', episode);
+      } else {
+        updateQuery = updateQuery.isFilter('episode', null);
+      }
+
+      final updated = await updateQuery.select();
+
+      if (updated.isEmpty) {
+        // No existing row — insert fresh
+        await _supabase.from('watch_history').insert(data);
+      }
+
       debugPrint('[WatchHistory] ✅ Progress saved successfully');
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Error saving watch history: $e');
