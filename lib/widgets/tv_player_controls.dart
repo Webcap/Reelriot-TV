@@ -20,17 +20,26 @@ class TvPlayerControls extends StatefulWidget {
 }
 
 class _TvPlayerControlsState extends State<TvPlayerControls> {
-  bool _isVisible = true;
+  bool _isVisible = false;
   Timer? _hideTimer;
   final FocusNode _playPauseFocusNode = FocusNode();
   final FocusNode _progressBarFocusNode = FocusNode();
   final FocusNode _settingsFocusNode = FocusNode();
+  StreamSubscription? _visibilitySubscription;
 
   @override
   void initState() {
     super.initState();
     _startHideTimer();
     widget.controller.addEventsListener(_onPlayerEvent);
+    _visibilitySubscription = widget.controller.controlsVisibilityStream.listen((isVisible) {
+      debugPrint('[TvPlayerControls] 📻 Stream received: $isVisible');
+      if (isVisible) {
+        _showControls();
+      } else {
+        _hideControls();
+      }
+    });
   }
 
   @override
@@ -39,11 +48,13 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
     _playPauseFocusNode.dispose();
     _progressBarFocusNode.dispose();
     _settingsFocusNode.dispose();
+    _visibilitySubscription?.cancel();
     widget.controller.removeEventsListener(_onPlayerEvent);
     super.dispose();
   }
 
   void _onPlayerEvent(BetterPlayerEvent event) {
+    debugPrint('[TvPlayerControls] 📩 Received event: ${event.betterPlayerEventType}');
     if (event.betterPlayerEventType == BetterPlayerEventType.controlsVisible) {
       _showControls();
     } else if (event.betterPlayerEventType == BetterPlayerEventType.controlsHiddenEnd) {
@@ -52,19 +63,25 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   }
 
   void _showControls() {
+    debugPrint('[TvPlayerControls] 👁️ Setting _isVisible = true');
+    if (_isVisible) return; // Prevent redundant requests
     setState(() {
       _isVisible = true;
     });
     widget.onVisibilityChanged(true);
+    widget.controller.toggleControlsVisibility(true);
     _startHideTimer();
     _playPauseFocusNode.requestFocus();
   }
 
   void _hideControls() {
+    debugPrint('[TvPlayerControls] 🌑 Setting _isVisible = false');
+    if (!_isVisible) return;
     setState(() {
       _isVisible = false;
     });
     widget.onVisibilityChanged(false);
+    widget.controller.toggleControlsVisibility(false);
     _hideTimer?.cancel();
   }
 
