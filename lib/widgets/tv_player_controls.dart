@@ -25,6 +25,8 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   final FocusNode _playPauseFocusNode = FocusNode();
   final FocusNode _progressBarFocusNode = FocusNode();
   final FocusNode _settingsFocusNode = FocusNode();
+  final FocusNode _rewindFocusNode = FocusNode();
+  final FocusNode _ffFocusNode = FocusNode();
   StreamSubscription? _visibilitySubscription;
 
   @override
@@ -48,6 +50,8 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
     _playPauseFocusNode.dispose();
     _progressBarFocusNode.dispose();
     _settingsFocusNode.dispose();
+    _rewindFocusNode.dispose();
+    _ffFocusNode.dispose();
     _visibilitySubscription?.cancel();
     widget.controller.removeEventsListener(_onPlayerEvent);
     super.dispose();
@@ -63,15 +67,22 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   }
 
   void _showControls() {
-    debugPrint('[TvPlayerControls] 👁️ Setting _isVisible = true');
-    if (_isVisible) return; // Prevent redundant requests
-    setState(() {
-      _isVisible = true;
-    });
-    widget.onVisibilityChanged(true);
-    widget.controller.toggleControlsVisibility(true);
-    _startHideTimer();
-    _playPauseFocusNode.requestFocus();
+    debugPrint('[TvPlayerControls] 👁️ _showControls (isVisible: $_isVisible)');
+    if (!_isVisible) {
+      setState(() {
+        _isVisible = true;
+      });
+      widget.onVisibilityChanged(true);
+      widget.controller.toggleControlsVisibility(true);
+      
+      _startHideTimer();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _playPauseFocusNode.requestFocus();
+        debugPrint('[TvPlayerControls] 🎯 Play/Pause focus requested (post-frame). Has focus: ${_playPauseFocusNode.hasFocus}');
+      });
+    } else {
+      _startHideTimer();
+    }
   }
 
   void _hideControls() {
@@ -109,10 +120,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       opacity: _isVisible ? 1.0 : 0.0,
       duration: const Duration(milliseconds: 300),
       onEnd: () {
-        if (!_isVisible) {
-          // Move focus out when hidden to allow PlayerScreen to catch keys
-          FocusManager.instance.primaryFocus?.unfocus();
-        }
+        debugPrint('[TvPlayerControls] 🎬 Animation onEnd (isVisible: $_isVisible)');
       },
       child: IgnorePointer(
         ignoring: !_isVisible,
@@ -215,7 +223,11 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
                           children: [
                             _buildTimeText(videoValue.position),
                             const Spacer(),
+                            _buildRewindButton(),
+                            const SizedBox(width: 24),
                             _buildPlayPauseButton(),
+                            const SizedBox(width: 24),
+                            _buildFastForwardButton(),
                             const SizedBox(width: 48),
                             _buildSettingsButton(),
                             const Spacer(),
@@ -348,14 +360,11 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
           return KeyEventResult.handled;
         }
         if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-          _settingsFocusNode.requestFocus();
+          _ffFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
         if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-          // Left skips 10s even when on button for convenience
-          final pos = widget.controller.videoPlayerController?.value.position ?? Duration.zero;
-          widget.controller.seekTo(pos - const Duration(seconds: 10));
-          _startHideTimer();
+          _rewindFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -404,15 +413,12 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
           return KeyEventResult.handled;
         }
         if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-          _playPauseFocusNode.requestFocus();
+          _ffFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
         if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-          // Right skips 10s even when on button for convenience
-          final pos = widget.controller.videoPlayerController?.value.position ?? Duration.zero;
-          widget.controller.seekTo(pos + const Duration(seconds: 10));
-          _startHideTimer();
-          return KeyEventResult.handled;
+           // On rightmost button, just stay
+           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
       },
@@ -435,6 +441,91 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
                 Icons.settings_outlined,
                 color: isFocused ? Colors.black : Colors.white,
                 size: 48,
+              ),
+            ),
+          );
+        }
+      ),
+    );
+  }
+
+  Widget _buildRewindButton() {
+    return _buildControlButton(
+      focusNode: _rewindFocusNode,
+      icon: Icons.replay_10_rounded,
+      onPressed: () {
+        final pos = widget.controller.videoPlayerController?.value.position ?? Duration.zero;
+        widget.controller.seekTo(pos - const Duration(seconds: 10));
+        _startHideTimer();
+      },
+      onLeft: () => KeyEventResult.handled,
+      onRight: () => _playPauseFocusNode.requestFocus(),
+    );
+  }
+
+  Widget _buildFastForwardButton() {
+    return _buildControlButton(
+      focusNode: _ffFocusNode,
+      icon: Icons.forward_10_rounded,
+      onPressed: () {
+        final pos = widget.controller.videoPlayerController?.value.position ?? Duration.zero;
+        widget.controller.seekTo(pos + const Duration(seconds: 10));
+        _startHideTimer();
+      },
+      onLeft: () => _playPauseFocusNode.requestFocus(),
+      onRight: () => _settingsFocusNode.requestFocus(),
+    );
+  }
+
+  Widget _buildControlButton({
+    required FocusNode focusNode,
+    required IconData icon,
+    required VoidCallback onPressed,
+    required Function onLeft,
+    required Function onRight,
+    double size = 48,
+  }) {
+    return Focus(
+      focusNode: focusNode,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select) {
+          onPressed();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          _progressBarFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          final res = onLeft();
+          return res is KeyEventResult ? res : KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          final res = onRight();
+          return res is KeyEventResult ? res : KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Builder(
+        builder: (context) {
+          final isFocused = Focus.of(context).hasFocus;
+          return GestureDetector(
+            onTap: onPressed,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isFocused ? Colors.white : Colors.transparent,
+                shape: BoxShape.circle,
+                boxShadow: isFocused ? [
+                  BoxShadow(color: Colors.white.withOpacity(0.3), blurRadius: 20, spreadRadius: 5)
+                ] : null,
+              ),
+              child: Icon(
+                icon,
+                color: isFocused ? Colors.black : Colors.white,
+                size: size,
               ),
             ),
           );

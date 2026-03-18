@@ -39,6 +39,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final WatchHistoryService _historyService = WatchHistoryService();
   final FocusNode _mainFocusNode = FocusNode();
   Timer? _saveTimer;
+  bool _controlsVisible = false;
+  StreamSubscription? _visibilitySubscription;
 
   @override
   void initState() {
@@ -47,6 +49,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _setupController();
     _startProgressTimer();
     
+    _visibilitySubscription = _controller.controlsVisibilityStream.listen((visible) {
+      if (mounted) setState(() => _controlsVisible = visible);
+    });
+
     // Ensure we have focus on start
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _mainFocusNode.requestFocus();
@@ -102,7 +108,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
           playerTheme: BetterPlayerTheme.custom,
           customControlsBuilder: (controller, onVisibilityChanged) => TvPlayerControls(
             controller: controller,
-            onVisibilityChanged: onVisibilityChanged,
+            onVisibilityChanged: (visible) {
+              onVisibilityChanged(visible);
+              if (mounted) setState(() => _controlsVisible = visible);
+            },
             onShowSettings: _showSettings,
           ),
         ),
@@ -146,6 +155,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void dispose() {
     _saveTimer?.cancel();
     _saveCurrentProgress();
+    _visibilitySubscription?.cancel();
     _controller.dispose();
     _mainFocusNode.dispose();
     WakelockPlus.disable(); 
@@ -161,6 +171,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
         final key = event.logicalKey;
+        debugPrint('[PlayerScreen] 🔑 key: ${key.debugName}, controlsVisible: $_controlsVisible');
 
         // Exit keys
         if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
@@ -173,9 +184,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
             key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight ||
             key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
           
-          debugPrint('[PlayerScreen] 🔑 Key pressed: ${key.debugName}. Showing controls.');
-          _controller.setControlsVisibility(true);
-          return KeyEventResult.handled;
+          if (!_controlsVisible) {
+            debugPrint('[PlayerScreen] 🚀 Showing controls');
+            _controller.setControlsVisibility(true);
+            return KeyEventResult.handled;
+          } else {
+            // Already visible, but let's ensure the controller knows
+            // This is a safety measure in case states are out of sync
+            _controller.setControlsVisibility(true);
+          }
+          // If controls are visible, let the focus system within the controls handle it
+          return KeyEventResult.ignored;
         }
 
         return KeyEventResult.ignored;
