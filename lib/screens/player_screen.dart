@@ -4,6 +4,7 @@ import 'package:better_player/better_player.dart';
 import 'package:caffeine_tv/services/settings_service.dart';
 import 'package:caffeine_tv/services/watch_history_service.dart';
 import 'package:caffeine_tv/widgets/player_settings_overlay.dart';
+import 'package:caffeine_tv/widgets/tv_player_controls.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:async';
 
@@ -16,6 +17,7 @@ class PlayerScreen extends StatefulWidget {
     required this.isMovie,
     this.season,
     this.episode,
+    this.episodeName,
     this.startPosition,
   });
 
@@ -25,6 +27,7 @@ class PlayerScreen extends StatefulWidget {
   final bool isMovie;
   final int? season;
   final int? episode;
+  final String? episodeName;
   final Duration? startPosition;
 
   @override
@@ -63,14 +66,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       isMovie: widget.isMovie,
       season: widget.season,
       episode: widget.episode,
+      episodeName: widget.episodeName,
       position: position,
       duration: duration ?? Duration.zero,
     );
   }
 
   void _setupController() {
-    // We'll use a placeholder for context-dependent values initially,
-    // though BetterPlayer usually builds its own UI.
     _controller = BetterPlayerController(
       BetterPlayerConfiguration(
         autoPlay: true,
@@ -88,14 +90,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
           enableProgressBar: true,
           enableSkips: false,
           name: widget.title,
-          // Marvel Red brand color from design.json
-          progressBarPlayedColor: const Color(0xFFE60000),
-          progressBarHandleColor: Colors.white,
-          progressBarBufferedColor: Colors.white30,
-          progressBarBackgroundColor: Colors.white10,
-          loadingColor: const Color(0xFFE60000),
-          controlBarColor: Colors.black45,
-          playerTheme: BetterPlayerTheme.material,
+          watchingText: widget.isMovie 
+              ? '' 
+              : '${widget.episodeName} | S${widget.season} E${widget.episode}',
+          playerTheme: BetterPlayerTheme.custom,
+          customControlsBuilder: (controller, onVisibilityChanged) => TvPlayerControls(
+            controller: controller,
+            onVisibilityChanged: onVisibilityChanged,
+            onShowSettings: _showSettings,
+          ),
         ),
         startAt: widget.startPosition ?? Duration.zero,
       ),
@@ -144,8 +147,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Subtitles are already set to a TV-friendly size (24) in initState.
-    
     return Focus(
       autofocus: true,
       onKeyEvent: (node, event) {
@@ -153,44 +154,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         final key = event.logicalKey;
 
-        // Wake up controls on any remote interaction
-        _controller.setControlsVisibility(true);
-
-        // Exit keys (Escape only, system handles GoBack/Back naturally)
-        if (key == LogicalKeyboardKey.escape) {
+        // Exit keys
+        if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
           Navigator.of(context).pop();
           return KeyEventResult.handled;
         }
 
-        // Play / Pause
-        if (key == LogicalKeyboardKey.select ||
-            key == LogicalKeyboardKey.enter ||
-            key == LogicalKeyboardKey.space ||
-            key == LogicalKeyboardKey.mediaPlayPause) {
-          if (_controller.isPlaying() == true) {
-            _controller.pause();
-          } else {
-            _controller.play();
-          }
-          return KeyEventResult.handled;
-        }
-
-        // Fast Forward / Rewind (10 seconds)
-        if (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.mediaFastForward) {
-          final current = _controller.videoPlayerController?.value.position ?? Duration.zero;
-          _controller.seekTo(current + const Duration(seconds: 10));
-          return KeyEventResult.handled;
-        }
-
-        if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.mediaRewind) {
-          final current = _controller.videoPlayerController?.value.position ?? Duration.zero;
-          _controller.seekTo(current - const Duration(seconds: 10));
-          return KeyEventResult.handled;
-        }
-
-        // Show Options / Settings on Arrow Up
-        if (key == LogicalKeyboardKey.arrowUp) {
-          _showSettings();
+        // 1. Critical Directional Keys
+        if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown || 
+            key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight ||
+            key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
+          
+          _controller.setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 

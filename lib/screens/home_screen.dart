@@ -11,6 +11,8 @@ import 'package:caffeine_tv/screens/video_loader_screen.dart';
 import 'package:caffeine_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:caffeine_tv/widgets/exit_dialog.dart';
 import 'dart:async';
 
 class HomeScreen extends StatefulWidget {
@@ -23,6 +25,46 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 1;
   final GlobalKey<FavoritesScreenState> _favoritesKey = GlobalKey<FavoritesScreenState>();
+  final List<FocusNode> _navNodes = List.generate(5, (_) => FocusNode());
+
+  @override
+  void dispose() {
+    for (var node in _navNodes) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  void _onBackInvoke(bool didPop) async {
+    if (didPop) return;
+
+    // Check if any navigation item has focus
+    bool navHasFocus = false;
+    for (var node in _navNodes) {
+      if (node.hasFocus) {
+        navHasFocus = true;
+        break;
+      }
+    }
+
+    if (!navHasFocus) {
+      // If navigation doesn't have focus, reset focus to the current tab
+      _navNodes[_selectedIndex].requestFocus();
+      return;
+    }
+
+    // If navigation already has focus, show the exit dialog
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => const ExitDialog(),
+    );
+
+    if (shouldExit == true) {
+      // Exit the application
+      SystemNavigator.pop();
+    }
+  }
 
   static const _tabs = [
     _Tab(label: 'Search', icon: Icons.search),
@@ -34,24 +76,28 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF000000), // Pure black per design.json
-      body: Row(
-        children: [
-          _buildNavRail(context),
-          Expanded(
-            child: IndexedStack(
-              index: _selectedIndex,
-              children: [
-                const SearchScreen(),
-                const _MainHomeView(),
-                const SportsScreen(),
-                const SettingsScreen(),
-                FavoritesScreen(key: _favoritesKey),
-              ],
+    return PopScope(
+      canPop: false,
+      onPopInvoked: _onBackInvoke,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF000000), // Pure black per design.json
+        body: Row(
+          children: [
+            _buildNavRail(context),
+            Expanded(
+              child: IndexedStack(
+                index: _selectedIndex,
+                children: [
+                  const SearchScreen(),
+                  const _MainHomeView(),
+                  const SportsScreen(),
+                  const SettingsScreen(),
+                  FavoritesScreen(key: _favoritesKey),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -99,6 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   final tab = _tabs[i];
                   final selected = _selectedIndex == i;
                   return Focus(
+                    focusNode: _navNodes[i],
                     onKeyEvent: (node, event) {
                       if (event is! KeyDownEvent) return KeyEventResult.ignored;
                       if (event.logicalKey == LogicalKeyboardKey.enter ||
@@ -182,12 +229,25 @@ class _MainHomeViewState extends State<_MainHomeView> {
   int _trendingIndex = 0;
   late ScrollController _scrollController;
   bool _isHeroInView = true;
+  StreamSubscription<AuthState>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_onScroll);
     _loadContent();
+    _listenToAuthChanges();
+  }
+
+  void _listenToAuthChanges() {
+    _authSubscription?.cancel();
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      final event = data.event;
+      if (event == AuthChangeEvent.signedIn || event == AuthChangeEvent.signedOut || event == AuthChangeEvent.tokenRefreshed) {
+        debugPrint('[HomeScreen] 👤 Auth state changed: $event. Refreshing content.');
+        _loadContent();
+      }
+    });
   }
 
   void _onScroll() {
@@ -207,30 +267,46 @@ class _MainHomeViewState extends State<_MainHomeView> {
   }
 
   Future<void> _loadContent() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _history = null;
+      _trending = null;
+      _weeklyTrending = null;
+      _popular = null;
+      _airingToday = null;
+    });
+    
     try {
       final isTv = _selectedCategory == 'TV Shows';
       
       if (isTv) {
-        final trending = await _api.fetchTrendingTv();
-        final popular = await _api.fetchPopularTv();
-        final airingToday = await _api.fetchAiringToday();
-        
-        if (trending.results.isNotEmpty) {
-          final hero = await _api.fetchTvDetail(trending.results.first.id);
-          if (mounted) {
-            setState(() {
-              // Map TvShowDetail to a shared-like structure for the UI
+        final results = await Future.wait([
+          _historyService.getHistory(mediaType: 'tv'),
+          _api.fetchTrendingTv(),
+          _api.fetchPopularTv(),
+          _api.fetchAiringToday(),
+        ]);
+
+        final history = results[0] as List<Map<String, dynamic>>;
+        final trending = results[1] as TvListResponse;
+        final popular = results[2] as TvListResponse;
+        final airingToday = results[3] as TvListResponse;
+
+        if (mounted) {
+          setState(() {
+            _history = history;
+            
+            if (trending.results.isNotEmpty) {
+              final first = trending.results.first;
               _focusedMovie = MovieDetail(
-                id: hero.id,
-                title: hero.name, // Map name to title
-                overview: hero.overview,
-                posterPath: hero.posterPath,
-                backdropPath: hero.backdropPath,
-                voteAverage: hero.voteAverage,
+                id: first.id,
+                title: first.name,
+                overview: first.overview,
+                posterPath: first.posterPath,
+                backdropPath: first.backdropPath,
+                voteAverage: first.voteAverage,
               );
               
-              // Normalize TvListItem to MovieListItem for components
               _trending = trending.results.take(5).map((t) => MovieListItem(
                 id: t.id,
                 title: t.name,
@@ -246,37 +322,37 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 backdropPath: t.backdropPath,
                 overview: t.overview,
               )).toList();
-              
-              _popular = popular.results.map((t) => MovieListItem(
-                id: t.id,
-                title: t.name,
-                posterPath: t.posterPath,
-                backdropPath: t.backdropPath,
-                overview: t.overview,
-              )).toList();
+            }
+            
+            _popular = popular.results.map((t) => MovieListItem(
+              id: t.id,
+              title: t.name,
+              posterPath: t.posterPath,
+              backdropPath: t.backdropPath,
+              overview: t.overview,
+            )).toList();
 
-              _airingToday = airingToday.results.map((t) => MovieListItem(
-                id: t.id,
-                title: t.name,
-                posterPath: t.posterPath,
-                backdropPath: t.backdropPath,
-                overview: t.overview,
-              )).toList();
-              
-              _historyService.getHistory(mediaType: 'tv').then((h) {
-                if (mounted) setState(() => _history = h);
-              });
-              
-              _loading = false;
-            });
-            _startAutoSlide();
-          }
+            _airingToday = airingToday.results.map((t) => MovieListItem(
+              id: t.id,
+              title: t.name,
+              posterPath: t.posterPath,
+              backdropPath: t.backdropPath,
+              overview: t.overview,
+            )).toList();
+          });
+          _startAutoSlide();
         }
       } else {
-        final trending = await _api.fetchTrendingMovies();
-        final popular = await _api.fetchPopularMovies();
+        final results = await Future.wait([
+          _historyService.getHistory(mediaType: 'movie'),
+          _api.fetchTrendingMovies(),
+          _api.fetchPopularMovies(),
+        ]);
 
-        // Keep only movies with a past/present release date (in theaters or digital).
+        final history = results[0] as List<Map<String, dynamic>>;
+        final trending = results[1] as MovieListResponse;
+        final popular = results[2] as MovieListResponse;
+
         final today = DateTime.now();
         bool isReleased(MovieListItem m) {
           if (m.releaseDate == null || m.releaseDate!.isEmpty) return false;
@@ -290,24 +366,32 @@ class _MainHomeViewState extends State<_MainHomeView> {
         final releasedTrending = trending.results.where(isReleased).toList();
         final releasedPopular = popular.results.where(isReleased).toList();
         
-        if (releasedTrending.isNotEmpty) {
-          final hero = await _api.fetchMovieDetail(releasedTrending.first.id);
-          if (mounted) {
-            setState(() {
-              _focusedMovie = hero;
+        if (mounted) {
+          setState(() {
+            _history = history;
+            if (releasedTrending.isNotEmpty) {
+              final first = releasedTrending.first;
+              // Note: fetchMovieDetail is still needed for more details if necessary, 
+              // but we can use trending item for basic hero display.
+              _focusedMovie = MovieDetail(
+                id: first.id,
+                title: first.title,
+                overview: first.overview,
+                posterPath: first.posterPath,
+                backdropPath: first.backdropPath,
+                voteAverage: first.voteAverage,
+              );
               _trending = releasedTrending.take(5).toList();
               _weeklyTrending = releasedTrending;
-              _popular = releasedPopular;
-              _historyService.getHistory(mediaType: 'movie').then((h) {
-                if (mounted) setState(() => _history = h);
-              });
-              _loading = false;
-            });
-            _startAutoSlide();
-          }
+            }
+            _popular = releasedPopular;
+          });
+          _startAutoSlide();
         }
       }
     } catch (e) {
+      debugPrint('[HomeScreen] ❌ Error loading content: $e');
+    } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -345,6 +429,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _autoSlideTimer?.cancel();
+    _authSubscription?.cancel();
     super.dispose();
   }
 
@@ -526,15 +611,17 @@ class _MainHomeViewState extends State<_MainHomeView> {
                               style: HeroButtonStyle.primary,
                               onTap: () {
                                 // Handle both Movies and TV Shows
+                                final Future<void>? push;
                                 if (_selectedCategory == 'TV Shows') {
-                                   Navigator.of(context).push(
+                                   push = Navigator.of(context).push(
                                     MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: _focusedMovie!.id)),
                                   );
                                 } else {
-                                  Navigator.of(context).push(
+                                  push = Navigator.of(context).push(
                                     MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: _focusedMovie!.id)),
                                   );
                                 }
+                                push.then((_) => _reloadHistory());
                               },
                             ),
                             SizedBox(width: s(36)),
@@ -631,57 +718,57 @@ class _MainHomeViewState extends State<_MainHomeView> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: categories.map((cat) {
-        final isSelected = cat == _selectedCategory;
-        return Focus(
-          onKeyEvent: (node, event) {
-            if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select)) {
-              if (_selectedCategory != cat) {
-                setState(() {
-                  _selectedCategory = cat;
-                });
-                _loadContent();
+          final isSelected = cat == _selectedCategory;
+          return Focus(
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select)) {
+                if (_selectedCategory != cat) {
+                  setState(() {
+                    _selectedCategory = cat;
+                  });
+                  _loadContent();
+                }
+                return KeyEventResult.handled;
               }
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
-          },
-          child: Builder(
-            builder: (context) {
-              final focused = Focus.of(context).hasFocus;
-              return GestureDetector(
-                onTap: () {
-                  if (_selectedCategory != cat) {
-                    setState(() => _selectedCategory = cat);
-                    _loadContent();
-                  }
-                },
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: s(48)),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        cat,
-                        style: TextStyle(
-                          color: focused ? Colors.white : (isSelected ? Colors.white : Colors.white38),
-                          fontSize: s(48),
-                          fontWeight: isSelected || focused ? FontWeight.w600 : FontWeight.w400,
+              return KeyEventResult.ignored;
+            },
+            child: Builder(
+              builder: (context) {
+                final focused = Focus.of(context).hasFocus;
+                return GestureDetector(
+                  onTap: () {
+                    if (_selectedCategory != cat) {
+                      setState(() => _selectedCategory = cat);
+                      _loadContent();
+                    }
+                  },
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: s(48)),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          cat,
+                          style: TextStyle(
+                            color: focused ? Colors.white : (isSelected ? Colors.white : Colors.white38),
+                            fontSize: s(48),
+                            fontWeight: isSelected || focused ? FontWeight.w600 : FontWeight.w400,
+                          ),
                         ),
-                      ),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        margin: EdgeInsets.only(top: s(4)),
-                        height: s(4),
-                        width: focused ? s(64) : (isSelected ? s(42) : 0),
-                        color: focused || isSelected ? const Color(0xFFEC1D24) : Colors.transparent,
-                      ),
-                    ],
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          margin: EdgeInsets.only(top: s(4)),
+                          height: s(4),
+                          width: focused ? s(64) : (isSelected ? s(42) : 0),
+                          color: focused || isSelected ? const Color(0xFFEC1D24) : Colors.transparent,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            }
-          ),
-        );
+                );
+              }
+            ),
+          );
         }).toList(),
       ),
     );
@@ -840,6 +927,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                             tvShow: detail,
                             season: h['season'],
                             episode: h['episode'],
+                            episodeName: h['episode_name'],
                             startPosition: startAt,
                           ),
                         ),

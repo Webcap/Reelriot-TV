@@ -111,10 +111,13 @@ class _PairingScreenState extends State<PairingScreen> {
           final refreshToken = data['refresh_token'] as String?;
           if (refreshToken != null && refreshToken.isNotEmpty && mounted) {
             try {
-              await Supabase.instance.client.auth.setSession(refreshToken);
+              _log('Setting session with refresh token');
+              await Supabase.instance.client.auth.recoverSession(refreshToken);
+              _log('Session recovered successfully');
               if (mounted) _onLinked();
             } catch (e) {
-              _log('setSession failed', e);
+              _log('recoverSession failed', e);
+              setState(() => _error = 'Failed to establish session: $e');
             }
           } else {
             _log('Linked but no refresh_token in response');

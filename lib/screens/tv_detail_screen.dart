@@ -97,7 +97,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
     }
   }
 
-  void _playEpisode(int season, int episode) {
+  void _playEpisode(int season, int episode, String? episodeTitle) {
     if (_show == null) return;
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -105,6 +105,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
           tvShow: _show!,
           season: season,
           episode: episode,
+          episodeName: episodeTitle,
         ),
       ),
     );
@@ -390,7 +391,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                           if (ep.airDate == null || 
                                               ep.airDate!.isEmpty || 
                                               DateTime.tryParse(ep.airDate!)?.isBefore(DateTime.now()) == true) {
-                                            _playEpisode(ep.seasonNumber, ep.episodeNumber);
+                                            _playEpisode(ep.seasonNumber, ep.episodeNumber, ep.name);
                                           }
                                           return KeyEventResult.handled;
                                         }
@@ -404,7 +405,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                               if (ep.airDate == null || 
                                                   ep.airDate!.isEmpty || 
                                                   DateTime.tryParse(ep.airDate!)?.isBefore(DateTime.now()) == true) {
-                                                _playEpisode(ep.seasonNumber, ep.episodeNumber);
+                                                _playEpisode(ep.seasonNumber, ep.episodeNumber, ep.name);
                                               }
                                             },
                                             child: AnimatedContainer(

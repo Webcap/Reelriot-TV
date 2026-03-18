@@ -10,73 +10,80 @@ class WatchHistoryService {
     required bool isMovie,
     int? season,
     int? episode,
+    String? episodeName,
     required Duration position,
     required Duration duration,
   }) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
 
-    final mediaId = isMovie ? (item as MovieDetail).id : (item as TvShowDetail).id;
-    final title = isMovie ? (item as MovieDetail).title : (item as TvShowDetail).name;
-    final posterPath = isMovie ? (item as MovieDetail).posterPath : (item as TvShowDetail).posterPath;
-    final backdropPath = isMovie ? (item as MovieDetail).backdropPath : (item as TvShowDetail).backdropPath;
-    final overview = isMovie ? (item as MovieDetail).overview : (item as TvShowDetail).overview;
-
-    // Mark as completed when >= 90% watched
-    final pct = duration.inMilliseconds > 0
-        ? position.inMilliseconds / duration.inMilliseconds
-        : 0.0;
-    final completed = pct >= 0.9;
-
-    final type = isMovie ? 'movie' : 'tv';
-    final data = {
-      'user_id': user.id,
-      'media_id': mediaId,
-      'type': type,
-      'title': title,
-      'poster_path': posterPath,
-      'backdrop_path': backdropPath,
-      'overview': overview,
-      'season': season,
-      'episode': episode,
-      'position_ms': position.inMilliseconds,
-      'duration_ms': duration.inMilliseconds,
-      'completed': completed,
-      'updated_at': DateTime.now().toIso8601String(),
-    };
-
     try {
-      debugPrint('[WatchHistory] 💾 Saving progress for $title (ID: $mediaId) at ${position.inSeconds}s${completed ? ' [COMPLETED]' : ''}');
-
-      // Build the UPDATE query — match nulls explicitly with isFilter
-      var updateQuery = _supabase
+      // 1. Fetch the user's single flattened row
+      final res = await _supabase
           .from('watch_history')
-          .update(data)
+          .select('movies, tv_shows')
           .eq('user_id', user.id)
-          .eq('media_id', mediaId)
-          .eq('type', type);
+          .limit(1);
 
-      if (season != null) {
-        updateQuery = updateQuery.eq('season', season);
+      final data = res.isNotEmpty ? res[0] : null;
+      List<dynamic> movies = data?['movies'] as List<dynamic>? ?? [];
+      List<dynamic> tvShows = data?['tv_shows'] as List<dynamic>? ?? [];
+
+      // 2. Prepare the item with keys matching mobile schema
+      final now = DateTime.now().toIso8601String();
+      final elapsed = position.inSeconds;
+      final remaining = (duration - position).inSeconds;
+      
+      if (isMovie) {
+        final movie = item as MovieDetail;
+        movies.removeWhere((m) => (m as Map)['id'] == movie.id);
+        movies.insert(0, {
+          'id': movie.id,
+          'title': movie.title,
+          'poster_path': movie.posterPath,
+          'backdrop_path': movie.backdropPath,
+          'overview': movie.overview,
+          'release_year': movie.releaseDate != null && movie.releaseDate!.length >= 4 
+              ? int.tryParse(movie.releaseDate!.substring(0, 4)) 
+              : null,
+          'elapsed': elapsed,
+          'remaining': remaining,
+          'date_watched': now,
+        });
       } else {
-        updateQuery = updateQuery.isFilter('season', null);
-      }
-      if (episode != null) {
-        updateQuery = updateQuery.eq('episode', episode);
-      } else {
-        updateQuery = updateQuery.isFilter('episode', null);
+        final show = item as TvShowDetail;
+        // Season/Episode detail needs to be found if we only have the show detail
+        // But in PlayerScreen we usually have season/episode numbers.
+        tvShows.removeWhere((t) {
+          final m = t as Map;
+          return m['id'] == show.id && m['season_num'] == season && m['episode_num'] == episode;
+        });
+        tvShows.insert(0, {
+          'id': show.id, // Using show ID for consistency with mobile RecentEpisode
+          'series_name': show.name,
+          'episode_name': episodeName,
+          'poster_path': show.posterPath,
+          'backdrop_path': show.backdropPath,
+          'season_num': season,
+          'episode_num': episode,
+          'elapsed': elapsed,
+          'remaining': remaining,
+          'date_added': now,
+          'series_id': show.id,
+        });
       }
 
-      final updated = await updateQuery.select();
+      // 3. Upsert the row
+      await _supabase.from('watch_history').upsert({
+        'user_id': user.id,
+        'movies': movies,
+        'tv_shows': tvShows,
+        'updated_at': now,
+      });
 
-      if (updated.isEmpty) {
-        // No existing row — insert fresh
-        await _supabase.from('watch_history').insert(data);
-      }
-
-      debugPrint('[WatchHistory] ✅ Progress saved successfully');
+      debugPrint('[WatchHistory] ✅ Progress saved for ${isMovie ? 'Movie' : 'TV Show'} (ID: ${isMovie ? (item as MovieDetail).id : (item as TvShowDetail).id})');
     } catch (e) {
-      debugPrint('[WatchHistory] ❌ Error saving watch history: $e');
+      debugPrint('[WatchHistory] ❌ Error saving progress: $e');
     }
   }
 
@@ -85,23 +92,62 @@ class WatchHistoryService {
     if (user == null) return [];
 
     try {
-      var query = _supabase
+      final res = await _supabase
           .from('watch_history')
-          .select()
+          .select('movies, tv_shows')
           .eq('user_id', user.id)
-          .eq('completed', false); // only incomplete items
+          .limit(1);
 
-      if (mediaType != null) {
-        query = query.eq('type', mediaType);
+      if (res.isEmpty) return [];
+      
+      final data = res[0];
+      List<dynamic> rawItems = [];
+      
+      if (mediaType == 'movie') {
+        rawItems = data['movies'] as List<dynamic>? ?? [];
+      } else if (mediaType == 'tv') {
+        rawItems = data['tv_shows'] as List<dynamic>? ?? [];
+      } else {
+        // Combined
+        rawItems = [
+          ...(data['movies'] as List? ?? []),
+          ...(data['tv_shows'] as List? ?? []),
+        ];
       }
 
-      final res = await query
-          .order('updated_at', ascending: false)
-          .limit(20);
+      // Filter out completed (>= 95% like mobile)
+      final items = rawItems.where((item) {
+        final m = item as Map;
+        final elapsed = m['elapsed'] as int? ?? 0;
+        final remaining = m['remaining'] as int? ?? 0;
+        final total = elapsed + remaining;
+        if (total <= 0) return true;
+        return (elapsed / total) < 0.95;
+      }).toList();
 
-      return List<Map<String, dynamic>>.from(res);
+      // Normalize keys for the UI (media_id, type)
+      final normalized = items.map((item) {
+        final m = Map<String, dynamic>.from(item as Map);
+        m['media_id'] = m['id'];
+        m['type'] = m.containsKey('series_name') ? 'tv' : 'movie';
+        if (m['type'] == 'tv') m['title'] = m['series_name'];
+        // position_ms and duration_ms for existing UI compatibility
+        m['position_ms'] = (m['elapsed'] as int? ?? 0) * 1000;
+        m['duration_ms'] = ((m['elapsed'] as int? ?? 0) + (m['remaining'] as int? ?? 0)) * 1000;
+        return m;
+      }).toList();
+
+      // Sort by date
+      normalized.sort((a, b) {
+        final da = a['date_watched'] ?? a['date_added'] ?? '';
+        final db = b['date_watched'] ?? b['date_added'] ?? '';
+        return db.compareTo(da);
+      });
+
+      debugPrint('[WatchHistory] 🔍 Fetched ${normalized.length} items (Filter: $mediaType)');
+      return normalized;
     } catch (e) {
-      debugPrint('Error fetching watch history: $e');
+      debugPrint('[WatchHistory] ❌ Error fetching history: $e');
       return [];
     }
   }
@@ -111,26 +157,34 @@ class WatchHistoryService {
     if (user == null) return null;
 
     try {
-      var query = _supabase
+      final res = await _supabase
           .from('watch_history')
-          .select('position_ms')
+          .select(isMovie ? 'movies' : 'tv_shows')
           .eq('user_id', user.id)
-          .eq('media_id', mediaId)
-          .eq('type', isMovie ? 'movie' : 'tv');
-
-      if (!isMovie) {
-        query = query.eq('season', season as Object).eq('episode', episode as Object);
-      }
-
-      final res = await query
-          .order('updated_at', ascending: false)
           .limit(1);
 
-      if (res.isNotEmpty && res[0]['position_ms'] != null) {
-        return Duration(milliseconds: res[0]['position_ms'] as int);
+      if (res.isEmpty) return null;
+      
+      final List<dynamic> items = res[0][isMovie ? 'movies' : 'tv_shows'] ?? [];
+      
+      if (isMovie) {
+        final match = items.firstWhere(
+          (m) => (m as Map)['id'] == mediaId,
+          orElse: () => null,
+        );
+        if (match != null) return Duration(seconds: match['elapsed'] as int? ?? 0);
+      } else {
+        final match = items.firstWhere(
+          (t) {
+            final m = t as Map;
+            return m['id'] == mediaId && m['season_num'] == season && m['episode_num'] == episode;
+          },
+          orElse: () => null,
+        );
+        if (match != null) return Duration(seconds: match['elapsed'] as int? ?? 0);
       }
     } catch (e) {
-      debugPrint('Error fetching saved progress: $e');
+      debugPrint('[WatchHistory] ❌ Error fetching progress: $e');
     }
     return null;
   }

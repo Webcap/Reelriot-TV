@@ -11,6 +11,7 @@ class VideoLoaderScreen extends StatefulWidget {
   final core.TvShowDetail? tvShow;
   final int? season;
   final int? episode;
+  final String? episodeName;
   final Duration? startPosition;
 
   const VideoLoaderScreen({
@@ -18,6 +19,7 @@ class VideoLoaderScreen extends StatefulWidget {
     this.tvShow,
     this.season,
     this.episode,
+    this.episodeName,
     this.startPosition,
     super.key,
   });
@@ -120,6 +122,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
                 isMovie: widget.movie != null,
                 season: widget.season,
                 episode: widget.episode,
+                episodeName: widget.episodeName,
                 startPosition: startPos,
               ),
             ),
