@@ -334,30 +334,34 @@ class _MainHomeViewState extends State<_MainHomeView> {
         final airingToday = results[3] as TvListResponse;
         final aiResult = results[4] as RecommendationResult;
 
+        final trendingList = trending.results.take(5).map((t) => MovieListItem(
+          id: t.id,
+          title: t.name,
+          posterPath: t.posterPath,
+          backdropPath: t.backdropPath,
+          overview: t.overview,
+        )).toList();
+
+        _precacheImages(trendingList);
+
         if (mounted) {
           setState(() {
             _history = history;
             _aiRecommendations = aiResult.items;
             _aiAnchorTitle = aiResult.anchorTitle;
             
-            if (trending.results.isNotEmpty) {
-              final first = trending.results.first;
+            if (trendingList.isNotEmpty) {
+              final first = trendingList.first;
               _focusedMovie = MovieDetail(
                 id: first.id,
-                title: first.name,
+                title: first.title,
                 overview: first.overview,
                 posterPath: first.posterPath,
                 backdropPath: first.backdropPath,
                 voteAverage: first.voteAverage,
               );
               
-              _trending = trending.results.take(5).map((t) => MovieListItem(
-                id: t.id,
-                title: t.name,
-                posterPath: t.posterPath,
-                backdropPath: t.backdropPath,
-                overview: t.overview,
-              )).toList();
+              _trending = trendingList;
 
               _weeklyTrending = trending.results.map((t) => MovieListItem(
                 id: t.id,
@@ -411,16 +415,17 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
         final releasedTrending = trending.results.where(isReleased).toList();
         final releasedPopular = popular.results.where(isReleased).toList();
+        final trendingList = releasedTrending.take(5).toList();
+
+        _precacheImages(trendingList);
         
         if (mounted) {
           setState(() {
             _history = history;
             _aiRecommendations = aiResult.items;
             _aiAnchorTitle = aiResult.anchorTitle;
-            if (releasedTrending.isNotEmpty) {
-              final first = releasedTrending.first;
-              // Note: fetchMovieDetail is still needed for more details if necessary, 
-              // but we can use trending item for basic hero display.
+            if (trendingList.isNotEmpty) {
+              final first = trendingList.first;
               _focusedMovie = MovieDetail(
                 id: first.id,
                 title: first.title,
@@ -429,7 +434,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 backdropPath: first.backdropPath,
                 voteAverage: first.voteAverage,
               );
-              _trending = releasedTrending.take(5).toList();
+              _trending = trendingList;
               _weeklyTrending = releasedTrending;
             }
             _popular = releasedPopular;
@@ -450,6 +455,19 @@ class _MainHomeViewState extends State<_MainHomeView> {
     if (mounted) setState(() => _history = h);
   }
 
+  void _precacheImages([List<MovieListItem>? items]) {
+    final list = items ?? _trending;
+    if (list == null) return;
+    for (var item in list) {
+      if (item.backdropPath != null) {
+        precacheImage(
+          NetworkImage('https://image.tmdb.org/t/p/w1280${item.backdropPath}'),
+          context,
+        );
+      }
+    }
+  }
+
   void _startAutoSlide() {
     _autoSlideTimer?.cancel();
     if (!_isHeroInView) return; // Don't start if not in view
@@ -462,8 +480,15 @@ class _MainHomeViewState extends State<_MainHomeView> {
       
       setState(() {
         _trendingIndex = (_trendingIndex + 1) % _trending!.length;
-        final nextId = _trending![_trendingIndex].id;
-        _updateFocusedMovie(nextId, isAuto: true);
+        final item = _trending![_trendingIndex];
+        _focusedMovie = MovieDetail(
+          id: item.id,
+          title: item.title,
+          overview: item.overview,
+          posterPath: item.posterPath,
+          backdropPath: item.backdropPath,
+          voteAverage: item.voteAverage,
+        );
       });
     });
   }
@@ -538,10 +563,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 key: ValueKey(_focusedMovie!.id),
                 decoration: BoxDecoration(
                   image: DecorationImage(
-                    image: NetworkImage('https://image.tmdb.org/t/p/original${_focusedMovie!.backdropPath}'),
+                    image: NetworkImage('https://image.tmdb.org/t/p/w1280${_focusedMovie!.backdropPath}'),
                     fit: BoxFit.cover,
                     colorFilter: ColorFilter.mode(
-                      const Color(0xFFEC1D24).withOpacity(0.3), // brand red
+                      const Color(0xFFEC1D24).withOpacity(0.35), // slightly more contrast
                       BlendMode.multiply,
                     ),
                   ),

@@ -79,7 +79,7 @@ class _SplashScreenState extends State<SplashScreen>
       
       // 1. Load API Config
       try {
-        final config = await api.loadConfig().timeout(const Duration(seconds: 4));
+        final config = await api.loadConfig().timeout(const Duration(seconds: 10));
         SettingsService().updateFromConfig(config);
       } catch (e) {
         debugPrint('[Splash] Config fetch failed: $e');
@@ -91,7 +91,7 @@ class _SplashScreenState extends State<SplashScreen>
 
       Future<void> fetchBatch(Future<core.MovieListResponse> call) async {
         try {
-          final page = await call.timeout(const Duration(seconds: 4));
+          final page = await call.timeout(const Duration(seconds: 15));
           for (final m in page.results) {
             if (m.posterPath != null && seen.add(m.posterPath!)) {
               paths.add(m.posterPath!);
