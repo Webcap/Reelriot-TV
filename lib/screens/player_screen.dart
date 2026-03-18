@@ -37,14 +37,20 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen> {
   late BetterPlayerController _controller;
   final WatchHistoryService _historyService = WatchHistoryService();
+  final FocusNode _mainFocusNode = FocusNode();
   Timer? _saveTimer;
 
   @override
   void initState() {
     super.initState();
-    WakelockPlus.enable(); // Keep screen awake during playback
+    WakelockPlus.enable(); 
     _setupController();
     _startProgressTimer();
+    
+    // Ensure we have focus on start
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _mainFocusNode.requestFocus();
+    });
   }
 
   void _startProgressTimer() {
@@ -79,7 +85,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         fit: BoxFit.contain,
         expandToFill: true,
         subtitlesConfiguration: const BetterPlayerSubtitlesConfiguration(
-          fontSize: 24, // Optimized for distance
+          fontSize: 24, 
           fontColor: Colors.white,
           outlineColor: Colors.black,
         ),
@@ -141,13 +147,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _saveTimer?.cancel();
     _saveCurrentProgress();
     _controller.dispose();
-    WakelockPlus.disable(); // Allow screen to sleep again
+    _mainFocusNode.dispose();
+    WakelockPlus.disable(); 
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Focus(
+      focusNode: _mainFocusNode,
       autofocus: true,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -160,11 +168,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           return KeyEventResult.handled;
         }
 
-        // 1. Critical Directional Keys
+        // Action / Directional keys
         if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown || 
             key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight ||
             key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
           
+          debugPrint('[PlayerScreen] 🔑 Key pressed: ${key.debugName}. Showing controls.');
           _controller.setControlsVisibility(true);
           return KeyEventResult.handled;
         }

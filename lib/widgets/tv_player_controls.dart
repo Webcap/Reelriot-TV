@@ -91,117 +91,128 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
     return AnimatedOpacity(
       opacity: _isVisible ? 1.0 : 0.0,
       duration: const Duration(milliseconds: 300),
-      child: Stack(
-        children: [
-          // Background Gradient Overlay
-          Positioned.fill(
-            child: IgnorePointer(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withOpacity(0.7),
-                      Colors.transparent,
-                      Colors.transparent,
-                      Colors.black.withOpacity(0.7),
-                    ],
-                    stops: const [0.0, 0.2, 0.8, 1.0],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          
-          // Top Bar (Title & Info)
-          Positioned(
-            top: 40,
-            left: 60,
-            right: 60,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.controller.betterPlayerControlsConfiguration.name.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 32,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -1,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _buildInfoBadge('HD'),
-                    const SizedBox(width: 12),
-                    Text(
-                      widget.controller.betterPlayerControlsConfiguration.watchingText ?? '',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.6),
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
+      onEnd: () {
+        if (!_isVisible) {
+          // Move focus out when hidden to allow PlayerScreen to catch keys
+          FocusManager.instance.primaryFocus?.unfocus();
+        }
+      },
+      child: IgnorePointer(
+        ignoring: !_isVisible,
+        child: FocusScope(
+          canRequestFocus: _isVisible,
+          child: Stack(
+            children: [
+              // Background Gradient Overlay
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withOpacity(0.7),
+                          Colors.transparent,
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.7),
+                        ],
+                        stops: const [0.0, 0.2, 0.8, 1.0],
                       ),
                     ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // Center Play/Pause Indicator (Optional, but good for feedback)
-          Center(
-            child: IgnorePointer(
-              child: AnimatedScale(
-                scale: widget.controller.isPlaying()! ? 0.0 : 1.0,
-                duration: const Duration(milliseconds: 200),
-                child: Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.black45,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white24, width: 2),
                   ),
-                  child: const Icon(Icons.pause_rounded, color: Colors.white, size: 60),
                 ),
               ),
-            ),
-          ),
-
-          // Bottom Bar (Progress & Controls)
-          Positioned(
-            bottom: 40,
-            left: 60,
-            right: 60,
-            child: Builder(
-              builder: (context) {
-                final videoController = widget.controller.videoPlayerController;
-                if (videoController == null) return const SizedBox.shrink();
-                
-                final videoValue = videoController.value;
-                return Column(
+              
+              // Top Bar (Title & Info)
+              Positioned(
+                top: 40,
+                left: 60,
+                right: 60,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildProgressBar(),
-                    const SizedBox(height: 24),
+                    Text(
+                      widget.controller.betterPlayerControlsConfiguration.name.toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -1,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        _buildTimeText(videoValue.position),
-                        const Spacer(),
-                        _buildPlayPauseButton(),
-                        const SizedBox(width: 48),
-                        _buildSettingsButton(),
-                        const Spacer(),
-                        _buildTimeText(videoValue.duration),
+                        _buildInfoBadge('HD'),
+                        const SizedBox(width: 12),
+                        Text(
+                          widget.controller.betterPlayerControlsConfiguration.watchingText ?? '',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.6),
+                            fontSize: 18,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ],
                     ),
                   ],
-                );
-              }
-            ),
+                ),
+              ),
+    
+              Center(
+                child: IgnorePointer(
+                  child: AnimatedScale(
+                    scale: widget.controller.isPlaying() == true ? 0.0 : 1.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.black45,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white24, width: 2),
+                      ),
+                      child: const Icon(Icons.pause_rounded, color: Colors.white, size: 60),
+                    ),
+                  ),
+                ),
+              ),
+    
+              // Bottom Bar (Progress & Controls)
+              Positioned(
+                bottom: 40,
+                left: 60,
+                right: 60,
+                child: Builder(
+                  builder: (context) {
+                    final videoController = widget.controller.videoPlayerController;
+                    if (videoController == null) return const SizedBox.shrink();
+                    
+                    final videoValue = videoController.value;
+                    return Column(
+                      children: [
+                        _buildProgressBar(),
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _buildTimeText(videoValue.position),
+                            const Spacer(),
+                            _buildPlayPauseButton(),
+                            const SizedBox(width: 48),
+                            _buildSettingsButton(),
+                            const Spacer(),
+                            _buildTimeText(videoValue.duration),
+                          ],
+                        ),
+                      ],
+                    );
+                  }
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
