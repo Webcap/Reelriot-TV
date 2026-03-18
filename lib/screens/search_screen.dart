@@ -2,9 +2,10 @@ import 'package:caffeine_core/caffeine_core.dart';
 import 'package:caffeine_tv/screens/movie_detail_screen.dart';
 import 'package:caffeine_tv/screens/tv_detail_screen.dart';
 import 'package:caffeine_tv/services/api_service.dart';
-import 'package:caffeine_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -20,16 +21,63 @@ class _SearchScreenState extends State<SearchScreen> {
   List<TvListItem>? _tv;
   String? _error;
   bool _loading = false;
+  Timer? _debounceTimer;
+  List<String> _history = [];
 
   @override
   void initState() {
     super.initState();
+    _loadHistory();
   }
 
   @override
   void dispose() {
     _queryController.dispose();
+    _debounceTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _history = prefs.getStringList('search_history') ?? [];
+      });
+    }
+  }
+
+  Future<void> _saveToHistory(String query) async {
+    if (query.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final history = prefs.getStringList('search_history') ?? [];
+    
+    // Remove if exists and add to front
+    history.removeWhere((q) => q.toLowerCase() == query.toLowerCase());
+    history.insert(0, query);
+    
+    // Keep last 10
+    final limited = history.take(10).toList();
+    await prefs.setStringList('search_history', limited);
+    
+    if (mounted) {
+      setState(() {
+        _history = limited;
+      });
+    }
+  }
+
+  void _onQueryChanged() {
+    _debounceTimer?.cancel();
+    if (_queryController.text.isEmpty) {
+      setState(() {
+        _movies = null;
+        _tv = null;
+      });
+      return;
+    }
+    _debounceTimer = Timer(const Duration(milliseconds: 600), () {
+      _search();
+    });
   }
 
   Future<void> _search() async {
@@ -50,6 +98,9 @@ class _SearchScreenState extends State<SearchScreen> {
           _tv = tv.results;
           _loading = false;
         });
+        if (q.isNotEmpty && (movies.results.isNotEmpty || tv.results.isNotEmpty)) {
+          _saveToHistory(q);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -90,6 +141,7 @@ class _SearchScreenState extends State<SearchScreen> {
                             setState(() {
                               _queryController.text += key;
                             });
+                            _onQueryChanged();
                           },
                           onBackspace: () {
                             if (_queryController.text.isNotEmpty) {
@@ -97,6 +149,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                 _queryController.text = _queryController.text
                                     .substring(0, _queryController.text.length - 1);
                               });
+                              _onQueryChanged();
                             }
                           },
                           onClear: () {
@@ -142,7 +195,10 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
             child: TextField(
               controller: _queryController,
-              readOnly: true, // Use Virtual Keyboard or Speech
+              readOnly: true,
+              showCursor: true,
+              cursorColor: const Color(0xFFDC2626),
+              cursorWidth: 3,
               style: const TextStyle(color: Colors.white, fontSize: 20),
               decoration: InputDecoration(
                 hintText: 'Search for movies or shows',
@@ -166,18 +222,42 @@ class _SearchScreenState extends State<SearchScreen> {
       return Center(child: Text(_error!, style: const TextStyle(color: Colors.red)));
     }
     if (_movies == null && _tv == null) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search, size: 80, color: Colors.white10),
-            SizedBox(height: 16),
-            Text(
-              'Type or use voice to discover content',
-              style: TextStyle(color: Colors.white30, fontSize: 18),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_history.isNotEmpty) ...[
+            const Text(
+              'Recent Searches',
+              style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: _history.map((q) => _HistoryPill(
+                label: q,
+                onTap: () {
+                  _queryController.text = q;
+                  _search();
+                },
+              )).toList(),
+            ),
+            const SizedBox(height: 48),
           ],
-        ),
+          const Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.search, size: 80, color: Colors.white10),
+                SizedBox(height: 16),
+                Text(
+                  'Search to discover content',
+                  style: TextStyle(color: Colors.white30, fontSize: 18),
+                ),
+              ],
+            ),
+          ),
+        ],
       );
     }
     if (_movies!.isEmpty && _tv!.isEmpty) {
@@ -187,25 +267,25 @@ class _SearchScreenState extends State<SearchScreen> {
     return ListView(
       children: [
         if (_movies!.isNotEmpty) ...[
-          const Text('Movies', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+          const Text('Movies', style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          _HorizontalResults(
-            items: _movies!,
-            onTap: (m) => Navigator.of(context).push(
+          ..._movies!.map((m) => _ResultTile(
+            item: m,
+            onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
             ),
-          ),
-          const SizedBox(height: 48),
+          )),
+          const SizedBox(height: 32),
         ],
         if (_tv!.isNotEmpty) ...[
-          const Text('TV Shows', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+          const Text('TV Shows', style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          _HorizontalResults(
-            items: _tv!,
-            onTap: (t) => Navigator.of(context).push(
+          ..._tv!.map((t) => _ResultTile(
+            item: t,
+            onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: t.id)),
             ),
-          ),
+          )),
         ],
       ],
     );
@@ -356,31 +436,169 @@ class _Key extends StatelessWidget {
   }
 }
 
-class _HorizontalResults extends StatelessWidget {
-  final List items;
-  final Function(dynamic) onTap;
+class _ResultTile extends StatelessWidget {
+  final dynamic item;
+  final VoidCallback onTap;
 
-  const _HorizontalResults({required this.items, required this.onTap});
+  const _ResultTile({required this.item, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 450,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: items.length,
-        itemBuilder: (context, i) {
-          final item = items[i];
-          final String? poster = (item is MovieListItem) ? item.posterPath : (item as TvListItem).posterPath;
-          final String title = (item is MovieListItem) ? (item.title ?? 'Movie') : (item as TvListItem).name ?? 'TV';
-          
-          return PosterCard(
-            posterPath: poster,
-            title: title,
-            onTap: () => onTap(item),
-          );
-        },
-      ),
+    final String? poster = (item is MovieListItem) ? item.posterPath : (item as TvListItem).posterPath;
+    final String title = (item is MovieListItem) ? (item.title ?? 'Movie') : (item as TvListItem).name ?? 'TV';
+    final String? overview = (item is MovieListItem) ? item.overview : (item as TvListItem).overview;
+    final String? date = (item is MovieListItem) ? item.releaseDate : (item as TvListItem).firstAirDate;
+    final String year = (date != null && date.length >= 4) ? date.substring(0, 4) : '';
+    final double rating = (item is MovieListItem) ? (item.voteAverage ?? 0) : (item as TvListItem).voteAverage ?? 0;
+
+    return Focus(
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.select)) {
+          onTap();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Builder(builder: (context) {
+        final focused = Focus.of(context).hasFocus;
+        return GestureDetector(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: focused ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.04),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: focused ? Colors.white : Colors.white10,
+                width: 1,
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Small Poster
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    width: 70,
+                    height: 105,
+                    child: (poster != null && poster.isNotEmpty)
+                        ? Image.network(
+                            'https://image.tmdb.org/t/p/w185$poster',
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(color: Colors.grey[900]),
+                          )
+                        : Container(color: Colors.grey[900]),
+                  ),
+                ),
+                const SizedBox(width: 24),
+                // Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: focused ? Colors.white : Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          if (year.isNotEmpty) ...[
+                            Text(year, style: const TextStyle(color: Colors.white54, fontSize: 14)),
+                            const SizedBox(width: 16),
+                          ],
+                          const Icon(Icons.star, color: Color(0xFFDC2626), size: 14),
+                          const SizedBox(width: 4),
+                          Text(
+                            rating.toStringAsFixed(1),
+                            style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (overview != null && overview.isNotEmpty)
+                        Text(
+                          overview,
+                          style: TextStyle(
+                            color: focused ? Colors.white.withOpacity(0.8) : Colors.white54,
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                if (focused)
+                  const Center(
+                    child: Icon(Icons.chevron_right, color: Colors.white54),
+                  ),
+              ],
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _HistoryPill extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _HistoryPill({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.select)) {
+          onTap();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Builder(builder: (context) {
+        final focused = Focus.of(context).hasFocus;
+        return GestureDetector(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: focused ? Colors.white : Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: focused ? Colors.white : Colors.white10,
+                width: 1,
+              ),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: focused ? Colors.black : Colors.white70,
+                fontSize: 14,
+                fontWeight: focused ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+        );
+      }),
     );
   }
 }
