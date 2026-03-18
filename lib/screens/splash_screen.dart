@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:caffeine_core/caffeine_core.dart' as core;
+import 'package:caffeine_tv/constants.dart';
 import 'package:caffeine_tv/services/api_service.dart';
+import 'package:caffeine_tv/services/settings_service.dart';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class SplashScreen extends StatefulWidget {
   final Widget destination;
@@ -69,23 +73,41 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _bootstrap() async {
-    // Load posters
+    // Load posters and config
     try {
       final api = ApiService();
-      final results = await Future.wait([
-        api.fetchTrendingMovies(),
-        api.fetchPopularMovies(),
-      ]);
+      
+      // 1. Load API Config
+      try {
+        final config = await api.loadConfig().timeout(const Duration(seconds: 4));
+        SettingsService().updateFromConfig(config);
+      } catch (e) {
+        debugPrint('[Splash] Config fetch failed: $e');
+      }
 
+      // 2. Fetch posters
+      final List<String> paths = [];
       final seen = <String>{};
-      final paths = <String>[];
-      for (final page in results) {
-        for (final m in page.results) {
-          if (m.posterPath != null && seen.add(m.posterPath!)) {
-            paths.add(m.posterPath!);
+
+      Future<void> fetchBatch(Future<core.MovieListResponse> call) async {
+        try {
+          final page = await call.timeout(const Duration(seconds: 4));
+          for (final m in page.results) {
+            if (m.posterPath != null && seen.add(m.posterPath!)) {
+              paths.add(m.posterPath!);
+            }
           }
+        } catch (e) {
+          debugPrint('[Splash] Batch fetch failed: $e');
         }
       }
+
+      await Future.wait([
+        fetchBatch(api.fetchTrendingMovies()),
+        fetchBatch(api.fetchPopularMovies()),
+        fetchBatch(api.fetchTopRatedMovies()),
+      ]);
+
       // Shuffle so it looks varied every launch
       paths.shuffle(Random());
 
@@ -96,7 +118,8 @@ class _SplashScreenState extends State<SplashScreen>
         });
         _startScrolling();
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Splash] Bootstrap error: $e');
       if (mounted) setState(() => _postersLoaded = true);
     }
 
@@ -105,7 +128,7 @@ class _SplashScreenState extends State<SplashScreen>
     if (mounted) _contentController.forward();
 
     // Navigate after splash duration
-    await Future.delayed(const Duration(milliseconds: 3200));
+    await Future.delayed(const Duration(milliseconds: 4000));
     if (mounted) {
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
@@ -127,7 +150,7 @@ class _SplashScreenState extends State<SplashScreen>
       // Alternate rows scroll right/left
       final reverse = i.isOdd;
       // Stagger start
-      Timer(Duration(milliseconds: i * 120), () {
+      Timer(Duration(milliseconds: i * 150), () {
         if (!mounted) return;
         _animateRow(i, reverse);
       });
@@ -139,7 +162,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     // Scroll at ~30px/s continuously using a periodic ticker
     const fps = 60;
-    const pixelsPerFrame = 0.5; // slow, cinematic drift
+    const pixelsPerFrame = 0.6; // slightly faster drift
     final timer = Timer.periodic(
       const Duration(milliseconds: 1000 ~/ fps),
       (_) {
@@ -181,8 +204,15 @@ class _SplashScreenState extends State<SplashScreen>
     for (int i = 0; i < _posterPaths.length; i++) {
       rows[i % _rowCount].add(_posterPaths[i]);
     }
-    // Duplicate each row so we can loop seamlessly
-    return rows.map((r) => [...r, ...r, ...r]).toList();
+    // Duplicate each row so we can loop seamlessly and fill screen width
+    return rows.map((r) {
+      if (r.isEmpty) return <String>[];
+      final List<String> repeated = [];
+      while (repeated.length < 25) {
+        repeated.addAll(r);
+      }
+      return repeated;
+    }).toList();
   }
 
   @override
@@ -215,19 +245,31 @@ class _SplashScreenState extends State<SplashScreen>
                     itemCount: row.length,
                     separatorBuilder: (_, __) => const SizedBox(width: gap),
                     itemBuilder: (_, idx) {
-                      final path = row[idx];
+                      final rawPath = row[idx];
+                      final path = rawPath.startsWith('/') ? rawPath : '/$rawPath';
+                      final imageUrl = '${tmdbImageBaseUrl}w342$path';
+                      
                       return ClipRRect(
                         borderRadius: BorderRadius.circular(6),
-                        child: Image.network(
-                          'https://image.tmdb.org/t/p/w342$path',
+                        child: CachedNetworkImage(
+                          imageUrl: imageUrl,
                           width: posterW,
                           height: posterH,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
+                          placeholder: (context, url) => Container(
                             width: posterW,
                             height: posterH,
-                            color: const Color(0xFF1A1A1A),
+                            color: Colors.white.withOpacity(0.05),
                           ),
+                          errorWidget: (context, url, error) {
+                            debugPrint('[Splash] Failed to load image: $imageUrl');
+                            return Container(
+                              width: posterW,
+                              height: posterH,
+                              color: const Color(0xFF1A1A1A),
+                              child: const Icon(Icons.movie_outlined, color: Colors.white10, size: 24),
+                            );
+                          },
                         ),
                       );
                     },
@@ -243,8 +285,8 @@ class _SplashScreenState extends State<SplashScreen>
                 center: Alignment.center,
                 radius: 1.1,
                 colors: [
-                  Color(0xCC000000),
-                  Color(0xEE000000),
+                  Color(0x99000000), // 60% opacity
+                  Color(0xDD000000), // 86% opacity
                 ],
               ),
             ),

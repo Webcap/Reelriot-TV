@@ -196,6 +196,8 @@ class WatchHistoryService {
         if (isTv) {
           m['media_id'] = m['series_id'] ?? m['id'];
           m['title'] = m['series_name'];
+          m['season'] = m['season_num'];
+          m['episode'] = m['episode_num'];
         } else {
           m['media_id'] = m['id'];
         }
@@ -256,6 +258,53 @@ class WatchHistoryService {
       }
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Error fetching progress: $e');
+    }
+    return null;
+  }
+
+  Future<void> clearHistory({required String mediaType}) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      final column = mediaType == 'movie' ? 'movies' : 'tv_shows';
+      await _supabase.from('watch_history').update({column: []}).eq('user_id', user.id);
+      debugPrint('[WatchHistory] 🧹 Cleared $mediaType history');
+    } catch (e) {
+      debugPrint('[WatchHistory] ❌ Error clearing history: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>?> getLastWatchedEpisodeForShow(int tvId) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return null;
+
+    try {
+      final res = await _supabase
+          .from('watch_history')
+          .select('tv_shows')
+          .eq('user_id', user.id);
+
+      if (res.isEmpty) return null;
+      
+      List<dynamic> allTvShows = [];
+      for (var row in res) {
+        allTvShows.addAll(row['tv_shows'] as List? ?? []);
+      }
+      
+      final matches = allTvShows.where((t) => ((t as Map)['series_id'] ?? t['id']) == tvId).toList();
+      if (matches.isEmpty) return null;
+
+      // Sort by date_added to find the absolute last one watched
+      matches.sort((a, b) {
+        final da = (a as Map)['date_added'] as String? ?? '';
+        final db = (b as Map)['date_added'] as String? ?? '';
+        return db.compareTo(da);
+      });
+
+      return Map<String, dynamic>.from(matches.first as Map);
+    } catch (e) {
+      debugPrint('[WatchHistory] ❌ Error fetching last watched: $e');
     }
     return null;
   }

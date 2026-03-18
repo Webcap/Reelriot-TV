@@ -1,7 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:ui' as ui;
 
-class SettingsService {
+class SettingsService extends ChangeNotifier {
   static final SettingsService _instance = SettingsService._internal();
   factory SettingsService() => _instance;
   SettingsService._internal();
@@ -29,5 +30,15 @@ class SettingsService {
 
   Future<void> setLanguage(String langCode) async {
     await _prefs.setString(_keyLanguage, langCode);
+    notifyListeners();
+  }
+
+  bool _sportsEnabled = true;
+  bool get sportsEnabled => _sportsEnabled;
+
+  void updateFromConfig(Map<String, dynamic> config) {
+    _sportsEnabled = config['enable_ott'] == true ||
+        config['enable_ott'].toString().toLowerCase() == 'true';
+    notifyListeners();
   }
 }

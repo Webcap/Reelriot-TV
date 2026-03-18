@@ -7,12 +7,14 @@ import 'package:caffeine_tv/screens/settings_screen.dart';
 import 'package:caffeine_tv/screens/sports_screen.dart';
 import 'package:caffeine_tv/services/api_service.dart';
 import 'package:caffeine_tv/services/watch_history_service.dart';
+import 'package:caffeine_tv/services/recommendation_service.dart';
 import 'package:caffeine_tv/screens/video_loader_screen.dart';
 import 'package:caffeine_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:caffeine_tv/widgets/exit_dialog.dart';
+import 'package:caffeine_tv/services/settings_service.dart';
 import 'dart:async';
 
 class HomeScreen extends StatefulWidget {
@@ -25,10 +27,37 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 1;
   final GlobalKey<FavoritesScreenState> _favoritesKey = GlobalKey<FavoritesScreenState>();
-  final List<FocusNode> _navNodes = List.generate(5, (_) => FocusNode());
+  late List<FocusNode> _navNodes;
+
+  List<_Tab> get _visibleTabs {
+    final List<_Tab> tabs = [
+      const _Tab(label: 'Search', icon: Icons.search),
+      const _Tab(label: 'Home', icon: Icons.home_filled),
+    ];
+    
+    if (SettingsService().sportsEnabled) {
+      tabs.add(const _Tab(label: 'Sports', icon: Icons.sports_soccer));
+    }
+    
+    tabs.add(const _Tab(label: 'Profile', icon: Icons.person_outline));
+    tabs.add(const _Tab(label: 'Favorites', icon: Icons.favorite_border));
+    return tabs;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _navNodes = List.generate(5, (_) => FocusNode());
+    SettingsService().addListener(_onSettingsChanged);
+  }
+
+  void _onSettingsChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
+    SettingsService().removeListener(_onSettingsChanged);
     for (var node in _navNodes) {
       node.dispose();
     }
@@ -66,16 +95,20 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  static const _tabs = [
-    _Tab(label: 'Search', icon: Icons.search),
-    _Tab(label: 'Home', icon: Icons.home_filled),
-    _Tab(label: 'Sports', icon: Icons.sports_soccer),
-    _Tab(label: 'Profile', icon: Icons.person_outline),
-    _Tab(label: 'Favorites', icon: Icons.favorite_border),
-  ];
 
   @override
   Widget build(BuildContext context) {
+    final tabs = _visibleTabs;
+    // Ensure selected index is within bounds if tabs change
+    if (_selectedIndex >= tabs.length) {
+      _selectedIndex = 1; // Default to Home
+    }
+
+    // Ensure we have enough focus nodes
+    if (_navNodes.length < tabs.length) {
+      _navNodes.addAll(List.generate(tabs.length - _navNodes.length, (_) => FocusNode()));
+    }
+
     return PopScope(
       canPop: false,
       onPopInvoked: _onBackInvoke,
@@ -83,14 +116,14 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: const Color(0xFF000000), // Pure black per design.json
         body: Row(
           children: [
-            _buildNavRail(context),
+            _buildNavRail(context, tabs),
             Expanded(
               child: IndexedStack(
                 index: _selectedIndex,
                 children: [
                   const SearchScreen(),
                   const _MainHomeView(),
-                  const SportsScreen(),
+                  if (SettingsService().sportsEnabled) const SportsScreen(),
                   const SettingsScreen(),
                   FavoritesScreen(key: _favoritesKey),
                 ],
@@ -108,7 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return (value * width) / 1920;
   }
 
-  Widget _buildNavRail(BuildContext context) {
+  Widget _buildNavRail(BuildContext context, List<_Tab> tabs) {
     final s = (double v) => _scale(context, v);
     // Updated per design.json: width 8rem (128px), background #111111
     return Container(
@@ -141,8 +174,8 @@ class _HomeScreenState extends State<HomeScreen> {
             child: SingleChildScrollView(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.start,
-                children: List.generate(_tabs.length, (i) {
-                  final tab = _tabs[i];
+                children: List.generate(tabs.length, (i) {
+                  final tab = tabs[i];
                   final selected = _selectedIndex == i;
                   return Focus(
                     focusNode: _navNodes[i],
@@ -151,7 +184,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (event.logicalKey == LogicalKeyboardKey.enter ||
                           event.logicalKey == LogicalKeyboardKey.select) {
                         setState(() => _selectedIndex = i);
-                        if (i == 4) {
+                        // Check if selected tab is favorites (label comparison since index might shift)
+                        if (tab.label == 'Favorites') {
                           _favoritesKey.currentState?.refresh();
                         }
                         return KeyEventResult.handled;
@@ -223,6 +257,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
   List<MovieListItem>? _weeklyTrending;
   List<MovieListItem>? _popular;
   List<MovieListItem>? _airingToday;
+  List<MovieListItem>? _aiRecommendations;
+  String? _aiAnchorTitle;
+  final RecommendationService _recService = RecommendationService();
   List<Map<String, dynamic>>? _history;
   bool _loading = true;
   Timer? _autoSlideTimer;
@@ -275,6 +312,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
         _weeklyTrending = null;
         _popular = null;
         _airingToday = null;
+        _aiRecommendations = null;
       });
     }
     
@@ -287,16 +325,20 @@ class _MainHomeViewState extends State<_MainHomeView> {
           _api.fetchTrendingTv(),
           _api.fetchPopularTv(),
           _api.fetchAiringToday(),
+          _recService.getRecommendations(),
         ]);
 
         final history = results[0] as List<Map<String, dynamic>>;
         final trending = results[1] as TvListResponse;
         final popular = results[2] as TvListResponse;
         final airingToday = results[3] as TvListResponse;
+        final aiResult = results[4] as RecommendationResult;
 
         if (mounted) {
           setState(() {
             _history = history;
+            _aiRecommendations = aiResult.items;
+            _aiAnchorTitle = aiResult.anchorTitle;
             
             if (trending.results.isNotEmpty) {
               final first = trending.results.first;
@@ -349,11 +391,13 @@ class _MainHomeViewState extends State<_MainHomeView> {
           _historyService.getHistory(mediaType: 'movie'),
           _api.fetchTrendingMovies(),
           _api.fetchPopularMovies(),
+          _recService.getRecommendations(),
         ]);
 
         final history = results[0] as List<Map<String, dynamic>>;
         final trending = results[1] as MovieListResponse;
         final popular = results[2] as MovieListResponse;
+        final aiResult = results[3] as RecommendationResult;
 
         final today = DateTime.now();
         bool isReleased(MovieListItem m) {
@@ -371,6 +415,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
         if (mounted) {
           setState(() {
             _history = history;
+            _aiRecommendations = aiResult.items;
+            _aiAnchorTitle = aiResult.anchorTitle;
             if (releasedTrending.isNotEmpty) {
               final first = releasedTrending.first;
               // Note: fetchMovieDetail is still needed for more details if necessary, 
@@ -539,115 +585,140 @@ class _MainHomeViewState extends State<_MainHomeView> {
             children: [
               _buildTopNav(context),
               SizedBox(height: s(150)),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 600),
-                transitionBuilder: (Widget child, Animation<double> animation) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0.0, 0.05),
-                        end: Offset.zero,
-                      ).animate(CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOutCubic,
-                      )),
-                      child: child,
-                    ),
-                  );
-                },
-                child: _focusedMovie == null 
-                  ? const SizedBox.shrink()
-                  : Column(
-                      key: ValueKey('hero_content_${_focusedMovie!.id}'),
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Brand Label
-                        Container(
-                          padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEC1D24), // brand red
-                            borderRadius: BorderRadius.circular(s(4)),
+              SizedBox(
+                height: s(620), // Fixed height to prevent layout shifts
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 600),
+                  transitionBuilder: (Widget child, Animation<double> animation) {
+                    return FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0.0, 0.05),
+                          end: Offset.zero,
+                        ).animate(CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeOutCubic,
+                        )),
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: _focusedMovie == null 
+                    ? const SizedBox.shrink()
+                    : Column(
+                        key: ValueKey('hero_content_${_focusedMovie!.id}'),
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Brand Label
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEC1D24), // brand red
+                              borderRadius: BorderRadius.circular(s(4)),
+                            ),
+                            child: Text(
+                              'TRENDING', 
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: s(15),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
-                          child: Text(
-                            'TRENDING', 
+                          SizedBox(height: s(18)),
+                          Text(
+                            _focusedMovie?.title?.toUpperCase() ?? '',
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: s(15),
-                              fontWeight: FontWeight.bold,
+                              fontSize: s(130),
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: s(-4),
+                              height: 0.9,
                             ),
-                          ),
-                        ),
-                        SizedBox(height: s(18)),
-                        Text(
-                          _focusedMovie?.title?.toUpperCase() ?? '',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: s(130),
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: s(-4),
-                            height: 0.9,
-                          ),
-                        ),
-                        SizedBox(height: s(24)),
-                        SizedBox(
-                          width: s(780),
-                          child: Text(
-                            _focusedMovie?.overview ?? '',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: s(22),
-                              fontWeight: FontWeight.w400,
-                              height: 1.4,
-                            ),
-                            maxLines: 3,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                        SizedBox(height: s(72)),
-                        Row(
-                          children: [
-                            _HeroButton(
-                              label: 'Watch Now',
-                              icon: Icons.play_arrow_outlined,
-                              style: HeroButtonStyle.primary,
-                              onTap: () {
-                                // Handle both Movies and TV Shows
-                                final Future<void>? push;
-                                if (_selectedCategory == 'TV Shows') {
-                                   push = Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: _focusedMovie!.id)),
-                                  );
-                                } else {
-                                  push = Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: _focusedMovie!.id)),
-                                  );
-                                }
-                                push.then((_) => _reloadHistory());
-                              },
+                          SizedBox(height: s(24)),
+                          SizedBox(
+                            width: s(780),
+                            child: Text(
+                              _focusedMovie?.overview ?? '',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: s(22),
+                                fontWeight: FontWeight.w400,
+                                height: 1.4,
+                              ),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            SizedBox(width: s(36)),
-                            _HeroButton(
-                              label: 'Favourite',
-                              icon: Icons.favorite_border,
-                              style: HeroButtonStyle.secondaryRed,
-                              onTap: () {},
-                            ),
-                            SizedBox(width: s(36)),
-                            _HeroButton(
-                              label: 'Share',
-                              icon: Icons.share_outlined,
-                              style: HeroButtonStyle.secondaryWhite,
-                              onTap: () {},
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: s(48)),
-                        _buildSliderIndicators(context),
+                          ),
+                          SizedBox(height: s(72)),
+                          Row(
+                            children: [
+                              _HeroButton(
+                                label: 'Watch Now',
+                                icon: Icons.play_arrow_outlined,
+                                style: HeroButtonStyle.primary,
+                                onTap: () {
+                                  // Handle both Movies and TV Shows
+                                  final Future<void>? push;
+                                  if (_selectedCategory == 'TV Shows') {
+                                     push = Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: _focusedMovie!.id)),
+                                    );
+                                  } else {
+                                    push = Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: _focusedMovie!.id)),
+                                    );
+                                  }
+                                  push.then((_) => _reloadHistory());
+                                },
+                              ),
+                              SizedBox(width: s(36)),
+                              _HeroButton(
+                                label: 'Favourite',
+                                icon: Icons.favorite_border,
+                                style: HeroButtonStyle.secondaryRed,
+                                onTap: () {},
+                              ),
+                              SizedBox(width: s(36)),
+                              _HeroButton(
+                                label: 'Share',
+                                icon: Icons.share_outlined,
+                                style: HeroButtonStyle.secondaryWhite,
+                                onTap: () {},
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: s(48)),
+                          _buildSliderIndicators(context),
+                        ],
+                      ),
+                ),
+              ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 500),
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return SizeTransition(
+                    sizeFactor: animation,
+                    axisAlignment: -1.0,
+                    child: FadeTransition(opacity: animation, child: child),
+                  );
+                },
+                child: (_history == null || _history!.isEmpty)
+                  ? const SizedBox.shrink()
+                  : Column(
+                      key: const ValueKey('continue_watching_section'),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildContinueWatchingRow(context, s),
+                        SizedBox(height: s(96)),
                       ],
                     ),
               ),
-              _buildContinueWatchingRow(context, s),
+              _buildAiRecommendationsRow(context, s),
               if (_selectedCategory == 'TV Shows') ...[
                 SizedBox(height: s(96)),
                 _buildAiringTodayRow(context, s),
@@ -869,13 +940,50 @@ class _MainHomeViewState extends State<_MainHomeView> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(height: s(72)),
-        Text(
-          'Continue Watching',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: s(48),
-            fontWeight: FontWeight.w800,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Continue Watching',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: s(48),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            _HeroButton(
+              label: 'Clear All',
+              icon: Icons.delete_outline,
+              style: HeroButtonStyle.secondaryWhite,
+              onTap: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: const Color(0xFF1A1A1A),
+                    title: const Text('Clear History?', style: TextStyle(color: Colors.white)),
+                    content: const Text('Do you want to clear all "Continue Watching" items for this category?', style: TextStyle(color: Colors.white70)),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, true), 
+                        child: const Text('Clear', style: TextStyle(color: Color(0xFFE60000)))
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true) {
+                  await _historyService.clearHistory(mediaType: _selectedCategory == 'TV Shows' ? 'tv' : 'movie');
+                  if (_scrollController.hasClients) {
+                    await _scrollController.animateTo(0, duration: const Duration(milliseconds: 500), curve: Curves.easeOutCubic);
+                  }
+                  setState(() {
+                    _trendingIndex = 0;
+                  });
+                  _loadContent(); // Full refresh (non-quiet) to reset the UI feel
+                }
+              },
+            ),
+          ],
         ),
         SizedBox(height: s(42)),
         SizedBox(
@@ -922,18 +1030,28 @@ class _MainHomeViewState extends State<_MainHomeView> {
                     } else {
                       final detail = await _api.fetchTvDetail(h['media_id']);
                       if (!mounted) return;
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => VideoLoaderScreen(
-                            tvShow: detail,
-                            season: h['season'],
-                            episode: h['episode'],
-                            episodeName: h['episode_name'],
-                            startPosition: startAt,
+                      
+                      // If somehow season/episode are missing, go to detail screen instead of loader
+                      if (h['season'] == null || h['episode'] == null) {
+                        debugPrint('[HomeScreen] ⚠️ History for TV show ${h['title']} is missing season/episode. Going to detail screen.');
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: h['media_id'])),
+                        );
+                      } else {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => VideoLoaderScreen(
+                              tvShow: detail,
+                              season: h['season'],
+                              episode: h['episode'],
+                              episodeName: h['episode_name'],
+                              startPosition: startAt,
+                            ),
                           ),
-                        ),
-                      );
+                        );
+                      }
                     }
 
                     // Refresh history so completed items disappear immediately
@@ -1013,6 +1131,128 @@ class _MainHomeViewState extends State<_MainHomeView> {
   String _monthName(int month) {
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return months[month - 1];
+  }
+
+  Widget _buildAiRecommendationsRow(BuildContext context, double Function(double) s) {
+    if (_aiRecommendations == null || _aiRecommendations!.isEmpty || _aiAnchorTitle == null) {
+      return const SizedBox.shrink();
+    }
+    
+    final title = 'Because you watched $_aiAnchorTitle, we think you might like';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: s(48),
+                  fontWeight: FontWeight.w800,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            SizedBox(width: s(24)),
+            _HeroButton(
+              label: 'Surprise Me',
+              icon: Icons.auto_awesome,
+              style: HeroButtonStyle.secondaryRed,
+              onTap: () async {
+                final situation = await _showSituationDialog(context);
+                if (situation != null) {
+                  setState(() => _loading = true);
+                  final result = await _recService.getRecommendations(situation: situation);
+                  if (mounted) {
+                    setState(() {
+                      _aiRecommendations = result.items;
+                      _aiAnchorTitle = result.anchorTitle;
+                      _loading = false;
+                    });
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+        SizedBox(height: s(42)),
+        SizedBox(
+          height: s(480),
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            primary: false,
+            itemCount: _aiRecommendations!.length,
+            itemBuilder: (context, index) {
+              final m = _aiRecommendations![index];
+              return Padding(
+                padding: EdgeInsets.only(right: s(36)),
+                child: PosterCard(
+                  posterPath: m.posterPath,
+                  title: m.title ?? '',
+                  onFocus: () => _updateFocusedMovie(m.id),
+                  onTap: () async {
+                    if (_selectedCategory == 'TV Shows') {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: m.id)),
+                      );
+                    } else {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
+                      );
+                    }
+                    if (mounted) _loadContent(quiet: true);
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<String?> _showSituationDialog(BuildContext context) {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('What\'s the occasion?', style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('e.g. "date night", "horror fans", "relaxing Sunday"', style: TextStyle(color: Colors.white54)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                hintText: 'Enter a situation...',
+                hintStyle: TextStyle(color: Colors.white24),
+                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE60000))),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Get Recommendations', style: TextStyle(color: Color(0xFFE60000))),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildRow(BuildContext context, String title, List<MovieListItem>? items) {

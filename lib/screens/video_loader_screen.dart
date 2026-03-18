@@ -51,7 +51,11 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
       status: ProviderStatus.pending,
     )).toList();
 
-    _loadVideo();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadVideo();
+      }
+    });
   }
 
   void _loadVideo() async {
@@ -60,6 +64,16 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     debugPrint('[VideoLoader] 🎬 Loading media: $mediaName (ID: $mediaId)');
     if (widget.tvShow != null) {
       debugPrint('[VideoLoader] 📺 TV Show: S${widget.season}E${widget.episode}');
+      if (widget.season == null || widget.episode == null) {
+        debugPrint('[VideoLoader] ❌ Cannot load TV stream: season or episode missing');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not determine which episode to play')),
+          );
+          Navigator.of(context).pop();
+        }
+        return;
+      }
     }
 
     for (int i = 0; i < _providers.length; i++) {
@@ -113,6 +127,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
 
           debugPrint('[VideoLoader] 🚀 Launching PlayerScreen with URL: ${response.links!.first.url}');
           // Navigate to player
+          if (!mounted) return;
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (context) => PlayerScreen(
@@ -147,6 +162,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     // If all failed
     if (mounted && !_isDone) {
       debugPrint('[VideoLoader] 🚫 All providers failed to return a stream for $mediaName');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No stream available from any provider')),
       );

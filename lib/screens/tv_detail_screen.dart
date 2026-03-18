@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:caffeine_tv/services/bookmark_service.dart';
+import 'package:caffeine_tv/services/watch_history_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class TvDetailScreen extends StatefulWidget {
@@ -29,6 +30,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
   final BookmarkService _bookmarkService = BookmarkService();
   bool _isFavorite = false;
   String? _error;
+  Map<String, dynamic>? _lastWatched;
 
   @override
   void initState() {
@@ -41,19 +43,23 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
       final show = await _api.fetchTvDetail(widget.tvId);
       List<TvListItem>? recs;
       CreditsResponse? credits;
+      Map<String, dynamic>? lastWatched;
 
-      // Fetch recommendations and credits in parallel
+      // Fetch recommendations, credits and history in parallel
       await Future.wait([
         _api.fetchTvRecommendations(widget.tvId).then((r) => recs = r.results).catchError((_) => recs = []),
         _api.fetchTvCredits(widget.tvId).then((c) => credits = c).catchError((_) => credits = CreditsResponse(id: widget.tvId, cast: [])),
+        WatchHistoryService().getLastWatchedEpisodeForShow(widget.tvId).then((h) => lastWatched = h),
       ]);
 
       if (mounted) {
         setState(() {
           _show = show;
           _seasons = {};
+          _lastWatched = lastWatched;
           if (show.numberOfSeasons != null && show.numberOfSeasons! > 0) {
-            _selectedSeason = 1;
+            // Default to last watched season or Season 1
+            _selectedSeason = lastWatched?['season_num'] ?? 1;
           }
           _recommendations = recs;
           _credits = credits;
@@ -108,6 +114,64 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
           episodeName: episodeTitle,
         ),
       ),
+    );
+  }
+
+  Widget _buildUpNextButton(double Function(double) s) {
+    if (_show == null) return const SizedBox.shrink();
+    
+    int nextSeason = 1;
+    int nextEpisode = 1;
+    String label = 'PLAY';
+    bool inProgress = false;
+
+    if (_lastWatched != null) {
+      final season = _lastWatched!['season_num'] as int? ?? 1;
+      final episode = _lastWatched!['episode_num'] as int? ?? 1;
+      final elapsed = _lastWatched!['elapsed'] as int? ?? 0;
+      final total = elapsed + (_lastWatched!['remaining'] as int? ?? 0);
+      
+      final isFinished = total > 0 && (elapsed / total) >= 0.95;
+      
+      if (!isFinished) {
+        nextSeason = season;
+        nextEpisode = episode;
+        label = 'CONTINUE S$season E$episode';
+        inProgress = true;
+      } else {
+        // Find next episode
+        final currentSeasonDetail = _seasons?[season];
+        if (currentSeasonDetail != null) {
+          if (episode < currentSeasonDetail.episodes.length) {
+            nextSeason = season;
+            nextEpisode = episode + 1;
+            label = 'WATCH NEXT S$nextSeason E$nextEpisode';
+          } else if (season < (_show?.numberOfSeasons ?? 0)) {
+            nextSeason = season + 1;
+            nextEpisode = 1;
+            label = 'WATCH NEXT S$nextSeason E1';
+          } else {
+            label = 'PLAY S1 E1';
+            nextSeason = 1;
+            nextEpisode = 1;
+          }
+        } else {
+          // Fallback if current season detail isn't in memory
+          // We can at least guess it's the next episode
+          nextSeason = season;
+          nextEpisode = episode + 1;
+          label = 'WATCH NEXT';
+        }
+      }
+    }
+
+    return _ActionBtn(
+      label: label,
+      icon: inProgress ? Icons.play_arrow : Icons.play_circle_outline,
+      isPrimary: true,
+      onTap: () => _playEpisode(nextSeason, nextEpisode, null),
+      s: s,
+      autofocus: true,
     );
   }
 
@@ -286,13 +350,14 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                             // Action Buttons (Favorite/Share) - Play is handled per episode
                             Row(
                               children: [
+                                _buildUpNextButton(s),
+                                SizedBox(width: s(24)),
                                 _ActionBtn(
                                   label: _isFavorite ? 'FAVOURITED' : 'FAVOURITE',
                                   icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
-                                  isPrimary: _isFavorite,
+                                  isPrimary: false, // Favorite is secondary now
                                   onTap: _toggleFavorite,
                                   s: s,
-                                  autofocus: true,
                                 ),
                                 SizedBox(width: s(24)),
                                 _ActionBtn(
@@ -309,67 +374,16 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                             if (show.numberOfSeasons != null && show.numberOfSeasons! > 0) ...[
                               _SectionHeader(title: 'SEASONS', s: s),
                               SizedBox(height: s(24)),
-                              SizedBox(
-                                height: s(60),
-                                child: ListView.builder(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: show.numberOfSeasons!,
-                                  itemBuilder: (context, i) {
-                                    final num = i + 1;
-                                    final selected = _selectedSeason == num;
-                                    return Padding(
-                                      padding: EdgeInsets.only(right: s(16)),
-                                      child: Focus(
-                                        descendantsAreFocusable: false,
-                                        onKeyEvent: (node, event) {
-                                          if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                                          if (event.logicalKey == LogicalKeyboardKey.enter ||
-                                              event.logicalKey == LogicalKeyboardKey.select) {
-                                            setState(() { _selectedSeason = num; _loadSeason(num); });
-                                            return KeyEventResult.handled;
-                                          }
-                                          return KeyEventResult.ignored;
-                                        },
-                                        child: Builder(
-                                          builder: (context) {
-                                            final focused = Focus.of(context).hasFocus;
-                                            return GestureDetector(
-                                              onTap: () { setState(() { _selectedSeason = num; _loadSeason(num); }); },
-                                              child: AnimatedContainer(
-                                                duration: const Duration(milliseconds: 200),
-                                                padding: EdgeInsets.symmetric(horizontal: s(32)),
-                                                decoration: BoxDecoration(
-                                                  color: selected 
-                                                      ? const Color(0xFFDC2626) 
-                                                      : (focused ? Colors.white.withOpacity(0.2) : Colors.white.withOpacity(0.05)),
-                                                  borderRadius: BorderRadius.circular(s(8)),
-                                                  border: Border.all(
-                                                    color: focused ? Colors.white : Colors.transparent,
-                                                    width: s(2),
-                                                  ),
-                                                  boxShadow: focused
-                                                      ? [BoxShadow(color: Colors.white.withOpacity(0.2), blurRadius: 10)]
-                                                      : [],
-                                                ),
-                                                child: Center(
-                                                  child: Text(
-                                                    'SEASON $num',
-                                                    style: TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: s(18),
-                                                      fontWeight: FontWeight.bold,
-                                                      letterSpacing: s(1),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            );
-                                          }
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
+                              _SeasonSelector(
+                                currentSeason: _selectedSeason!,
+                                totalSeasons: show.numberOfSeasons!,
+                                s: s,
+                                onSelected: (num) {
+                                  setState(() {
+                                    _selectedSeason = num;
+                                    _loadSeason(num);
+                                  });
+                                },
                               ),
                               SizedBox(height: s(48)),
                             ],
@@ -726,6 +740,228 @@ class _ActionBtnState extends State<_ActionBtn> {
               ),
             );
           }
+        ),
+      ),
+    );
+  }
+}
+
+class _SeasonSelector extends StatefulWidget {
+  final int currentSeason;
+  final int totalSeasons;
+  final double Function(double) s;
+  final ValueChanged<int> onSelected;
+
+  const _SeasonSelector({
+    required this.currentSeason,
+    required this.totalSeasons,
+    required this.s,
+    required this.onSelected,
+  });
+
+  @override
+  State<_SeasonSelector> createState() => _SeasonSelectorState();
+}
+
+class _SeasonSelectorState extends State<_SeasonSelector> {
+  bool _isFocused = false;
+
+  void _showPicker() {
+    showDialog(
+      context: context,
+      builder: (context) => _SeasonPicker(
+        totalSeasons: widget.totalSeasons,
+        currentSeason: widget.currentSeason,
+        s: widget.s,
+        onSelected: widget.onSelected,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.s;
+    return Focus(
+      onFocusChange: (focused) => setState(() => _isFocused = focused),
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.select)) {
+          _showPicker();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        onTap: _showPicker,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: EdgeInsets.symmetric(horizontal: s(24), vertical: s(12)),
+          decoration: BoxDecoration(
+            color: _isFocused ? Colors.white : Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(s(8)),
+            border: Border.all(
+              color: _isFocused ? Colors.white : Colors.white24,
+              width: s(2),
+            ),
+            boxShadow: _isFocused
+                ? [BoxShadow(color: Colors.white.withOpacity(0.3), blurRadius: 15)]
+                : [],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'SEASON ${widget.currentSeason}',
+                style: TextStyle(
+                  color: _isFocused ? Colors.black : Colors.white,
+                  fontSize: s(20),
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: s(1),
+                ),
+              ),
+              SizedBox(width: s(16)),
+              Icon(
+                Icons.arrow_drop_down,
+                color: _isFocused ? Colors.black : Colors.white,
+                size: s(24),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SeasonPicker extends StatelessWidget {
+  final int totalSeasons;
+  final int currentSeason;
+  final double Function(double) s;
+  final ValueChanged<int> onSelected;
+
+  const _SeasonPicker({
+    required this.totalSeasons,
+    required this.currentSeason,
+    required this.s,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(s(16))),
+      child: Container(
+        width: s(400),
+        padding: EdgeInsets.all(s(24)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'SELECT SEASON',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.5),
+                fontSize: s(16),
+                fontWeight: FontWeight.bold,
+                letterSpacing: s(2),
+              ),
+            ),
+            SizedBox(height: s(24)),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: totalSeasons,
+                itemBuilder: (context, i) {
+                  final num = i + 1;
+                  final selected = num == currentSeason;
+                  return _SeasonItem(
+                    num: num,
+                    selected: selected,
+                    s: s,
+                    onTap: () {
+                      onSelected(num);
+                      Navigator.pop(context);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SeasonItem extends StatefulWidget {
+  final int num;
+  final bool selected;
+  final double Function(double) s;
+  final VoidCallback onTap;
+
+  const _SeasonItem({
+    required this.num,
+    required this.selected,
+    required this.s,
+    required this.onTap,
+  });
+
+  @override
+  State<_SeasonItem> createState() => _SeasonItemState();
+}
+
+class _SeasonItemState extends State<_SeasonItem> {
+  bool _isFocused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.s;
+    return Focus(
+      onFocusChange: (focused) => setState(() => _isFocused = focused),
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.select)) {
+          widget.onTap();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: EdgeInsets.only(bottom: s(8)),
+          padding: EdgeInsets.symmetric(horizontal: s(24), vertical: s(16)),
+          decoration: BoxDecoration(
+            color: _isFocused ? Colors.white : (widget.selected ? const Color(0xFFDC2626).withOpacity(0.2) : Colors.transparent),
+            borderRadius: BorderRadius.circular(s(8)),
+            border: Border.all(
+              color: _isFocused ? Colors.white : (widget.selected ? const Color(0xFFDC2626) : Colors.transparent),
+              width: s(2),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Season ${widget.num}',
+                style: TextStyle(
+                  color: _isFocused ? Colors.black : Colors.white,
+                  fontSize: s(20),
+                  fontWeight: widget.selected ? FontWeight.bold : FontWeight.w500,
+                ),
+              ),
+              if (widget.selected)
+                Icon(
+                  Icons.check,
+                  color: _isFocused ? Colors.black : const Color(0xFFDC2626),
+                  size: s(20),
+                ),
+            ],
+          ),
         ),
       ),
     );
