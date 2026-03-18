@@ -1,4 +1,5 @@
 import 'package:caffeine_core/caffeine_core.dart';
+import 'package:caffeine_tv/screens/home_screen.dart';
 import 'package:caffeine_tv/screens/movie_detail_screen.dart';
 import 'package:caffeine_tv/screens/tv_detail_screen.dart';
 import 'package:caffeine_tv/services/api_service.dart';
@@ -271,9 +272,14 @@ class _SearchScreenState extends State<SearchScreen> {
           const SizedBox(height: 16),
           ..._movies!.map((m) => _ResultTile(
             item: m,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
-            ),
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
+              );
+              if (context.mounted) {
+                HomeScreenState.of(context)?.setIndex(1);
+              }
+            },
           )),
           const SizedBox(height: 32),
         ],
@@ -282,9 +288,14 @@ class _SearchScreenState extends State<SearchScreen> {
           const SizedBox(height: 16),
           ..._tv!.map((t) => _ResultTile(
             item: t,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: t.id)),
-            ),
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: t.id)),
+              );
+              if (context.mounted) {
+                HomeScreenState.of(context)?.setIndex(1);
+              }
+            },
           )),
         ],
       ],

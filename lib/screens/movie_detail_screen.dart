@@ -3,6 +3,7 @@ import 'package:caffeine_tv/constants.dart';
 import 'package:caffeine_tv/screens/video_loader_screen.dart';
 import 'package:caffeine_tv/screens/actor_screen.dart';
 import 'package:caffeine_tv/services/api_service.dart';
+import 'package:caffeine_tv/services/watch_history_service.dart';
 import 'package:caffeine_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,6 +28,8 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   final BookmarkService _bookmarkService = BookmarkService();
   bool _isFavorite = false;
   String? _error;
+  Duration? _movieHistory;
+  final WatchHistoryService _historyService = WatchHistoryService();
 
   @override
   void initState() {
@@ -40,10 +43,11 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
       List<MovieListItem>? recs;
       CreditsResponse? credits;
       
-      // Fetch recommendations and credits in parallel
+      // Fetch recommendations, credits, and watch history in parallel
       await Future.wait([
         _api.fetchMovieRecommendations(widget.movieId).then((r) => recs = r.results).catchError((_) => recs = []),
         _api.fetchMovieCredits(widget.movieId).then((c) => credits = c).catchError((_) => credits = CreditsResponse(id: widget.movieId, cast: [])),
+        _historyService.getSavedProgress(widget.movieId, true).then((p) => _movieHistory = p),
       ]);
 
       if (mounted) {
@@ -59,15 +63,50 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     }
   }
 
-  void _play() {
+  void _play({Duration? startPosition}) {
     if (_movie == null) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => VideoLoaderScreen(
           movie: _movie!,
+          startPosition: startPosition,
         ),
       ),
     );
+  }
+
+  void _handlePlay() async {
+    if (_movieHistory != null && _movieHistory! > Duration.zero) {
+      final resume = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Text('Resume Playback?', style: TextStyle(color: Colors.white)),
+          content: Text('Do you want to resume from ${_movieHistory!.toString().split('.').first}?', style: const TextStyle(color: Colors.white70)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('START OVER', style: TextStyle(color: Color(0xFFEC1D24))),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEC1D24)),
+              child: const Text('RESUME'),
+            ),
+          ],
+        ),
+      );
+
+      if (resume == null) return;
+      
+      if (resume) {
+        _play(startPosition: _movieHistory);
+      } else {
+        _play(startPosition: Duration.zero);
+      }
+    } else {
+      _play();
+    }
   }
 
   Future<void> _checkFavorite() async {
@@ -87,9 +126,11 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
       await _bookmarkService.toggleBookmark(_movie!, true);
       setState(() => _isFavorite = !_isFavorite);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update favorites: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update favorites: $e')),
+        );
+      }
     }
   }
 
@@ -267,21 +308,18 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                           SizedBox(height: s(48)),
                           Row(
                             children: [
-                              if (m.releaseDate == null || 
-                                  m.releaseDate!.isEmpty || 
-                                  DateTime.tryParse(m.releaseDate!)?.isBefore(DateTime.now()) == true)
-                                _ActionBtn(
-                                  label: 'WATCH NOW',
+                              _ActionBtn(
+                                  label: _movieHistory != null && _movieHistory! > Duration.zero ? 'CONTINUE' : 'WATCH NOW',
                                   icon: Icons.play_arrow,
                                   isPrimary: true,
-                                  onTap: _play,
+                                  onTap: _handlePlay,
                                   s: s,
                                   autofocus: true,
+                                  progress: (_movieHistory != null && _movie?.id != null) 
+                                      ? (_movieHistory!.inSeconds / 7200).clamp(0.0, 1.0) // Mock total for now or fetch?
+                                      : null,
                                 ),
-                              if (m.releaseDate == null || 
-                                  m.releaseDate!.isEmpty || 
-                                  DateTime.tryParse(m.releaseDate!)?.isBefore(DateTime.now()) == true)
-                                SizedBox(width: s(24)),
+                              SizedBox(width: s(24)),
                               _ActionBtn(
                                 label: _isFavorite ? 'FAVORITED' : 'FAVORITE',
                                 icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
@@ -445,6 +483,7 @@ class _ActionBtn extends StatefulWidget {
   final VoidCallback onTap;
   final double Function(double) s;
   final bool autofocus;
+  final double? progress;
 
   const _ActionBtn({
     required this.label,
@@ -453,6 +492,7 @@ class _ActionBtn extends StatefulWidget {
     required this.onTap,
     required this.s,
     this.autofocus = false,
+    this.progress,
   });
 
   @override
@@ -487,37 +527,60 @@ class _ActionBtnState extends State<_ActionBtn> {
         final focused = Focus.of(context).hasFocus;
         return GestureDetector(
           onTap: _handleTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            transform: Matrix4.identity()..scale(focused ? 1.05 : 1.0),
-            padding: EdgeInsets.symmetric(horizontal: widget.s(40), vertical: widget.s(16)),
-            decoration: BoxDecoration(
-              color: widget.isPrimary 
-                  ? (focused ? Colors.white : const Color(0xFFEC1D24))
-                  : (focused ? Colors.white.withOpacity(0.2) : Colors.white10),
-              borderRadius: BorderRadius.circular(widget.s(8)),
-              border: widget.isPrimary ? null : Border.all(color: Colors.white24, width: widget.s(1)),
-            ),
-            child: Row(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(widget.s(8)),
+            child: Stack(
               children: [
-                Icon(
-                  widget.icon, 
-                  color: widget.isPrimary 
-                      ? (focused ? Colors.black : Colors.white)
-                      : Colors.white,
-                  size: widget.s(28)
-                ),
-                SizedBox(width: widget.s(12)),
-                Text(
-                  widget.label,
-                  style: TextStyle(
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  transform: Matrix4.identity()..scale(focused ? 1.05 : 1.0),
+                  padding: EdgeInsets.symmetric(horizontal: widget.s(40), vertical: widget.s(16)),
+                  decoration: BoxDecoration(
                     color: widget.isPrimary 
-                        ? (focused ? Colors.black : Colors.white)
-                        : Colors.white,
-                    fontSize: widget.s(20),
-                    fontWeight: FontWeight.bold,
+                        ? (focused ? Colors.white : const Color(0xFFEC1D24))
+                        : (focused ? Colors.white.withOpacity(0.2) : Colors.white10),
+                    borderRadius: BorderRadius.circular(widget.s(8)),
+                    border: widget.isPrimary ? null : Border.all(color: Colors.white24, width: widget.s(1)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        widget.icon, 
+                        color: widget.isPrimary 
+                            ? (focused ? Colors.black : Colors.white)
+                            : Colors.white,
+                        size: widget.s(28)
+                      ),
+                      SizedBox(width: widget.s(12)),
+                      Text(
+                        widget.label,
+                        style: TextStyle(
+                          color: widget.isPrimary 
+                              ? (focused ? Colors.black : Colors.white)
+                              : Colors.white,
+                          fontSize: widget.s(20),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                if (widget.progress != null && widget.progress! > 0)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      height: widget.s(4),
+                      color: Colors.white.withOpacity(0.2),
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: widget.progress!,
+                        child: Container(color: focused ? Colors.black : const Color(0xFFEC1D24)),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

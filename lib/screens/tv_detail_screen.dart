@@ -28,9 +28,11 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
   List<TvListItem>? _recommendations;
   CreditsResponse? _credits;
   final BookmarkService _bookmarkService = BookmarkService();
+  final WatchHistoryService _historyService = WatchHistoryService();
   bool _isFavorite = false;
   String? _error;
   Map<String, dynamic>? _lastWatched;
+  List<Map<String, dynamic>>? _seasonHistory;
 
   @override
   void initState() {
@@ -73,10 +75,23 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
   }
 
   Future<void> _loadSeason(int num) async {
-    if (_seasons!.containsKey(num)) return;
     try {
-      final detail = await _api.fetchSeasonDetail(widget.tvId, num);
-      if (mounted) setState(() => _seasons![num] = detail);
+      final results = await Future.wait([
+        _api.fetchSeasonDetail(widget.tvId, num),
+        _historyService.getHistory(mediaType: 'tv'),
+      ]);
+
+      final detail = results[0] as TvSeasonDetailResponse;
+      final history = results[1] as List<Map<String, dynamic>>;
+      
+      final currentSeasonHistory = history.where((h) => h['media_id'] == widget.tvId && h['season'] == num).toList();
+
+      if (mounted) {
+        setState(() {
+          _seasons![num] = detail;
+          _seasonHistory = currentSeasonHistory;
+        });
+      }
     } catch (_) {}
   }
 
@@ -97,24 +112,12 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
       await _bookmarkService.toggleBookmark(_show!, false);
       setState(() => _isFavorite = !_isFavorite);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update favorites: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update favorites: $e')),
+        );
+      }
     }
-  }
-
-  void _playEpisode(int season, int episode, String? episodeTitle) {
-    if (_show == null) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => VideoLoaderScreen(
-          tvShow: _show!,
-          season: season,
-          episode: episode,
-          episodeName: episodeTitle,
-        ),
-      ),
-    );
   }
 
   Widget _buildUpNextButton(double Function(double) s) {
@@ -123,7 +126,6 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
     int nextSeason = 1;
     int nextEpisode = 1;
     String label = 'PLAY';
-    bool inProgress = false;
 
     if (_lastWatched != null) {
       final season = _lastWatched!['season_num'] as int? ?? 1;
@@ -132,13 +134,22 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
       final total = elapsed + (_lastWatched!['remaining'] as int? ?? 0);
       
       final isFinished = total > 0 && (elapsed / total) >= 0.95;
+      final progress = total > 0 ? (elapsed / total).clamp(0.0, 1.0) : 0.0;
       
       if (!isFinished) {
-        nextSeason = season;
-        nextEpisode = episode;
-        label = 'CONTINUE S$season E$episode';
-        inProgress = true;
-      } else {
+          nextSeason = season;
+          nextEpisode = episode;
+          label = 'CONTINUE S$season E$episode';
+          return _ActionBtn(
+            label: label,
+            icon: Icons.play_arrow,
+            isPrimary: true,
+            progress: progress,
+            onTap: () => _handlePlay(nextSeason, nextEpisode, null, elapsed: elapsed),
+            s: s,
+            autofocus: true,
+          );
+        } else {
         // Find next episode
         final currentSeasonDetail = _seasons?[season];
         if (currentSeasonDetail != null) {
@@ -167,11 +178,60 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
 
     return _ActionBtn(
       label: label,
-      icon: inProgress ? Icons.play_arrow : Icons.play_circle_outline,
+      icon: Icons.play_circle_outline,
       isPrimary: true,
-      onTap: () => _playEpisode(nextSeason, nextEpisode, null),
+      onTap: () => _handlePlay(nextSeason, nextEpisode, null),
       s: s,
       autofocus: true,
+    );
+  }
+
+  void _handlePlay(int season, int episode, String? episodeTitle, {int elapsed = 0}) async {
+    if (elapsed > 0) {
+      final resume = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Text('Resume Playback?', style: TextStyle(color: Colors.white)),
+          content: Text('Do you want to resume from ${Duration(seconds: elapsed).toString().split('.').first}?', style: const TextStyle(color: Colors.white70)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('START OVER', style: TextStyle(color: Color(0xFFEC1D24))),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEC1D24)),
+              child: const Text('RESUME'),
+            ),
+          ],
+        ),
+      );
+
+      if (resume == null) return;
+      
+      if (resume) {
+        _playEpisode(season, episode, episodeTitle, startPosition: Duration(seconds: elapsed));
+      } else {
+        _playEpisode(season, episode, episodeTitle, startPosition: Duration.zero);
+      }
+    } else {
+      _playEpisode(season, episode, episodeTitle);
+    }
+  }
+
+  void _playEpisode(int season, int episode, String? episodeTitle, {Duration? startPosition}) {
+    if (_show == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => VideoLoaderScreen(
+          tvShow: _show!,
+          season: season,
+          episode: episode,
+          episodeName: episodeTitle,
+          startPosition: startPosition,
+        ),
+      ),
     );
   }
 
@@ -402,10 +462,13 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                         if (event is! KeyDownEvent) return KeyEventResult.ignored;
                                         if (event.logicalKey == LogicalKeyboardKey.enter ||
                                             event.logicalKey == LogicalKeyboardKey.select) {
-                                          if (ep.airDate == null || 
-                                              ep.airDate!.isEmpty || 
-                                              DateTime.tryParse(ep.airDate!)?.isBefore(DateTime.now()) == true) {
-                                            _playEpisode(ep.seasonNumber, ep.episodeNumber, ep.name);
+                                          if (true) {
+                                              final history = _seasonHistory?.firstWhere(
+                                                (h) => h['episode'] == ep.episodeNumber,
+                                                orElse: () => {},
+                                              );
+                                              final elapsed = history != null && history.isNotEmpty ? history['elapsed'] as int? ?? 0 : 0;
+                                              _handlePlay(ep.seasonNumber, ep.episodeNumber, ep.name, elapsed: elapsed);
                                           }
                                           return KeyEventResult.handled;
                                         }
@@ -416,15 +479,17 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                           final focused = Focus.of(context).hasFocus;
                                           return GestureDetector(
                                             onTap: () {
-                                              if (ep.airDate == null || 
-                                                  ep.airDate!.isEmpty || 
-                                                  DateTime.tryParse(ep.airDate!)?.isBefore(DateTime.now()) == true) {
-                                                _playEpisode(ep.seasonNumber, ep.episodeNumber, ep.name);
+                                              if (true) {
+                                                final history = _seasonHistory?.firstWhere(
+                                                  (h) => h['episode'] == ep.episodeNumber,
+                                                  orElse: () => {},
+                                                );
+                                                final elapsed = history != null && history.isNotEmpty ? history['elapsed'] as int? ?? 0 : 0;
+                                                _handlePlay(ep.seasonNumber, ep.episodeNumber, ep.name, elapsed: elapsed);
                                               }
                                             },
                                             child: AnimatedContainer(
                                               duration: const Duration(milliseconds: 200),
-                                              padding: EdgeInsets.all(s(16)),
                                               decoration: BoxDecoration(
                                                 color: focused ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.02),
                                                 borderRadius: BorderRadius.circular(s(16)),
@@ -436,63 +501,108 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                                     ? [BoxShadow(color: const Color(0xFFEC1D24).withOpacity(0.25), blurRadius: 16)]
                                                     : [],
                                               ),
-                                              child: Row(
+                                              child: Stack(
                                                 children: [
-                                                  if (ep.stillPath != null && ep.stillPath!.isNotEmpty)
-                                                    ClipRRect(
-                                                      borderRadius: BorderRadius.circular(s(12)),
-                                                      child: CachedNetworkImage(
-                                                        imageUrl: '$tmdbImageBaseUrl/w300${ep.stillPath}',
-                                                        width: s(200),
-                                                        height: s(112),
-                                                        fit: BoxFit.cover,
-                                                      ),
-                                                    )
-                                                  else
-                                                    Container(
-                                                      width: s(200),
-                                                      height: s(112),
-                                                      decoration: BoxDecoration(
-                                                        color: Colors.white10,
-                                                        borderRadius: BorderRadius.circular(s(12)),
-                                                      ),
-                                                      child: Icon(Icons.tv, color: Colors.white38, size: s(40)),
-                                                    ),
-                                                  SizedBox(width: s(32)),
-                                                  Expanded(
-                                                    child: Column(
-                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                  Padding(
+                                                    padding: EdgeInsets.all(s(16)),
+                                                    child: Row(
                                                       children: [
-                                                        Text(
-                                                          'E${ep.episodeNumber} - ${ep.name ?? ""}',
-                                                          style: TextStyle(
-                                                            color: Colors.white,
-                                                            fontSize: s(22),
-                                                            fontWeight: focused ? FontWeight.bold : FontWeight.w600,
+                                                        if (ep.stillPath != null && ep.stillPath!.isNotEmpty)
+                                                          ClipRRect(
+                                                            borderRadius: BorderRadius.circular(s(12)),
+                                                            child: CachedNetworkImage(
+                                                              imageUrl: '$tmdbImageBaseUrl/w300${ep.stillPath}',
+                                                              width: s(200),
+                                                              height: s(112),
+                                                              fit: BoxFit.cover,
+                                                            ),
+                                                          )
+                                                        else
+                                                          Container(
+                                                            width: s(200),
+                                                            height: s(112),
+                                                            decoration: BoxDecoration(
+                                                              color: Colors.white10,
+                                                              borderRadius: BorderRadius.circular(s(12)),
+                                                            ),
+                                                            child: Icon(Icons.tv, color: Colors.white38, size: s(40)),
+                                                          ),
+                                                        SizedBox(width: s(32)),
+                                                        Expanded(
+                                                          child: Column(
+                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                            children: [
+                                                              Text(
+                                                                'E${ep.episodeNumber} - ${ep.name ?? ""}',
+                                                                style: TextStyle(
+                                                                  color: Colors.white,
+                                                                  fontSize: s(22),
+                                                                  fontWeight: focused ? FontWeight.bold : FontWeight.w600,
+                                                                ),
+                                                              ),
+                                                              SizedBox(height: s(8)),
+                                                              if (ep.overview != null && ep.overview!.isNotEmpty)
+                                                                Text(
+                                                                  ep.overview!,
+                                                                  style: TextStyle(
+                                                                    color: focused ? Colors.white.withOpacity(0.9) : Colors.white54,
+                                                                    fontSize: s(16),
+                                                                    height: 1.4,
+                                                                  ),
+                                                                  maxLines: 2,
+                                                                  overflow: TextOverflow.ellipsis,
+                                                                ),
+                                                            ],
                                                           ),
                                                         ),
-                                                        SizedBox(height: s(8)),
-                                                        if (ep.overview != null && ep.overview!.isNotEmpty)
-                                                          Text(
-                                                            ep.overview!,
-                                                            style: TextStyle(
-                                                              color: focused ? Colors.white.withOpacity(0.9) : Colors.white54,
-                                                              fontSize: s(16),
-                                                              height: 1.4,
-                                                            ),
-                                                            maxLines: 2,
-                                                            overflow: TextOverflow.ellipsis,
+                                                        if (focused)
+                                                          Padding(
+                                                            padding: EdgeInsets.only(right: s(16)),
+                                                            child: Icon(Icons.play_circle_fill, color: Colors.white, size: s(48)),
                                                           ),
                                                       ],
                                                     ),
                                                   ),
-                                                  if (focused && (ep.airDate == null || 
-                                                      ep.airDate!.isEmpty || 
-                                                      DateTime.tryParse(ep.airDate!)?.isBefore(DateTime.now()) == true))
-                                                    Padding(
-                                                      padding: EdgeInsets.only(right: s(16)),
-                                                      child: Icon(Icons.play_circle_fill, color: Colors.white, size: s(48)),
-                                                    ),
+                                                  // Progress bar for episodes
+                                                  Builder(
+                                                    builder: (context) {
+                                                      final history = _seasonHistory?.firstWhere(
+                                                        (h) => h['episode'] == ep.episodeNumber,
+                                                        orElse: () => {},
+                                                      );
+                                                      if (history == null || history.isEmpty) return const SizedBox.shrink();
+                                                      
+                                                      final elapsed = history['elapsed'] as int? ?? 0;
+                                                      final remaining = history['remaining'] as int? ?? 0;
+                                                      final total = elapsed + remaining;
+                                                      if (total <= 0) return const SizedBox.shrink();
+                                                      
+                                                      final progress = (elapsed / total).clamp(0.0, 1.0);
+                                                      
+                                                      return Positioned(
+                                                        left: s(16),
+                                                        right: s(16),
+                                                        bottom: 0,
+                                                        child: Container(
+                                                          height: s(4),
+                                                          decoration: BoxDecoration(
+                                                            color: Colors.white10,
+                                                            borderRadius: BorderRadius.circular(s(2)),
+                                                          ),
+                                                          child: FractionallySizedBox(
+                                                            alignment: Alignment.centerLeft,
+                                                            widthFactor: progress,
+                                                            child: Container(
+                                                              decoration: BoxDecoration(
+                                                                color: const Color(0xFFEC1D24),
+                                                                borderRadius: BorderRadius.circular(s(2)),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      );
+                                                    },
+                                                  ),
                                                 ],
                                               ),
                                             ),
@@ -655,6 +765,7 @@ class _ActionBtn extends StatefulWidget {
   final VoidCallback onTap;
   final double Function(double) s;
   final bool autofocus;
+  final double? progress;
 
   const _ActionBtn({
     required this.label,
@@ -663,6 +774,7 @@ class _ActionBtn extends StatefulWidget {
     required this.onTap,
     required this.s,
     this.autofocus = false,
+    this.progress,
   });
 
   @override
@@ -704,38 +816,57 @@ class _ActionBtnState extends State<_ActionBtn> {
               onTap: _handleTap,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding: EdgeInsets.symmetric(horizontal: widget.s(32), vertical: widget.s(16)),
                 decoration: BoxDecoration(
                   color: widget.isPrimary 
                       ? (focused ? Colors.white : const Color(0xFFEC1D24))
-                      : (focused ? Colors.white.withOpacity(0.2) : Colors.transparent),
+                      : (focused ? Colors.white.withOpacity(0.2) : Colors.white10),
                   borderRadius: BorderRadius.circular(widget.s(8)),
-                  border: widget.isPrimary 
-                      ? Border.all(color: Colors.white, width: widget.s(focused ? 4 : 0))
-                      : Border.all(color: Colors.white, width: widget.s(1)),
-                  boxShadow: (widget.isPrimary && focused) 
-                      ? [BoxShadow(color: Colors.white.withOpacity(0.4), blurRadius: 15)]
-                      : [],
+                  border: widget.isPrimary ? null : Border.all(color: Colors.white24, width: widget.s(1)),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      widget.icon, 
-                      color: widget.isPrimary ? (focused ? Colors.black : Colors.white) : Colors.white,
-                      size: widget.s(28),
-                    ),
-                    SizedBox(width: widget.s(12)),
-                    Text(
-                      widget.label,
-                      style: TextStyle(
-                        color: widget.isPrimary ? (focused ? Colors.black : Colors.white) : Colors.white,
-                        fontSize: widget.s(18),
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: widget.s(1.1),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(widget.s(8)),
+                  child: Stack(
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: widget.s(32), vertical: widget.s(16)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              widget.icon, 
+                              color: widget.isPrimary ? (focused ? Colors.black : Colors.white) : Colors.white,
+                              size: widget.s(28),
+                            ),
+                            SizedBox(width: widget.s(12)),
+                            Text(
+                              widget.label,
+                              style: TextStyle(
+                                color: widget.isPrimary ? (focused ? Colors.black : Colors.white) : Colors.white,
+                                fontSize: widget.s(18),
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: widget.s(1.1),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                      if (widget.progress != null && widget.progress! > 0)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            height: widget.s(4),
+                            color: Colors.white.withOpacity(0.2),
+                            child: FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: widget.progress!,
+                              child: Container(color: focused ? Colors.black : const Color(0xFFEC1D24)),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             );

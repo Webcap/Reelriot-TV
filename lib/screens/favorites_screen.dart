@@ -1,4 +1,5 @@
 import 'package:caffeine_core/caffeine_core.dart';
+import 'package:caffeine_tv/screens/home_screen.dart';
 import 'package:caffeine_tv/screens/movie_detail_screen.dart';
 import 'package:caffeine_tv/screens/tv_detail_screen.dart';
 import 'package:caffeine_tv/widgets/poster_card.dart';
@@ -155,14 +156,17 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
         return PosterCard(
           posterPath: item.posterPath,
           title: isMovie ? (item as MovieListItem).title ?? '' : (item as TvListItem).name ?? '',
-          onTap: () {
-            Navigator.of(context).push(
+          onTap: () async {
+            await Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (context) => isMovie 
                   ? MovieDetailScreen(movieId: item.id)
                   : TvDetailScreen(tvId: item.id),
               ),
             );
+            if (context.mounted) {
+              HomeScreenState.of(context)?.setIndex(1);
+            }
           },
         );
       },

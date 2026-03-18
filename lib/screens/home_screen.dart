@@ -21,13 +21,21 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> {
+  static HomeScreenState? of(BuildContext context) => context.findAncestorStateOfType<HomeScreenState>();
+
   int _selectedIndex = 1;
   final GlobalKey<FavoritesScreenState> _favoritesKey = GlobalKey<FavoritesScreenState>();
   late List<FocusNode> _navNodes;
+
+  void setIndex(int index) {
+    if (mounted) {
+      setState(() => _selectedIndex = index);
+    }
+  }
 
   List<_Tab> get _visibleTabs {
     final List<_Tab> tabs = [
@@ -726,7 +734,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
                                       MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: _focusedMovie!.id)),
                                     );
                                   }
-                                  push.then((_) => _reloadHistory());
+                                  push.then((_) {
+                                    HomeScreenState.of(context)?.setIndex(1);
+                                    _reloadHistory();
+                                  });
                                 },
                               ),
                               SizedBox(width: s(36)),

@@ -21,6 +21,7 @@ class TvPlayerControls extends StatefulWidget {
 
 class _TvPlayerControlsState extends State<TvPlayerControls> {
   bool _isVisible = false;
+  bool _isBuffering = false;
   Timer? _hideTimer;
   final FocusNode _playPauseFocusNode = FocusNode();
   final FocusNode _progressBarFocusNode = FocusNode();
@@ -65,6 +66,10 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       _showControls();
     } else if (event.betterPlayerEventType == BetterPlayerEventType.controlsHiddenEnd) {
       _hideControls();
+    } else if (event.betterPlayerEventType == BetterPlayerEventType.bufferingStart) {
+      setState(() => _isBuffering = true);
+    } else if (event.betterPlayerEventType == BetterPlayerEventType.bufferingEnd) {
+      setState(() => _isBuffering = false);
     }
   }
 
@@ -118,137 +123,154 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedOpacity(
-      opacity: _isVisible ? 1.0 : 0.0,
-      duration: const Duration(milliseconds: 300),
-      onEnd: () {
-        debugPrint('[TvPlayerControls] 🎬 Animation onEnd (isVisible: $_isVisible)');
-      },
-      child: IgnorePointer(
-        ignoring: !_isVisible,
-        child: FocusScope(
-          canRequestFocus: _isVisible,
-          child: Stack(
-            children: [
-              // Background Gradient Overlay
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withOpacity(0.7),
-                          Colors.transparent,
-                          Colors.transparent,
-                          Colors.black.withOpacity(0.7),
-                        ],
-                        stops: const [0.0, 0.2, 0.8, 1.0],
+    return Stack(
+      children: [
+        // Buffering Indicator (Always checked, independent of controls visibility)
+        if (_isBuffering)
+          Center(
+            child: SizedBox(
+              width: 80,
+              height: 80,
+              child: CircularProgressIndicator(
+                color: const Color(0xFFEC1D24),
+                strokeWidth: 4,
+                backgroundColor: Colors.white.withOpacity(0.1),
+              ),
+            ),
+          ),
+
+        // Controls Overlay
+        AnimatedOpacity(
+          opacity: _isVisible ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 300),
+          child: IgnorePointer(
+            ignoring: !_isVisible,
+            child: FocusScope(
+              canRequestFocus: _isVisible,
+              child: Stack(
+                children: [
+                  // Background Gradient Overlay
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.7),
+                              Colors.transparent,
+                              Colors.transparent,
+                              Colors.black.withOpacity(0.7),
+                            ],
+                            stops: const [0.0, 0.2, 0.8, 1.0],
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-              
-              // Top Bar (Title & Info)
-              Positioned(
-                top: 40,
-                left: 60,
-                right: 60,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.controller.betterPlayerControlsConfiguration.name.toUpperCase(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 32,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -1,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
+                  
+                  // Top Bar (Title & Info)
+                  Positioned(
+                    top: 40,
+                    left: 60,
+                    right: 60,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildInfoBadge('HD'),
-                        const SizedBox(width: 12),
                         Text(
-                          widget.controller.betterPlayerControlsConfiguration.watchingText ?? '',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.6),
-                            fontSize: 18,
-                            fontWeight: FontWeight.w500,
+                          widget.controller.betterPlayerControlsConfiguration.name.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 32,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -1,
                           ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            _buildInfoBadge('HD'),
+                            const SizedBox(width: 12),
+                            Text(
+                              widget.controller.betterPlayerControlsConfiguration.watchingText ?? '',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.6),
+                                fontSize: 18,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-    
-              Center(
-                child: IgnorePointer(
-                  child: AnimatedScale(
-                    scale: widget.controller.isPlaying() == true ? 0.0 : 1.0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.black45,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white24, width: 2),
+                  ),
+        
+                  // Pause Icon (Only when NOT buffering and NOT playing)
+                  Center(
+                    child: IgnorePointer(
+                      child: AnimatedScale(
+                        scale: (widget.controller.isPlaying() == true || _isBuffering) ? 0.0 : 1.0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: Colors.black45,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white24, width: 2),
+                          ),
+                          child: const Icon(Icons.pause_rounded, color: Colors.white, size: 60),
+                        ),
                       ),
-                      child: const Icon(Icons.pause_rounded, color: Colors.white, size: 60),
                     ),
                   ),
-                ),
-              ),
-    
-              // Bottom Bar (Progress & Controls)
-              Positioned(
-                bottom: 40,
-                left: 60,
-                right: 60,
-                child: Builder(
-                  builder: (context) {
-                    final videoController = widget.controller.videoPlayerController;
-                    if (videoController == null) return const SizedBox.shrink();
-                    
-                    return ValueListenableBuilder(
-                      valueListenable: videoController,
-                      builder: (context, videoValue, _) {
-                        return Column(
-                          children: [
-                            _buildProgressBar(videoValue),
-                            const SizedBox(height: 24),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
+        
+                  // Bottom Bar (Progress & Controls)
+                  Positioned(
+                    bottom: 40,
+                    left: 60,
+                    right: 60,
+                    child: Builder(
+                      builder: (context) {
+                        final videoController = widget.controller.videoPlayerController;
+                        if (videoController == null) return const SizedBox.shrink();
+                        
+                        return ValueListenableBuilder(
+                          valueListenable: videoController,
+                          builder: (context, videoValue, _) {
+                            return Column(
                               children: [
-                                _buildTimeText(videoValue.position),
-                                const Spacer(),
-                                _buildRewindButton(),
-                                const SizedBox(width: 24),
-                                _buildPlayPauseButton(),
-                                const SizedBox(width: 24),
-                                _buildFastForwardButton(),
-                                const SizedBox(width: 48),
-                                _buildSettingsButton(),
-                                const Spacer(),
-                                _buildTimeText(videoValue.duration),
+                                _buildProgressBar(videoValue),
+                                const SizedBox(height: 24),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    _buildTimeText(videoValue.position),
+                                    const Spacer(),
+                                    _buildRewindButton(),
+                                    const SizedBox(width: 24),
+                                    _buildPlayPauseButton(),
+                                    const SizedBox(width: 24),
+                                    _buildFastForwardButton(),
+                                    const SizedBox(width: 48),
+                                    _buildSettingsButton(),
+                                    const Spacer(),
+                                    _buildTimeText(videoValue.duration),
+                                  ],
+                                ),
                               ],
-                            ),
-                          ],
+                            );
+                          },
                         );
-                      },
-                    );
-                  }
-                ),
+                      }
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 

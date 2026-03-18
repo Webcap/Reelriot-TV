@@ -36,6 +36,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     {'code': 'vixsrc', 'name': 'Vixsrc'},
     {'code': 'vidsrc', 'name': 'Vidsrc'},
     {'code': 'vidzee', 'name': 'Vidzee'},
+    {'code': 'smashy', 'name': 'SmashyStream'},
   ];
 
   late List<ProviderLoadState> _providerStates;
