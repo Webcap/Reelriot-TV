@@ -259,6 +259,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
   List<MovieListItem>? _airingToday;
   List<MovieListItem>? _aiRecommendations;
   String? _aiAnchorTitle;
+  List<MovieListItem>? _tvRecommendations;
+  String? _tvRecommendationsTitle;
   final RecommendationService _recService = RecommendationService();
   List<Map<String, dynamic>>? _history;
   bool _loading = true;
@@ -313,6 +315,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
         _popular = null;
         _airingToday = null;
         _aiRecommendations = null;
+        _tvRecommendations = null;
+        _tvRecommendationsTitle = null;
       });
     }
     
@@ -334,6 +338,28 @@ class _MainHomeViewState extends State<_MainHomeView> {
         final airingToday = results[3] as TvListResponse;
         final aiResult = results[4] as RecommendationResult;
 
+        List<MovieListItem>? tvRecommendations;
+        String? tvRecommendationsTitle;
+
+        if (history.isNotEmpty) {
+          final lastTv = history.firstWhere((h) => h['media_id'] != null, orElse: () => {});
+          if (lastTv.isNotEmpty) {
+            try {
+              final recs = await _api.fetchTvRecommendations(lastTv['media_id']);
+              tvRecommendations = recs.results.map((t) => MovieListItem(
+                id: t.id,
+                title: t.name,
+                posterPath: t.posterPath,
+                backdropPath: t.backdropPath,
+                overview: t.overview,
+              )).toList();
+              tvRecommendationsTitle = 'Because you watched ${lastTv['title']}';
+            } catch (e) {
+              debugPrint('[HomeScreen] ❌ Error loading TV recommendations: $e');
+            }
+          }
+        }
+
         final trendingList = trending.results.take(5).map((t) => MovieListItem(
           id: t.id,
           title: t.name,
@@ -349,6 +375,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
             _history = history;
             _aiRecommendations = aiResult.items;
             _aiAnchorTitle = aiResult.anchorTitle;
+            _tvRecommendations = tvRecommendations;
+            _tvRecommendationsTitle = tvRecommendationsTitle;
             
             if (trendingList.isNotEmpty) {
               final first = trendingList.first;
@@ -745,6 +773,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
               ),
               _buildAiRecommendationsRow(context, s),
               if (_selectedCategory == 'TV Shows') ...[
+                if (_tvRecommendations != null && _tvRecommendations!.isNotEmpty) ...[
+                  SizedBox(height: s(96)),
+                  _buildRow(context, _tvRecommendationsTitle ?? 'Recommended for You', _tvRecommendations),
+                ],
                 SizedBox(height: s(96)),
                 _buildAiringTodayRow(context, s),
               ],
