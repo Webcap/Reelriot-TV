@@ -317,8 +317,9 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
           final now = DateTime.now().millisecondsSinceEpoch;
+          // Faster acceleration: cap at 20x (10 minutes per jump)
           if (_lastSeekTimestamp != null && (now - _lastSeekTimestamp!) < 400) {
-            _seekAccelerationFactor = (_seekAccelerationFactor + 1).clamp(1, 4);
+            _seekAccelerationFactor = (_seekAccelerationFactor + 1).clamp(1, 20);
           } else {
             _seekAccelerationFactor = 1;
           }
@@ -332,7 +333,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
         if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
           final now = DateTime.now().millisecondsSinceEpoch;
           if (_lastSeekTimestamp != null && (now - _lastSeekTimestamp!) < 400) {
-            _seekAccelerationFactor = (_seekAccelerationFactor + 1).clamp(1, 4);
+            _seekAccelerationFactor = (_seekAccelerationFactor + 1).clamp(1, 20);
           } else {
             _seekAccelerationFactor = 1;
           }
@@ -357,33 +358,55 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       child: Builder(
         builder: (context) {
           final isFocused = Focus.of(context).hasFocus;
-          return Column(
-            children: [
-              Container(
-                height: isFocused ? 12 : 6,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white10,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Stack(
-                  children: [
-                    FractionallySizedBox(
-                      widthFactor: playedPart.clamp(0.0, 1.0),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEC1D24), // Brand Red
-                          borderRadius: BorderRadius.circular(6),
-                          boxShadow: isFocused ? [
-                            const BoxShadow(color: Color(0xFFEC1D24), blurRadius: 10, spreadRadius: 2)
-                          ] : null,
-                        ),
-                      ),
+          
+          void handleSeek(Offset globalPosition) {
+            final RenderBox box = context.findRenderObject() as RenderBox;
+            final Offset localOffset = box.globalToLocal(globalPosition);
+            final double relative = localOffset.dx / box.size.width;
+            final double percentage = relative.clamp(0.0, 1.0);
+            
+            final duration = videoController.value.duration;
+            if (duration != null) {
+              widget.controller.seekTo(duration * percentage);
+              _startHideTimer();
+            }
+          }
+
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (details) => handleSeek(details.globalPosition),
+            onHorizontalDragUpdate: (details) => handleSeek(details.globalPosition),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20), // Larger hit area
+              child: Column(
+                children: [
+                  Container(
+                    height: isFocused ? 12 : 6,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white10,
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                  ],
-                ),
+                    child: Stack(
+                      children: [
+                        FractionallySizedBox(
+                          widthFactor: playedPart.clamp(0.0, 1.0),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEC1D24), // Brand Red
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: isFocused ? [
+                                const BoxShadow(color: Color(0xFFEC1D24), blurRadius: 10, spreadRadius: 2)
+                              ] : null,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           );
         }
       ),

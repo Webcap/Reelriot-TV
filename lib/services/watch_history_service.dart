@@ -18,18 +18,26 @@ class WatchHistoryService {
     if (user == null) return;
 
     try {
-      // 1. Fetch the user's single flattened row
+      // 1. Fetch ALL existing rows for this user
       final res = await _supabase
           .from('watch_history')
-          .select('movies, tv_shows')
-          .eq('user_id', user.id)
-          .limit(1);
+          .select()
+          .eq('user_id', user.id);
 
-      final data = res.isNotEmpty ? res[0] : null;
-      List<dynamic> movies = data?['movies'] as List<dynamic>? ?? [];
-      List<dynamic> tvShows = data?['tv_shows'] as List<dynamic>? ?? [];
+      List<dynamic> movies = [];
+      List<dynamic> tvShows = [];
+      final List<dynamic> rowIdsToDelete = [];
 
-      // 2. Prepare the item with keys matching mobile schema
+      if (res.isNotEmpty) {
+        for (var row in res) {
+          movies.addAll(row['movies'] as List? ?? []);
+          tvShows.addAll(row['tv_shows'] as List? ?? []);
+          // Collect IDs if they exist to clean up later
+          if (row['id'] != null) rowIdsToDelete.add(row['id']);
+        }
+      }
+
+      // 2. Prepare the item and deduplicate lists
       final now = DateTime.now().toIso8601String();
       final elapsed = position.inSeconds;
       final remaining = (duration - position).inSeconds;
@@ -52,14 +60,12 @@ class WatchHistoryService {
         });
       } else {
         final show = item as TvShowDetail;
-        // Season/Episode detail needs to be found if we only have the show detail
-        // But in PlayerScreen we usually have season/episode numbers.
         tvShows.removeWhere((t) {
           final m = t as Map;
           return m['id'] == show.id && m['season_num'] == season && m['episode_num'] == episode;
         });
         tvShows.insert(0, {
-          'id': show.id, // Using show ID for consistency with mobile RecentEpisode
+          'id': show.id,
           'series_name': show.name,
           'episode_name': episodeName,
           'poster_path': show.posterPath,
@@ -73,7 +79,29 @@ class WatchHistoryService {
         });
       }
 
-      // 3. Upsert the row
+      // Sort before deduplication to ensure newest wins
+      movies.sort((a, b) {
+        final da = (a as Map)['date_watched'] as String? ?? '';
+        final db = (b as Map)['date_watched'] as String? ?? '';
+        return db.compareTo(da);
+      });
+      tvShows.sort((a, b) {
+        final da = (a as Map)['date_added'] as String? ?? '';
+        final db = (b as Map)['date_added'] as String? ?? '';
+        return db.compareTo(da);
+      });
+
+      // Final deduplication for merging across rows
+      final seenMovieIds = <dynamic>{};
+      movies = movies.where((m) => seenMovieIds.add((m as Map)['id'])).toList();
+      
+      final seenTvKeys = <String>{};
+      tvShows = tvShows.where((t) {
+        final m = t as Map;
+        return seenTvKeys.add('${m['id']}_${m['season_num']}_${m['episode_num']}');
+      }).toList();
+
+      // 3. Consolidated Upsert
       await _supabase.from('watch_history').upsert({
         'user_id': user.id,
         'movies': movies,
@@ -81,7 +109,21 @@ class WatchHistoryService {
         'updated_at': now,
       });
 
-      debugPrint('[WatchHistory] ✅ Progress saved for ${isMovie ? 'Movie' : 'TV Show'} (ID: ${isMovie ? (item as MovieDetail).id : (item as TvShowDetail).id})');
+      // 4. Cleanup redundant rows if we found multiple
+      if (res.length > 1 && rowIdsToDelete.isNotEmpty) {
+        try {
+           // To consolidate, we delete the old existing row IDs.
+           // Since we already performed a fresh upsert, we can remove the ones we found.
+           for (final id in rowIdsToDelete) {
+             await _supabase.from('watch_history').delete().eq('id', id);
+           }
+           debugPrint('[WatchHistory] 🧹 Cleaned up ${rowIdsToDelete.length} redundant rows');
+        } catch (e) {
+           debugPrint('[WatchHistory] ⚠️ Cleanup failed: $e');
+        }
+      }
+
+      debugPrint('[WatchHistory] ✅ Progress saved & consolidated for ${isMovie ? 'Movie' : 'TV Show'}');
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Error saving progress: $e');
     }
@@ -95,25 +137,43 @@ class WatchHistoryService {
       final res = await _supabase
           .from('watch_history')
           .select('movies, tv_shows')
-          .eq('user_id', user.id)
-          .limit(1);
+          .eq('user_id', user.id);
 
       if (res.isEmpty) return [];
       
-      final data = res[0];
-      List<dynamic> rawItems = [];
-      
-      if (mediaType == 'movie') {
-        rawItems = data['movies'] as List<dynamic>? ?? [];
-      } else if (mediaType == 'tv') {
-        rawItems = data['tv_shows'] as List<dynamic>? ?? [];
-      } else {
-        // Combined
-        rawItems = [
-          ...(data['movies'] as List? ?? []),
-          ...(data['tv_shows'] as List? ?? []),
-        ];
+      List<dynamic> allMovies = [];
+      List<dynamic> allTvShows = [];
+
+      for (var row in res) {
+        allMovies.addAll(row['movies'] as List? ?? []);
+        allTvShows.addAll(row['tv_shows'] as List? ?? []);
       }
+
+      List<dynamic> rawItems = [];
+      if (mediaType == 'movie') {
+        rawItems = allMovies;
+      } else if (mediaType == 'tv') {
+        rawItems = allTvShows;
+      } else {
+        rawItems = [...allMovies, ...allTvShows];
+      }
+
+      // Sort before deduplication to ensure newest wins
+      rawItems.sort((a, b) {
+        final doubleA = (a as Map)['date_watched'] ?? a['date_added'] ?? '';
+        final doubleB = (b as Map)['date_watched'] ?? b['date_added'] ?? '';
+        return (doubleB as String).compareTo(doubleA as String);
+      });
+
+      // Final deduplication for merging across rows
+      final seenIds = <String>{};
+      rawItems = rawItems.where((item) {
+        final m = item as Map;
+        final id = m['id'];
+        final type = m.containsKey('series_name') ? 'tv' : 'movie';
+        final key = type == 'tv' ? '${id}_${m['season_num']}_${m['episode_num']}' : '$id';
+        return seenIds.add(key);
+      }).toList();
 
       // Filter out completed (>= 95% like mobile)
       final items = rawItems.where((item) {
@@ -128,9 +188,18 @@ class WatchHistoryService {
       // Normalize keys for the UI (media_id, type)
       final normalized = items.map((item) {
         final m = Map<String, dynamic>.from(item as Map);
-        m['media_id'] = m['id'];
-        m['type'] = m.containsKey('series_name') ? 'tv' : 'movie';
-        if (m['type'] == 'tv') m['title'] = m['series_name'];
+        final isTv = m.containsKey('series_name');
+        m['type'] = isTv ? 'tv' : 'movie';
+        
+        // For TV shows, the TMDB ID for the series is either in 'series_id' 
+        // or 'id' (if saved by the TV app). Mobile app uses 'series_id'.
+        if (isTv) {
+          m['media_id'] = m['series_id'] ?? m['id'];
+          m['title'] = m['series_name'];
+        } else {
+          m['media_id'] = m['id'];
+        }
+
         // position_ms and duration_ms for existing UI compatibility
         m['position_ms'] = (m['elapsed'] as int? ?? 0) * 1000;
         m['duration_ms'] = ((m['elapsed'] as int? ?? 0) + (m['remaining'] as int? ?? 0)) * 1000;
@@ -160,21 +229,23 @@ class WatchHistoryService {
       final res = await _supabase
           .from('watch_history')
           .select(isMovie ? 'movies' : 'tv_shows')
-          .eq('user_id', user.id)
-          .limit(1);
+          .eq('user_id', user.id);
 
       if (res.isEmpty) return null;
       
-      final List<dynamic> items = res[0][isMovie ? 'movies' : 'tv_shows'] ?? [];
+      List<dynamic> allItems = [];
+      for (var row in res) {
+        allItems.addAll(row[isMovie ? 'movies' : 'tv_shows'] as List? ?? []);
+      }
       
       if (isMovie) {
-        final match = items.firstWhere(
+        final match = allItems.firstWhere(
           (m) => (m as Map)['id'] == mediaId,
           orElse: () => null,
         );
         if (match != null) return Duration(seconds: match['elapsed'] as int? ?? 0);
       } else {
-        final match = items.firstWhere(
+        final match = allItems.firstWhere(
           (t) {
             final m = t as Map;
             return m['id'] == mediaId && m['season_num'] == season && m['episode_num'] == episode;

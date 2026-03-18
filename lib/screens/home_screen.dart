@@ -266,15 +266,17 @@ class _MainHomeViewState extends State<_MainHomeView> {
     }
   }
 
-  Future<void> _loadContent() async {
-    setState(() {
-      _loading = true;
-      _history = null;
-      _trending = null;
-      _weeklyTrending = null;
-      _popular = null;
-      _airingToday = null;
-    });
+  Future<void> _loadContent({bool quiet = false}) async {
+    if (!quiet) {
+      setState(() {
+        _loading = true;
+        _history = null;
+        _trending = null;
+        _weeklyTrending = null;
+        _popular = null;
+        _airingToday = null;
+      });
+    }
     
     try {
       final isTv = _selectedCategory == 'TV Shows';
@@ -935,7 +937,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                     }
 
                     // Refresh history so completed items disappear immediately
-                    if (mounted) _reloadHistory();
+                    if (mounted) _loadContent(quiet: true);
                   },
                 ),
               );
@@ -993,9 +995,12 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   posterPath: m.posterPath,
                   title: m.title ?? '',
                   onFocus: () => _updateFocusedMovie(m.id),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: m.id)),
-                  ),
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: m.id)),
+                    );
+                    if (mounted) _loadContent(quiet: true);
+                  },
                 ),
               );
             },
@@ -1039,16 +1044,17 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   posterPath: m.posterPath,
                   title: m.title ?? '',
                   onFocus: () => _updateFocusedMovie(m.id),
-                  onTap: () {
+                  onTap: () async {
                     if (_selectedCategory == 'TV Shows') {
-                      Navigator.of(context).push(
+                      await Navigator.of(context).push(
                         MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: m.id)),
                       );
                     } else {
-                      Navigator.of(context).push(
+                      await Navigator.of(context).push(
                         MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
                       );
                     }
+                    if (mounted) _loadContent(quiet: true);
                   },
                 ),
               );
