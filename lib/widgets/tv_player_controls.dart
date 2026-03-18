@@ -28,6 +28,8 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   final FocusNode _rewindFocusNode = FocusNode();
   final FocusNode _ffFocusNode = FocusNode();
   StreamSubscription? _visibilitySubscription;
+  int? _lastSeekTimestamp;
+  int _seekAccelerationFactor = 1;
 
   @override
   void initState() {
@@ -213,28 +215,32 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
                     final videoController = widget.controller.videoPlayerController;
                     if (videoController == null) return const SizedBox.shrink();
                     
-                    final videoValue = videoController.value;
-                    return Column(
-                      children: [
-                        _buildProgressBar(),
-                        const SizedBox(height: 24),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                    return ValueListenableBuilder(
+                      valueListenable: videoController,
+                      builder: (context, videoValue, _) {
+                        return Column(
                           children: [
-                            _buildTimeText(videoValue.position),
-                            const Spacer(),
-                            _buildRewindButton(),
-                            const SizedBox(width: 24),
-                            _buildPlayPauseButton(),
-                            const SizedBox(width: 24),
-                            _buildFastForwardButton(),
-                            const SizedBox(width: 48),
-                            _buildSettingsButton(),
-                            const Spacer(),
-                            _buildTimeText(videoValue.duration),
+                            _buildProgressBar(videoValue),
+                            const SizedBox(height: 24),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _buildTimeText(videoValue.position),
+                                const Spacer(),
+                                _buildRewindButton(),
+                                const SizedBox(width: 24),
+                                _buildPlayPauseButton(),
+                                const SizedBox(width: 24),
+                                _buildFastForwardButton(),
+                                const SizedBox(width: 48),
+                                _buildSettingsButton(),
+                                const Spacer(),
+                                _buildTimeText(videoValue.duration),
+                              ],
+                            ),
                           ],
-                        ),
-                      ],
+                        );
+                      },
                     );
                   }
                 ),
@@ -273,28 +279,70 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
     );
   }
 
-  Widget _buildProgressBar() {
+  Widget _buildProgressBar([dynamic currentVideoValue]) {
+    final videoController = widget.controller.videoPlayerController;
+    if (videoController == null) return const SizedBox.shrink();
+    
+    if (currentVideoValue != null) {
+      // Called from ValueListenableBuilder — use the passed value directly
+      final videoValue = currentVideoValue;
+      final duration = videoValue.duration as Duration?;
+      final position = videoValue.position as Duration;
+      final double playedPart = (duration == null || duration == Duration.zero)
+          ? 0.0
+          : position.inMilliseconds / duration.inMilliseconds;
+      return _buildProgressBarWidget(playedPart);
+    }
+
+    // Fallback: subscribe via ValueListenableBuilder
+    return ValueListenableBuilder(
+      valueListenable: videoController,
+      builder: (context, videoValue, _) {
+        final duration = videoValue.duration;
+        final double playedPart = (duration == null || duration == Duration.zero)
+            ? 0.0
+            : videoValue.position.inMilliseconds / duration.inMilliseconds;
+        return _buildProgressBarWidget(playedPart);
+      },
+    );
+  }
+
+  Widget _buildProgressBarWidget(double playedPart) {
     final videoController = widget.controller.videoPlayerController;
     if (videoController == null) return const SizedBox.shrink();
     final videoValue = videoController.value;
-    final duration = videoValue.duration;
-    final double playedPart = (duration == null || duration == Duration.zero)
-        ? 0.0 
-        : videoValue.position.inMilliseconds / duration.inMilliseconds;
-
     return Focus(
       focusNode: _progressBarFocusNode,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-           widget.controller.seekTo(videoValue.position + const Duration(seconds: 10));
-           _startHideTimer();
-           return KeyEventResult.handled;
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (_lastSeekTimestamp != null && (now - _lastSeekTimestamp!) < 400) {
+            _seekAccelerationFactor = (_seekAccelerationFactor + 1).clamp(1, 4);
+          } else {
+            _seekAccelerationFactor = 1;
+          }
+          _lastSeekTimestamp = now;
+          
+          final seekAmount = Duration(seconds: 30 * _seekAccelerationFactor);
+          widget.controller.seekTo(videoValue.position + seekAmount);
+          _startHideTimer();
+          return KeyEventResult.handled;
         }
         if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-           widget.controller.seekTo(videoValue.position - const Duration(seconds: 10));
-           _startHideTimer();
-           return KeyEventResult.handled;
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (_lastSeekTimestamp != null && (now - _lastSeekTimestamp!) < 400) {
+            _seekAccelerationFactor = (_seekAccelerationFactor + 1).clamp(1, 4);
+          } else {
+            _seekAccelerationFactor = 1;
+          }
+          _lastSeekTimestamp = now;
+
+          final seekAmount = Duration(seconds: 30 * _seekAccelerationFactor);
+          final target = videoValue.position - seekAmount;
+          widget.controller.seekTo(target < Duration.zero ? Duration.zero : target);
+          _startHideTimer();
+          return KeyEventResult.handled;
         }
         if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
            _playPauseFocusNode.requestFocus();

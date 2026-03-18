@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:better_player/better_player.dart';
 import 'package:caffeine_tv/services/settings_service.dart';
 import 'package:caffeine_tv/services/watch_history_service.dart';
+import 'package:caffeine_tv/utils/tv_keys.dart';
 import 'package:caffeine_tv/widgets/player_settings_overlay.dart';
 import 'package:caffeine_tv/widgets/tv_player_controls.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -173,27 +174,61 @@ class _PlayerScreenState extends State<PlayerScreen> {
         final key = event.logicalKey;
         debugPrint('[PlayerScreen] 🔑 key: ${key.debugName}, controlsVisible: $_controlsVisible');
 
-        // Exit keys
-        if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
+        // Back / Exit
+        if (TvKeys.isBack(key)) {
           Navigator.of(context).pop();
           return KeyEventResult.handled;
         }
 
-        // Action / Directional keys
-        if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown || 
-            key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight ||
-            key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
-          
+        // Dedicated media remote buttons (work whether controls are visible or not)
+        if (TvKeys.isPlayPause(key)) {
+          debugPrint('[PlayerScreen] ⏯️ Media Play/Pause key');
+          if (_controller.isPlaying() == true) {
+            _controller.pause();
+          } else {
+            _controller.play();
+          }
+          if (!_controlsVisible) _controller.setControlsVisibility(true);
+          return KeyEventResult.handled;
+        }
+
+        if (TvKeys.isMediaFastForward(key)) {
+          debugPrint('[PlayerScreen] ⏩ Media Fast Forward key');
+          final pos = _controller.videoPlayerController?.value.position;
+          if (pos != null) {
+            _controller.seekTo(pos + const Duration(seconds: 10));
+          }
+          if (!_controlsVisible) _controller.setControlsVisibility(true);
+          return KeyEventResult.handled;
+        }
+
+        if (TvKeys.isMediaRewind(key)) {
+          debugPrint('[PlayerScreen] ⏪ Media Rewind key');
+          final pos = _controller.videoPlayerController?.value.position;
+          if (pos != null) {
+            final target = pos - const Duration(seconds: 10);
+            _controller.seekTo(target < Duration.zero ? Duration.zero : target);
+          }
+          if (!_controlsVisible) _controller.setControlsVisibility(true);
+          return KeyEventResult.handled;
+        }
+
+        if (TvKeys.isMediaStop(key)) {
+          debugPrint('[PlayerScreen] ⏹️ Media Stop key');
+          Navigator.of(context).pop();
+          return KeyEventResult.handled;
+        }
+
+        // D-pad / navigation keys: show controls if hidden, pass through if visible
+        if (TvKeys.isNavigation(key)) {
           if (!_controlsVisible) {
             debugPrint('[PlayerScreen] 🚀 Showing controls');
             _controller.setControlsVisibility(true);
             return KeyEventResult.handled;
           } else {
-            // Already visible, but let's ensure the controller knows
-            // This is a safety measure in case states are out of sync
+            // Safety: keep-alive the visibility timer.
             _controller.setControlsVisibility(true);
           }
-          // If controls are visible, let the focus system within the controls handle it
           return KeyEventResult.ignored;
         }
 
