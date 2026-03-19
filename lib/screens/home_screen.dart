@@ -9,6 +9,7 @@ import 'package:caffeine_tv/services/api_service.dart';
 import 'package:caffeine_tv/services/watch_history_service.dart';
 import 'package:caffeine_tv/services/recommendation_service.dart';
 import 'package:caffeine_tv/screens/video_loader_screen.dart';
+import 'package:caffeine_tv/screens/player_screen.dart';
 import 'package:caffeine_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -277,6 +278,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
   late ScrollController _scrollController;
   bool _isHeroInView = true;
   StreamSubscription<AuthState>? _authSubscription;
+  final Map<int, String> _liveStreamUrls = {};
 
   @override
   void initState() {
@@ -478,6 +480,50 @@ class _MainHomeViewState extends State<_MainHomeView> {
           _startAutoSlide();
         }
       }
+
+      // --- Featured Live Event ---
+      MovieListItem? featuredItem;
+      try {
+        final featured = await Supabase.instance.client
+            .from('live_streams')
+            .select('*')
+            .eq('is_featured', true)
+            .maybeSingle();
+
+        if (featured != null) {
+          final streamUrl = featured['video_url'] ?? '';
+          final sport = featured['sport'] ?? 'Sports';
+          _liveStreamUrls[-100] = streamUrl;
+
+          featuredItem = MovieListItem(
+            id: -100, // Special ID for live events
+            title: featured['title'],
+            overview: "Experience the excitement of $sport live on Caffeine TV. Watch ${featured['title']} now!",
+            posterPath: featured['poster_url'] ?? featured['thumbnail_url'],
+            backdropPath: featured['poster_url'] ?? featured['thumbnail_url'],
+            mediaType: 'live',
+          );
+        }
+      } catch (e) {
+        debugPrint('[HomeScreen] ❌ Error fetching featured event: $e');
+      }
+
+      if (mounted) {
+        if (featuredItem != null && _trending != null) {
+          _trending!.insert(0, featuredItem);
+          // If the slider was just loaded, refocus on the featured item
+          if (_trendingIndex == 0) {
+            _focusedMovie = MovieDetail(
+              id: featuredItem.id,
+              title: featuredItem.title,
+              overview: featuredItem.overview,
+              posterPath: featuredItem.posterPath,
+              backdropPath: featuredItem.backdropPath,
+              mediaType: featuredItem.mediaType,
+            );
+          }
+        }
+      }
     } catch (e) {
       debugPrint('[HomeScreen] ❌ Error loading content: $e');
     } finally {
@@ -599,7 +645,11 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 key: ValueKey(_focusedMovie!.id),
                 decoration: BoxDecoration(
                   image: DecorationImage(
-                    image: NetworkImage('https://image.tmdb.org/t/p/w1280${_focusedMovie!.backdropPath}'),
+                    image: NetworkImage(
+                      _focusedMovie!.backdropPath != null && _focusedMovie!.backdropPath!.startsWith('http')
+                          ? _focusedMovie!.backdropPath!
+                          : 'https://image.tmdb.org/t/p/w1280${_focusedMovie!.backdropPath}'
+                    ),
                     fit: BoxFit.cover,
                     colorFilter: ColorFilter.mode(
                       const Color(0xFFEC1D24).withOpacity(0.35), // slightly more contrast
@@ -679,7 +729,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                               borderRadius: BorderRadius.circular(s(4)),
                             ),
                             child: Text(
-                              'TRENDING', 
+                              _focusedMovie?.mediaType == 'live' ? 'LIVE NOW' : 'TRENDING', 
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: s(15),
@@ -723,6 +773,27 @@ class _MainHomeViewState extends State<_MainHomeView> {
                                 icon: Icons.play_arrow_outlined,
                                 style: HeroButtonStyle.primary,
                                 onTap: () {
+                                  if (_focusedMovie!.mediaType == 'live') {
+                                    final url = _liveStreamUrls[_focusedMovie!.id];
+                                    if (url == null || url.isEmpty) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Stream link not found yet. Try again later!'))
+                                      );
+                                      return;
+                                    }
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (context) => PlayerScreen(
+                                          url: url,
+                                          title: _focusedMovie!.title ?? 'Live Event',
+                                          item: null,
+                                          isMovie: false,
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+
                                   // Handle both Movies and TV Shows
                                   final Future<void>? push;
                                   if (_selectedCategory == 'TV Shows') {

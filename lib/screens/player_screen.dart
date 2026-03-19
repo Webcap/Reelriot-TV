@@ -139,6 +139,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         },
       ),
     );
+
+    _controller.addEventsListener((event) {
+      if (event.betterPlayerEventType == BetterPlayerEventType.finished) {
+        if (mounted) Navigator.of(context).pop();
+      }
+    });
   }
 
   String _getReferer(String url) {
