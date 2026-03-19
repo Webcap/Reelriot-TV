@@ -187,6 +187,7 @@ class HomeScreenState extends State<HomeScreen> {
                   final tab = tabs[i];
                   final selected = _selectedIndex == i;
                   return Focus(
+                    autofocus: i == _selectedIndex,
                     focusNode: _navNodes[i],
                     onKeyEvent: (node, event) {
                       if (event is! KeyDownEvent) return KeyEventResult.ignored;
