@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:caffeine_tv/env.dart';
-import 'package:caffeine_tv/screens/player_screen.dart';
+import 'package:caffeine_tv/screens/sports_game_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -15,56 +15,53 @@ class _League {
   final String league;    // ESPN path segment (e.g. nba)
   final IconData icon;
   final Color color;
-  final List<String> channelKeywords; // daddylive keyword matching
-
   const _League({
     required this.name,
     required this.sport,
     required this.league,
     required this.icon,
     required this.color,
-    required this.channelKeywords,
   });
 }
 
 const _leagues = [
   // ── Basketball ─────────────────────────────────────────────────────────
-  _League(name: 'NBA', sport: 'basketball', league: 'nba', icon: Icons.sports_basketball, color: Color(0xFFF97316), channelKeywords: ['nba', 'tnt', 'espn nba', 'nbatv']),
-  _League(name: 'NCAAB (Men)', sport: 'basketball', league: 'mens-college-basketball', icon: Icons.sports_basketball, color: Color(0xFFF59E0B), channelKeywords: ['espn', 'cbs', 'tbs', 'tnt', 'acc', 'sec']),
-  _League(name: 'NCAAW (Women)', sport: 'basketball', league: 'womens-college-basketball', icon: Icons.sports_basketball, color: Color(0xFFEC4899), channelKeywords: ['espn', 'espnu']),
-  _League(name: 'WNBA', sport: 'basketball', league: 'wnba', icon: Icons.sports_basketball, color: Color(0xFFE11D48), channelKeywords: ['wnba', 'espn']),
+  _League(name: 'NBA', sport: 'basketball', league: 'nba', icon: Icons.sports_basketball, color: Color(0xFFF97316)),
+  _League(name: 'NCAAB (Men)', sport: 'basketball', league: 'mens-college-basketball', icon: Icons.sports_basketball, color: Color(0xFFF59E0B)),
+  _League(name: 'NCAAW (Women)', sport: 'basketball', league: 'womens-college-basketball', icon: Icons.sports_basketball, color: Color(0xFFEC4899)),
+  _League(name: 'WNBA', sport: 'basketball', league: 'wnba', icon: Icons.sports_basketball, color: Color(0xFFE11D48)),
   // ── American Football ───────────────────────────────────────────────────
-  _League(name: 'NFL', sport: 'football', league: 'nfl', icon: Icons.sports_football, color: Color(0xFF8B5CF6), channelKeywords: ['nfl', 'nfl network', 'redzone', 'espn nfl']),
-  _League(name: 'College Football', sport: 'football', league: 'college-football', icon: Icons.sports_football, color: Color(0xFF7C3AED), channelKeywords: ['espn', 'abc', 'cbs', 'fox', 'sec', 'acc']),
-  _League(name: 'CFL', sport: 'football', league: 'cfl', icon: Icons.sports_football, color: Color(0xFFA78BFA), channelKeywords: ['tsn', 'cfl']),
+  _League(name: 'NFL', sport: 'football', league: 'nfl', icon: Icons.sports_football, color: Color(0xFF8B5CF6)),
+  _League(name: 'College Football', sport: 'football', league: 'college-football', icon: Icons.sports_football, color: Color(0xFF7C3AED)),
+  _League(name: 'CFL', sport: 'football', league: 'cfl', icon: Icons.sports_football, color: Color(0xFFA78BFA)),
   // ── Baseball ────────────────────────────────────────────────────────────
-  _League(name: 'MLB', sport: 'baseball', league: 'mlb', icon: Icons.sports_baseball, color: Color(0xFF3B82F6), channelKeywords: ['mlb', 'mlb network', 'baseball', 'fox sports']),
+  _League(name: 'MLB', sport: 'baseball', league: 'mlb', icon: Icons.sports_baseball, color: Color(0xFF3B82F6)),
   // ── Hockey ──────────────────────────────────────────────────────────────
-  _League(name: 'NHL', sport: 'hockey', league: 'nhl', icon: Icons.sports_hockey, color: Color(0xFF06B6D4), channelKeywords: ['nhl', 'nhl network', 'hockey', 'espn nhl']),
+  _League(name: 'NHL', sport: 'hockey', league: 'nhl', icon: Icons.sports_hockey, color: Color(0xFF06B6D4)),
   // ── Soccer ──────────────────────────────────────────────────────────────
-  _League(name: 'Premier League', sport: 'soccer', league: 'eng.1', icon: Icons.sports_soccer, color: Color(0xFF22C55E), channelKeywords: ['sky sports premier', 'premier league', 'peacock', 'nbcsn']),
-  _League(name: 'La Liga', sport: 'soccer', league: 'esp.1', icon: Icons.sports_soccer, color: Color(0xFFEF4444), channelKeywords: ['la liga', 'bein sports', 'espn']),
-  _League(name: 'Bundesliga', sport: 'soccer', league: 'ger.1', icon: Icons.sports_soccer, color: Color(0xFFD97706), channelKeywords: ['bundesliga', 'espn', 'bein']),
-  _League(name: 'Serie A', sport: 'soccer', league: 'ita.1', icon: Icons.sports_soccer, color: Color(0xFF10B981), channelKeywords: ['serie a', 'paramount', 'cbssn']),
-  _League(name: 'Ligue 1', sport: 'soccer', league: 'fra.1', icon: Icons.sports_soccer, color: Color(0xFF0EA5E9), channelKeywords: ['ligue 1', 'bein', 'canal']),
-  _League(name: 'Champions League', sport: 'soccer', league: 'uefa.champions', icon: Icons.sports_soccer, color: Color(0xFF6366F1), channelKeywords: ['champions league', 'sky sports', 'bein', 'cbs']),
-  _League(name: 'Europa League', sport: 'soccer', league: 'uefa.europa', icon: Icons.sports_soccer, color: Color(0xFFF97316), channelKeywords: ['europa league', 'bein', 'cbs']),
-  _League(name: 'MLS', sport: 'soccer', league: 'usa.1', icon: Icons.sports_soccer, color: Color(0xFF38BDF8), channelKeywords: ['mls', 'apple tv', 'fox sports']),
-  _League(name: 'Liga MX', sport: 'soccer', league: 'mex.1', icon: Icons.sports_soccer, color: Color(0xFF84CC16), channelKeywords: ['liga mx', 'univision', 'tudn', 'fox deportes']),
+  _League(name: 'Premier League', sport: 'soccer', league: 'eng.1', icon: Icons.sports_soccer, color: Color(0xFF22C55E)),
+  _League(name: 'La Liga', sport: 'soccer', league: 'esp.1', icon: Icons.sports_soccer, color: Color(0xFFEF4444)),
+  _League(name: 'Bundesliga', sport: 'soccer', league: 'ger.1', icon: Icons.sports_soccer, color: Color(0xFFD97706)),
+  _League(name: 'Serie A', sport: 'soccer', league: 'ita.1', icon: Icons.sports_soccer, color: Color(0xFF10B981)),
+  _League(name: 'Ligue 1', sport: 'soccer', league: 'fra.1', icon: Icons.sports_soccer, color: Color(0xFF0EA5E9)),
+  _League(name: 'Champions League', sport: 'soccer', league: 'uefa.champions', icon: Icons.sports_soccer, color: Color(0xFF6366F1)),
+  _League(name: 'Europa League', sport: 'soccer', league: 'uefa.europa', icon: Icons.sports_soccer, color: Color(0xFFF97316)),
+  _League(name: 'MLS', sport: 'soccer', league: 'usa.1', icon: Icons.sports_soccer, color: Color(0xFF38BDF8)),
+  _League(name: 'Liga MX', sport: 'soccer', league: 'mex.1', icon: Icons.sports_soccer, color: Color(0xFF84CC16)),
   // ── Racing ──────────────────────────────────────────────────────────────
-  _League(name: 'Formula 1', sport: 'racing', league: 'f1', icon: Icons.speed, color: Color(0xFFDC2626), channelKeywords: ['sky sports f1', 'espn f1', 'f1 tv']),
-  _League(name: 'NASCAR Cup', sport: 'racing', league: 'nascar-premier', icon: Icons.speed, color: Color(0xFF78716C), channelKeywords: ['nascar', 'fox sports', 'nbc sports']),
-  _League(name: 'IndyCar', sport: 'racing', league: 'irl', icon: Icons.speed, color: Color(0xFF0284C7), channelKeywords: ['indycar', 'nbc', 'peacock']),
+  _League(name: 'Formula 1', sport: 'racing', league: 'f1', icon: Icons.speed, color: Color(0xFFDC2626)),
+  _League(name: 'NASCAR Cup', sport: 'racing', league: 'nascar-premier', icon: Icons.speed, color: Color(0xFF78716C)),
+  _League(name: 'IndyCar', sport: 'racing', league: 'irl', icon: Icons.speed, color: Color(0xFF0284C7)),
   // ── Tennis ──────────────────────────────────────────────────────────────
-  _League(name: 'Tennis (ATP)', sport: 'tennis', league: 'atp', icon: Icons.sports_tennis, color: Color(0xFFFBBF24), channelKeywords: ['tennis channel', 'espn tennis', 'tennis']),
-  _League(name: 'Tennis (WTA)', sport: 'tennis', league: 'wta', icon: Icons.sports_tennis, color: Color(0xFFF472B6), channelKeywords: ['tennis channel', 'espn']),
+  _League(name: 'Tennis (ATP)', sport: 'tennis', league: 'atp', icon: Icons.sports_tennis, color: Color(0xFFFBBF24)),
+  _League(name: 'Tennis (WTA)', sport: 'tennis', league: 'wta', icon: Icons.sports_tennis, color: Color(0xFFF472B6)),
   // ── Golf ────────────────────────────────────────────────────────────────
-  _League(name: 'PGA Tour', sport: 'golf', league: 'pga', icon: Icons.sports_golf, color: Color(0xFF4ADE80), channelKeywords: ['golf channel', 'pga', 'cbs sports', 'espn golf']),
-  _League(name: 'LIV Golf', sport: 'golf', league: 'liv', icon: Icons.sports_golf, color: Color(0xFF86EFAC), channelKeywords: ['liv golf', 'cw']),
+  _League(name: 'PGA Tour', sport: 'golf', league: 'pga', icon: Icons.sports_golf, color: Color(0xFF4ADE80)),
+  _League(name: 'LIV Golf', sport: 'golf', league: 'liv', icon: Icons.sports_golf, color: Color(0xFF86EFAC)),
   // ── Rugby ───────────────────────────────────────────────────────────────
-  _League(name: 'Rugby Union', sport: 'rugby-union', league: 'intl', icon: Icons.sports_rugby, color: Color(0xFF6EE7B7), channelKeywords: ['sky sports rugby', 'rugby', 'bein']),
+  _League(name: 'Rugby Union', sport: 'rugby-union', league: 'intl', icon: Icons.sports_rugby, color: Color(0xFF6EE7B7)),
   // ── MMA / Combat ────────────────────────────────────────────────────────
-  _League(name: 'UFC / MMA', sport: 'mma', league: 'ufc', icon: Icons.sports_mma, color: Color(0xFFDC2626), channelKeywords: ['ufc', 'ppv', 'espn mma', 'fight']),
+  _League(name: 'UFC / MMA', sport: 'mma', league: 'ufc', icon: Icons.sports_mma, color: Color(0xFFDC2626)),
 ];
 
 // ---------------------------------------------------------------------------
@@ -129,12 +126,14 @@ class _EspnGame {
       }
     }
 
-    String? teamName(Map<String, dynamic>? c) => (c?['team'] as Map?)?.entries
-        .firstWhere((e) => e.key == 'displayName', orElse: () => const MapEntry('', ''))
-        .value?.toString();
-    String? teamLogo(Map<String, dynamic>? c) => (c?['team'] as Map?)?.entries
-        .firstWhere((e) => e.key == 'logo', orElse: () => const MapEntry('', ''))
-        .value?.toString();
+    String? teamName(Map<String, dynamic>? c) {
+      final team = c?['team'] as Map<String, dynamic>?;
+      return team?['displayName']?.toString();
+    }
+    String? teamLogo(Map<String, dynamic>? c) {
+      final team = c?['team'] as Map<String, dynamic>?;
+      return team?['logo']?.toString();
+    }
     String? teamScore(Map<String, dynamic>? c) => c?['score']?.toString();
 
     final statusJson = comp['status'] as Map<String, dynamic>?;
@@ -172,68 +171,31 @@ class _EspnGame {
 class _LeagueData {
   final _League league;
   final List<_EspnGame> games;
-  final List<_DlChannel> channels;
 
-  const _LeagueData({required this.league, required this.games, required this.channels});
+  const _LeagueData({required this.league, required this.games});
 
   bool get hasGames => games.isNotEmpty;
-  bool get hasChannels => channels.isNotEmpty;
   bool get hasLive => games.any((g) => g.isLive);
 }
 
-class _DlChannel {
-  final int id;
-  final String name;
-  _DlChannel({required this.id, required this.name});
-}
+// Aggregated Sports fetch
+// ---------------------------------------------------------------------------
 
-class _DaddyliveResponse {
-  final String baseUrl;
-  final String trailingUrl;
-  final String referrer;
-  final String userAgent;
-  final List<_DlChannel> channels;
-  _DaddyliveResponse({required this.baseUrl, required this.trailingUrl, required this.referrer, required this.userAgent, required this.channels});
-}
-
-Future<_DaddyliveResponse?> _fetchDaddyliveChannels() async {
+Future<Map<String, dynamic>> _fetchAggregatedSports() async {
   try {
     final base = caffeineApiUrl.endsWith('/') ? caffeineApiUrl : '$caffeineApiUrl/';
-    final res = await http.get(Uri.parse('${base}daddylive/live')).timeout(const Duration(seconds: 15));
-    if (res.statusCode != 200) return null;
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    final raw = data['channels'] as List<dynamic>? ?? [];
-    final channels = raw.whereType<Map<String, dynamic>>().map((e) {
-      final id = e['id'];
-      final name = e['channel_name']?.toString() ?? '';
-      if (id is int) return _DlChannel(id: id, name: name);
-      return null;
-    }).whereType<_DlChannel>().toList();
-    return _DaddyliveResponse(
-      baseUrl: data['base_url']?.toString() ?? '',
-      trailingUrl: data['trailing_url']?.toString() ?? '',
-      referrer: data['referrer']?.toString() ?? 'https://lewblivehdplay.ru/',
-      userAgent: data['user_agent']?.toString() ?? 'Mozilla/5.0',
-      channels: channels,
-    );
+    // The aggregator handles the date and fetches all leagues in parallel
+    final res = await http.get(Uri.parse('${base}sports/scoreboard/all')).timeout(const Duration(seconds: 15));
+    debugPrint('[SportsScreen] Fetching aggregated sports from: ${base}sports/scoreboard/all');
+    if (res.statusCode != 200) {
+      debugPrint('[SportsScreen] Error fetching aggregated sports: ${res.statusCode}');
+      return {};
+    }
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    debugPrint('[SportsScreen] Successfully fetched aggregated sports. Leagues in response: ${body.keys.length}');
+    return body;
   } catch (_) {
-    return null;
-  }
-}
-
-Future<List<_EspnGame>> _fetchEspnGames(String sport, String league) async {
-  try {
-    // Pass today's date explicitly so ESPN only returns today's events
-    final now = DateTime.now();
-    final dateStr = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
-    final url = 'https://site.api.espn.com/apis/site/v2/sports/$sport/$league/scoreboard?dates=$dateStr';
-    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
-    if (res.statusCode != 200) return [];
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    final events = data['events'] as List<dynamic>? ?? [];
-    return events.whereType<Map<String, dynamic>>().map(_EspnGame.fromJson).toList();
-  } catch (_) {
-    return [];
+    return {};
   }
 }
 
@@ -250,7 +212,6 @@ class SportsScreen extends StatefulWidget {
 
 class _SportsScreenState extends State<SportsScreen> {
   List<_LeagueData>? _data;
-  _DaddyliveResponse? _dl;
   bool _loading = true;
   String? _error;
 
@@ -263,22 +224,24 @@ class _SportsScreenState extends State<SportsScreen> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      // Fetch daddylive channels + all ESPN leagues concurrently
-      final results = await Future.wait([
-        _fetchDaddyliveChannels(),
-        ..._leagues.map((l) => _fetchEspnGames(l.sport, l.league)),
-      ]);
-
-      final dl = results[0] as _DaddyliveResponse?;
+      // Fetch aggregated sports from caffeine-api
+      final allSportsData = await _fetchAggregatedSports();
+      
       final leagueData = <_LeagueData>[];
-      for (var i = 0; i < _leagues.length; i++) {
-        final games = results[i + 1] as List<_EspnGame>;
-        final keywords = _leagues[i].channelKeywords.map((k) => k.toLowerCase()).toList();
-        final channels = (dl?.channels ?? <_DlChannel>[]).where((ch) {
-          final name = ch.name.toLowerCase();
-          return keywords.any((k) => name.contains(k));
-        }).toList();
-        leagueData.add(_LeagueData(league: _leagues[i], games: games, channels: channels));
+      for (var l in _leagues) {
+        final key = '${l.sport}:${l.league}';
+        final rawData = allSportsData[key];
+        
+        List<_EspnGame> games = [];
+        if (rawData != null && rawData['events'] != null) {
+          final events = rawData['events'] as List<dynamic>;
+          games = events.whereType<Map<String, dynamic>>().map(_EspnGame.fromJson).toList();
+        }
+
+        leagueData.add(_LeagueData(league: l, games: games));
+        if (games.isNotEmpty) {
+          debugPrint('[SportsScreen] League ${l.name}: ${games.length} games found.');
+        }
       }
 
       // Only show leagues that have games today
@@ -286,20 +249,15 @@ class _SportsScreenState extends State<SportsScreen> {
       if (mounted) {
         setState(() {
           _data = active.isEmpty ? leagueData : active;
-          _dl = dl;
           _loading = false;
         });
       }
     } catch (e) {
+      debugPrint('[SportsScreen] CRITICAL ERROR IN LOAD: $e');
       if (mounted) setState(() { _loading = false; _error = e.toString(); });
     }
   }
 
-  String _directHls(int channelId) {
-    if (_dl == null) return '';
-    final base = _dl!.baseUrl.endsWith('/') ? _dl!.baseUrl : '${_dl!.baseUrl}/';
-    return '$base$channelId${_dl!.trailingUrl}';
-  }
 
   double _s(BuildContext context, double v) =>
       (v * MediaQuery.of(context).size.width) / 1920;
@@ -345,17 +303,6 @@ class _SportsScreenState extends State<SportsScreen> {
             ..._data!.map((d) => _LeagueSection(
               data: d,
               scale: s,
-              onChannelTap: (ch) {
-                final url = _directHls(ch.id);
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => PlayerScreen(
-                    url: url,
-                    title: ch.name,
-                    item: null,
-                    isMovie: false,
-                  ),
-                ));
-              },
             )).toList(),
         ],
       ),
@@ -373,9 +320,8 @@ class _SportsScreenState extends State<SportsScreen> {
 class _LeagueSection extends StatelessWidget {
   final _LeagueData data;
   final double Function(double) scale;
-  final void Function(_DlChannel ch) onChannelTap;
 
-  const _LeagueSection({required this.data, required this.scale, required this.onChannelTap});
+  const _LeagueSection({required this.data, required this.scale});
 
   @override
   Widget build(BuildContext context) {
@@ -403,14 +349,6 @@ class _LeagueSection extends StatelessWidget {
               SizedBox(width: s(16)),
               if (data.hasLive)
                 _LiveBadge(scale: s),
-              const Spacer(),
-              if (data.hasChannels)
-                _WatchButton(
-                  channels: data.channels,
-                  color: league.color,
-                  scale: s,
-                  onTap: onChannelTap,
-                ),
             ],
           ),
           SizedBox(height: s(20)),
@@ -424,6 +362,7 @@ class _LeagueSection extends StatelessWidget {
                 separatorBuilder: (_, __) => SizedBox(width: s(16)),
                 itemBuilder: (ctx, i) => _GameCard(
                   game: data.games[i],
+                  league: league,
                   accentColor: league.color,
                   scale: s,
                 ),
@@ -466,89 +405,6 @@ class _LiveBadge extends StatelessWidget {
   }
 }
 
-class _WatchButton extends StatefulWidget {
-  final List<_DlChannel> channels;
-  final Color color;
-  final double Function(double) scale;
-  final void Function(_DlChannel ch) onTap;
-
-  const _WatchButton({required this.channels, required this.color, required this.scale, required this.onTap});
-
-  @override
-  State<_WatchButton> createState() => _WatchButtonState();
-}
-
-class _WatchButtonState extends State<_WatchButton> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = widget.scale;
-    return Focus(
-      onFocusChange: (v) => setState(() => _focused = v),
-      onKeyEvent: (_, event) {
-        if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select)) {
-          _pick(context);
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        onTap: () => _pick(context),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: EdgeInsets.symmetric(horizontal: s(20), vertical: s(10)),
-          decoration: BoxDecoration(
-            color: _focused ? widget.color : widget.color.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(s(10)),
-            border: Border.all(color: widget.color.withValues(alpha: 0.5)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.play_arrow_rounded, color: _focused ? Colors.white : widget.color, size: s(22)),
-              SizedBox(width: s(8)),
-              Text('Watch', style: TextStyle(color: _focused ? Colors.white : widget.color, fontSize: s(18), fontWeight: FontWeight.w700)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _pick(BuildContext context) {
-    if (widget.channels.length == 1) {
-      widget.onTap(widget.channels.first);
-      return;
-    }
-    showDialog<_DlChannel>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Select Channel', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: SizedBox(
-          width: 400,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: widget.channels.length,
-            itemBuilder: (_, i) {
-              final ch = widget.channels[i];
-              return ListTile(
-                leading: const Icon(Icons.live_tv, color: Color(0xFFDC2626)),
-                title: Text(ch.name, style: const TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  widget.onTap(ch);
-                },
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Game card
@@ -556,10 +412,11 @@ class _WatchButtonState extends State<_WatchButton> {
 
 class _GameCard extends StatefulWidget {
   final _EspnGame game;
+  final _League league;
   final Color accentColor;
   final double Function(double) scale;
 
-  const _GameCard({required this.game, required this.accentColor, required this.scale});
+  const _GameCard({required this.game, required this.league, required this.accentColor, required this.scale});
 
   @override
   State<_GameCard> createState() => _GameCardState();
@@ -573,8 +430,22 @@ class _GameCardState extends State<_GameCard> {
     final s = widget.scale;
     final g = widget.game;
 
-    return Focus(
-      onFocusChange: (v) => setState(() => _focused = v),
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SportsGameDetailScreen(
+              sport: widget.league.sport,
+              league: widget.league.league,
+              eventId: widget.game.id,
+              gameName: widget.game.name,
+            ),
+          ),
+        );
+      },
+      child: Focus(
+        onFocusChange: (v) => setState(() => _focused = v),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         width: s(360),
@@ -628,7 +499,8 @@ class _GameCardState extends State<_GameCard> {
           ],
         ),
       ),
-    );
+    ),
+   );
   }
 }
 
