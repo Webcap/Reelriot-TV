@@ -126,10 +126,11 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
     int nextSeason = 1;
     int nextEpisode = 1;
     String label = 'PLAY';
+    int? nextEpisodeId;
 
     if (_lastWatched != null) {
-      final season = _lastWatched!['season_num'] as int? ?? 1;
-      final episode = _lastWatched!['episode_num'] as int? ?? 1;
+      final season = _lastWatched!['season'] as int? ?? 1;
+      final episode = _lastWatched!['episode'] as int? ?? 1;
       final elapsed = _lastWatched!['elapsed'] as int? ?? 0;
       final total = elapsed + (_lastWatched!['remaining'] as int? ?? 0);
       
@@ -145,7 +146,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
             icon: Icons.play_arrow,
             isPrimary: true,
             progress: progress,
-            onTap: () => _handlePlay(nextSeason, nextEpisode, null, elapsed: elapsed),
+            onTap: () => _handlePlay(season, episode, _lastWatched!['id'] as int, null, elapsed: elapsed),
             s: s,
             autofocus: true,
           );
@@ -154,17 +155,21 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
         final currentSeasonDetail = _seasons?[season];
         if (currentSeasonDetail != null) {
           if (episode < currentSeasonDetail.episodes.length) {
+            final nextEp = currentSeasonDetail.episodes[episode]; // episode is 0-indexed here
             nextSeason = season;
-            nextEpisode = episode + 1;
+            nextEpisode = nextEp.episodeNumber;
+            nextEpisodeId = nextEp.id;
             label = 'WATCH NEXT S$nextSeason E$nextEpisode';
           } else if (season < (_show?.numberOfSeasons ?? 0)) {
             nextSeason = season + 1;
             nextEpisode = 1;
+            // We don't have the next season's episode details yet, so episodeId will be null
             label = 'WATCH NEXT S$nextSeason E1';
           } else {
             label = 'PLAY S1 E1';
             nextSeason = 1;
             nextEpisode = 1;
+            // We don't have the first season's episode details yet, so episodeId will be null
           }
         } else {
           // Fallback if current season detail isn't in memory
@@ -180,13 +185,13 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
       label: label,
       icon: Icons.play_circle_outline,
       isPrimary: true,
-      onTap: () => _handlePlay(nextSeason, nextEpisode, null),
+      onTap: () => _handlePlay(nextSeason, nextEpisode, nextEpisodeId, null),
       s: s,
       autofocus: true,
     );
   }
 
-  void _handlePlay(int season, int episode, String? episodeTitle, {int elapsed = 0}) async {
+  void _handlePlay(int season, int episode, int? episodeId, String? episodeTitle, {int elapsed = 0}) async {
     if (elapsed > 0) {
       final resume = await showDialog<bool>(
         context: context,
@@ -211,16 +216,16 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
       if (resume == null) return;
       
       if (resume) {
-        _playEpisode(season, episode, episodeTitle, startPosition: Duration(seconds: elapsed));
+        _playEpisode(season, episode, episodeId, episodeTitle, startPosition: Duration(seconds: elapsed));
       } else {
-        _playEpisode(season, episode, episodeTitle, startPosition: Duration.zero);
+        _playEpisode(season, episode, episodeId, episodeTitle, startPosition: Duration.zero);
       }
     } else {
-      _playEpisode(season, episode, episodeTitle);
+      _playEpisode(season, episode, episodeId, episodeTitle);
     }
   }
 
-  void _playEpisode(int season, int episode, String? episodeTitle, {Duration? startPosition}) {
+  void _playEpisode(int season, int episode, int? episodeId, String? episodeTitle, {Duration? startPosition}) {
     if (_show == null) return;
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -228,6 +233,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
           tvShow: _show!,
           season: season,
           episode: episode,
+          episodeId: episodeId,
           episodeName: episodeTitle,
           startPosition: startPosition,
         ),
@@ -468,7 +474,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                                 orElse: () => {},
                                               );
                                               final elapsed = history != null && history.isNotEmpty ? history['elapsed'] as int? ?? 0 : 0;
-                                              _handlePlay(ep.seasonNumber, ep.episodeNumber, ep.name, elapsed: elapsed);
+                                              _handlePlay(ep.seasonNumber, ep.episodeNumber, ep.id, ep.name, elapsed: elapsed);
                                           }
                                           return KeyEventResult.handled;
                                         }
@@ -485,7 +491,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                                   orElse: () => {},
                                                 );
                                                 final elapsed = history != null && history.isNotEmpty ? history['elapsed'] as int? ?? 0 : 0;
-                                                _handlePlay(ep.seasonNumber, ep.episodeNumber, ep.name, elapsed: elapsed);
+                                                _handlePlay(ep.seasonNumber, ep.episodeNumber, ep.id, ep.name, elapsed: elapsed);
                                               }
                                             },
                                             child: AnimatedContainer(

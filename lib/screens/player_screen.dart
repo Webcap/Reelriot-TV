@@ -18,6 +18,7 @@ class PlayerScreen extends StatefulWidget {
     required this.isMovie,
     this.season,
     this.episode,
+    this.episodeId,
     this.episodeName,
     this.startPosition,
   });
@@ -28,6 +29,7 @@ class PlayerScreen extends StatefulWidget {
   final bool isMovie;
   final int? season;
   final int? episode;
+  final int? episodeId;
   final String? episodeName;
   final Duration? startPosition;
 
@@ -79,6 +81,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       isMovie: widget.isMovie,
       season: widget.season,
       episode: widget.episode,
+      episodeId: widget.episodeId,
       episodeName: widget.episodeName,
       position: position,
       duration: duration ?? Duration.zero,

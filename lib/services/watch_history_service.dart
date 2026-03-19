@@ -13,6 +13,7 @@ class WatchHistoryService {
     required bool isMovie,
     int? season,
     int? episode,
+    int? episodeId,
     String? episodeName,
     required Duration position,
     required Duration duration,
@@ -68,7 +69,7 @@ class WatchHistoryService {
           return m['id'] == show.id && m['season_num'] == season && m['episode_num'] == episode;
         });
         tvShows.insert(0, {
-          'id': show.id,
+          'id': episodeId ?? show.id,
           'series_name': show.name,
           'episode_name': episodeName,
           'poster_path': show.posterPath,
@@ -101,7 +102,8 @@ class WatchHistoryService {
       final seenTvKeys = <String>{};
       tvShows = tvShows.where((t) {
         final m = t as Map;
-        return seenTvKeys.add('${m['id']}_${m['season_num']}_${m['episode_num']}');
+        final sId = m['series_id'] ?? m['id'];
+        return seenTvKeys.add('${sId}_${m['season_num']}_${m['episode_num']}');
       }).toList();
 
       // 3. Consolidated Upsert
@@ -174,7 +176,8 @@ class WatchHistoryService {
         final m = item as Map;
         final id = m['id'];
         final type = m.containsKey('series_name') ? 'tv' : 'movie';
-        final key = type == 'tv' ? '${id}_${m['season_num']}_${m['episode_num']}' : '$id';
+        final seriesId = m['series_id'] ?? m['id'];
+        final key = type == 'tv' ? '${seriesId}_${m['season_num']}_${m['episode_num']}' : '$id';
         return seenIds.add(key);
       }).toList();
 
@@ -253,7 +256,8 @@ class WatchHistoryService {
         final match = allItems.firstWhere(
           (t) {
             final m = t as Map;
-            return m['id'] == mediaId && m['season_num'] == season && m['episode_num'] == episode;
+            final currentId = m['series_id'] ?? m['id'];
+            return currentId == mediaId && m['season_num'] == season && m['episode_num'] == episode;
           },
           orElse: () => null,
         );
@@ -295,7 +299,10 @@ class WatchHistoryService {
         allTvShows.addAll(row['tv_shows'] as List? ?? []);
       }
       
-      final matches = allTvShows.where((t) => ((t as Map)['series_id'] ?? t['id']) == tvId).toList();
+      final matches = allTvShows.where((t) {
+        final currentId = (t as Map)['series_id'] ?? t['id'];
+        return currentId == tvId;
+      }).toList();
       if (matches.isEmpty) return null;
 
       // Sort by date_added to find the absolute last one watched

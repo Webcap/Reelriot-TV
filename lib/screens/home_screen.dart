@@ -1114,6 +1114,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                               tvShow: detail,
                               season: h['season'],
                               episode: h['episode'],
+                              episodeId: h['id'],
                               episodeName: h['episode_name'],
                               startPosition: startAt,
                             ),
