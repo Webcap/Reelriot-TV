@@ -139,6 +139,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         },
       ),
     );
+    debugPrint('[PlayerScreen] 📺 Playing: ${widget.url}');
+    debugPrint('[PlayerScreen] 🔗 Referrer: ${widget.referrer ?? _getReferer(widget.url)}');
 
     _controller.addEventsListener((event) {
       if (event.betterPlayerEventType == BetterPlayerEventType.finished) {

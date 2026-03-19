@@ -4,6 +4,8 @@ import 'package:caffeine_tv/screens/sports_game_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:caffeine_tv/screens/player_screen.dart';
 
 // ---------------------------------------------------------------------------
 // ESPN league config
@@ -220,6 +222,7 @@ class SportsScreen extends StatefulWidget {
 
 class _SportsScreenState extends State<SportsScreen> {
   List<_LeagueData>? _data;
+  Map<String, dynamic>? _featuredEvent;
   bool _loading = true;
   String? _error;
 
@@ -266,9 +269,22 @@ class _SportsScreenState extends State<SportsScreen> {
         if (!a.hasLive && b.hasLive) return 1;
         return 0;
       });
+      // Fetch featured event from Supabase
+      Map<String, dynamic>? featured;
+      try {
+        featured = await Supabase.instance.client
+            .from('live_streams')
+            .select('*')
+            .eq('is_featured', true)
+            .maybeSingle();
+      } catch (e) {
+        debugPrint('[SportsScreen] Error fetching featured event: $e');
+      }
+
       if (mounted) {
         setState(() {
           _data = active.isEmpty ? leagueData : active;
+          _featuredEvent = featured;
           _loading = false;
         });
       }
@@ -318,6 +334,10 @@ class _SportsScreenState extends State<SportsScreen> {
           SizedBox(height: s(8)),
           Text(dateStr, style: TextStyle(color: Colors.white38, fontSize: s(24), fontWeight: FontWeight.w500)),
           SizedBox(height: s(40)),
+          if (_featuredEvent != null) ...[
+            _buildFeaturedCard(s),
+            SizedBox(height: s(48)),
+          ],
           if (_data != null)
             ..._data!.map((d) => _LeagueSection(
               data: d,
@@ -330,6 +350,205 @@ class _SportsScreenState extends State<SportsScreen> {
 
   String _dayName(int d) => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d - 1];
   String _monthName(int m) => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1];
+
+  Widget _buildFeaturedCard(double Function(double) s) {
+    bool focused = false;
+    final color = const Color(0xFFDC2626);
+    final title = _featuredEvent!['title'] ?? 'Featured Event';
+    final sport = _featuredEvent!['sport'] ?? 'LIVE';
+    final poster = _featuredEvent!['poster_url'] ?? _featuredEvent!['thumbnail_url'];
+
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return FocusableActionDetector(
+          onShowFocusHighlight: (v) => setState(() => focused = v),
+          actions: {
+            ActivateIntent: CallbackAction<ActivateIntent>(
+              onInvoke: (intent) {
+                if (_featuredEvent!['video_url'] != null) {
+                   Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => PlayerScreen(
+                        url: _featuredEvent!['video_url'],
+                        title: title,
+                        item: _featuredEvent,
+                        isMovie: false,
+                        referrer: _featuredEvent!['referrer'],
+                      ),
+                    ),
+                  );
+                }
+                return null;
+              },
+            ),
+          },
+          child: InkWell(
+            onTap: () {
+              if (_featuredEvent!['video_url'] != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PlayerScreen(
+                      url: _featuredEvent!['video_url'],
+                      title: title,
+                      item: _featuredEvent,
+                      isMovie: false,
+                      referrer: _featuredEvent!['referrer'],
+                    ),
+                  ),
+                );
+              }
+            },
+            borderRadius: BorderRadius.circular(s(24)),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: double.infinity,
+              height: s(450),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(s(24)),
+                boxShadow: [
+                  if (focused) BoxShadow(
+                    color: color.withOpacity(0.3),
+                    blurRadius: s(30),
+                    spreadRadius: s(5),
+                  )
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(s(24)),
+                child: Stack(
+                  children: [
+                    // Background Image / Gradient
+                    if (poster != null)
+                      Positioned.fill(
+                        child: Image.network(
+                          poster,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _gradientBack(color),
+                        ),
+                      )
+                    else
+                      _gradientBack(color),
+                    
+                    // Dark Overlay
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [
+                              Colors.black.withOpacity(0.9),
+                              Colors.black.withOpacity(0.4),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Content
+                    Padding(
+                      padding: EdgeInsets.all(s(32)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: s(16), vertical: s(8)),
+                            decoration: BoxDecoration(
+                              color: color,
+                              borderRadius: BorderRadius.circular(s(8)),
+                            ),
+                            child: Text(
+                              'FEATURED LIVE EVENT',
+                              style: TextStyle(color: Colors.white, fontSize: s(16), fontWeight: FontWeight.w900, letterSpacing: 1.2),
+                            ),
+                          ),
+                          SizedBox(height: s(20)),
+                          Flexible(
+                            child: Text(
+                              title,
+                              style: TextStyle(color: Colors.white, fontSize: s(56), fontWeight: FontWeight.w900, height: 1.1),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          SizedBox(height: s(12)),
+                          Row(
+                            children: [
+                              Icon(Icons.sports_soccer, color: Colors.white70, size: s(24)),
+                              SizedBox(width: s(12)),
+                              Text(
+                                sport,
+                                style: TextStyle(color: Colors.white70, fontSize: s(24), fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: s(32)),
+                          Row(
+                            children: [
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: s(32), vertical: s(16)),
+                                decoration: BoxDecoration(
+                                  color: focused ? Colors.white : Colors.white.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(s(12)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.play_arrow_rounded, 
+                                      color: focused ? Colors.black : Colors.white,
+                                      size: s(32),
+                                    ),
+                                    SizedBox(width: s(12)),
+                                    Text(
+                                      'WATCH NOW',
+                                      style: TextStyle(
+                                        color: focused ? Colors.black : Colors.white,
+                                        fontSize: s(24),
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Focus Border
+                    if (focused)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(s(24)),
+                            border: Border.all(color: Colors.white, width: s(4)),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    );
+  }
+
+  Widget _gradientBack(Color color) => Container(
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: [color.withOpacity(0.3), Colors.black],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -82,7 +82,7 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
   Future<void> _loadSummary() async {
     try {
       final String base = widget.baseUrl ?? caffeineApiUrl;
-      final String url = '$base/sports/${widget.sport}/${widget.league}/summary/${widget.eventId}';
+      final String url = '${base}sports/${widget.sport}/${widget.league}/summary/${widget.eventId}';
       debugPrint('[SportsGameDetailScreen] Fetching summary from: $url');
       
       final client = widget.client ?? http.Client();
@@ -171,10 +171,10 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
       ),
       body: ListView(
         children: [
-          Focus(child: _buildHeader()),
-          Focus(child: _buildWinProbability()),
-          Focus(child: _buildRecentPlays()),
-          Focus(child: _buildBoxscore()),
+          _buildHeader(),
+          _buildWinProbability(),
+          _buildRecentPlays(),
+          _buildBoxscore(),
         ],
       ),
     );
@@ -224,22 +224,20 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
           ),
           if (_streamUrl != null) ...[
             const SizedBox(height: 24),
-            Focus(
-              child: Builder(
-                builder: (context) {
-                  final isFocused = Focus.of(context).hasFocus;
-                  return ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isFocused ? Colors.red : Colors.grey[800],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onPressed: _playLiveStream,
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('WATCH LIVE', style: TextStyle(fontWeight: FontWeight.bold)),
-                  );
-                }
+            ElevatedButton.icon(
+              autofocus: true, // Should be easy to select when arriving
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 20),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 8,
+              ),
+              onPressed: _playLiveStream,
+              icon: const Icon(Icons.play_arrow, size: 32),
+              label: const Text(
+                'WATCH LIVE', 
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 1.2)
               ),
             ),
           ],

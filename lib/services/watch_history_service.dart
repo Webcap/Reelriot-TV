@@ -47,7 +47,11 @@ class WatchHistoryService {
       final remaining = (duration - position).inSeconds;
       
       if (isMovie) {
-        final movie = item as MovieDetail;
+        if (item is! MovieDetail) {
+          debugPrint('[WatchHistory] ⚠️ Item is not MovieDetail, cannot save movie progress.');
+          return;
+        }
+        final movie = item;
         movies.removeWhere((m) => (m as Map)['id'] == movie.id);
         movies.insert(0, {
           'id': movie.id,
@@ -63,7 +67,19 @@ class WatchHistoryService {
           'date_watched': now,
         });
       } else {
-        final show = item as TvShowDetail;
+        // Handle TV Show or other items passed as Map
+        if (item is Map) {
+          debugPrint('[WatchHistory] ℹ️ Item is a Map (likely Live Stream), skipping watch history for now.');
+          // You could implement live stream history here if desired.
+          return;
+        }
+
+        if (item is! TvShowDetail) {
+           debugPrint('[WatchHistory] ⚠️ Item is not TvShowDetail, cannot save show progress.');
+           return;
+        }
+        
+        final show = item;
         tvShows.removeWhere((t) {
           final m = t as Map;
           return m['id'] == show.id && m['season_num'] == season && m['episode_num'] == episode;
