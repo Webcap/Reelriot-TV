@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:caffeine_tv/env.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:caffeine_tv/screens/player_screen.dart';
 
 class SportsGameDetailScreen extends StatefulWidget {
   final String sport;
@@ -29,11 +31,52 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
   Map<String, dynamic>? _summary;
   bool _isLoading = true;
   String? _error;
+  String? _streamUrl;
+  String? _streamReferrer;
 
   @override
   void initState() {
     super.initState();
     _loadSummary();
+    _checkLiveStream();
+  }
+
+  Future<void> _checkLiveStream() async {
+    try {
+      final supabase = Supabase.instance.client;
+      final response = await supabase
+          .from('live_streams')
+          .select()
+          .eq('id', widget.eventId)
+          .maybeSingle();
+
+      if (response != null && response['video_url'] != null && response['video_url'].toString().isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _streamUrl = response['video_url'];
+            _streamReferrer = response['referrer'];
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[SportsGameDetailScreen] Error checking Supabase stream: $e');
+    }
+  }
+
+  void _playLiveStream() {
+    if (_streamUrl == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PlayerScreen(
+          url: _streamUrl!,
+          title: widget.gameName ?? 'Live Stream',
+          item: _summary,
+          isMovie: false,
+          referrer: _streamReferrer,
+        ),
+      ),
+    );
   }
 
   Future<void> _loadSummary() async {
@@ -179,6 +222,27 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
             header?['status']?['type']?['detail'] ?? 'Final',
             style: const TextStyle(color: Colors.white70, fontSize: 18),
           ),
+          if (_streamUrl != null) ...[
+            const SizedBox(height: 24),
+            Focus(
+              child: Builder(
+                builder: (context) {
+                  final isFocused = Focus.of(context).hasFocus;
+                  return ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isFocused ? Colors.red : Colors.grey[800],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: _playLiveStream,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('WATCH LIVE', style: TextStyle(fontWeight: FontWeight.bold)),
+                  );
+                }
+              ),
+            ),
+          ],
         ],
       ),
     );

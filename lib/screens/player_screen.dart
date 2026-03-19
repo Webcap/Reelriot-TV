@@ -21,6 +21,7 @@ class PlayerScreen extends StatefulWidget {
     this.episodeId,
     this.episodeName,
     this.startPosition,
+    this.referrer,
   });
 
   final String url;
@@ -32,6 +33,7 @@ class PlayerScreen extends StatefulWidget {
   final int? episodeId;
   final String? episodeName;
   final Duration? startPosition;
+  final String? referrer;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -133,7 +135,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         preferredAudioLanguage: SettingsService().language,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Referer': _getReferer(widget.url),
+          'Referer': widget.referrer ?? _getReferer(widget.url),
         },
       ),
     );
