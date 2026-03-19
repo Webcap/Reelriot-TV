@@ -3,7 +3,10 @@ import 'package:caffeine_core/caffeine_core.dart';
 import 'package:flutter/foundation.dart';
 
 class WatchHistoryService {
-  final _supabase = Supabase.instance.client;
+  final SupabaseClient _supabase;
+
+  WatchHistoryService({SupabaseClient? client}) 
+      : _supabase = client ?? Supabase.instance.client;
 
   Future<void> saveProgress({
     required dynamic item,

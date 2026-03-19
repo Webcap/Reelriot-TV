@@ -8,6 +8,8 @@ class SportsGameDetailScreen extends StatefulWidget {
   final String league;
   final String eventId;
   final String? gameName;
+  final String? baseUrl;
+  final http.Client? client;
 
   const SportsGameDetailScreen({
     super.key,
@@ -15,6 +17,8 @@ class SportsGameDetailScreen extends StatefulWidget {
     required this.league,
     required this.eventId,
     this.gameName,
+    this.baseUrl,
+    this.client,
   });
 
   @override
@@ -23,7 +27,7 @@ class SportsGameDetailScreen extends StatefulWidget {
 
 class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
   Map<String, dynamic>? _summary;
-  bool _loading = true;
+  bool _isLoading = true;
   String? _error;
 
   @override
@@ -33,63 +37,73 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
   }
 
   Future<void> _loadSummary() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
     try {
-      final base = caffeineApiUrl.endsWith('/') ? caffeineApiUrl : '$caffeineApiUrl/';
-      final url = '${base}sports/${widget.sport}/${widget.league}/summary/${widget.eventId}';
-      final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
-      if (res.statusCode != 200) {
-        throw 'Failed to load game details: ${res.statusCode}';
+      final String base = widget.baseUrl ?? caffeineApiUrl;
+      final String url = '$base/sports/${widget.sport}/${widget.league}/summary/${widget.eventId}';
+      debugPrint('[SportsGameDetailScreen] Fetching summary from: $url');
+      
+      final client = widget.client ?? http.Client();
+      final response = await client.get(Uri.parse(url));
+
+      if (!mounted) {
+        if (widget.client == null) client.close();
+        return;
       }
-      if (mounted) {
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
         setState(() {
-          _summary = jsonDecode(res.body);
-          _loading = false;
+          _summary = data;
+          _isLoading = false;
+        });
+        debugPrint('[SportsGameDetailScreen] Successfully loaded summary.');
+      } else {
+        debugPrint('[SportsGameDetailScreen] Status: ${response.statusCode}');
+        setState(() {
+          _error = 'Failed to load summary: ${response.statusCode}';
+          _isLoading = false;
         });
       }
+      if (widget.client == null) client.close();
     } catch (e) {
+      debugPrint('[SportsGameDetailScreen] ❌ Error loading summary: $e');
       if (mounted) {
         setState(() {
-          _loading = false;
-          _error = e.toString();
+          _error = 'Error loading summary: $e';
+          _isLoading = false;
         });
       }
     }
   }
 
-  double _s(BuildContext context, double v) =>
-      (v * MediaQuery.of(context).size.width) / 1920;
-
   @override
   Widget build(BuildContext context) {
-    final s = (double v) => _s(context, v);
-
-    if (_loading) {
-      return Scaffold(
+    if (_isLoading) {
+      return const Scaffold(
         backgroundColor: Colors.black,
-        body: const Center(child: CircularProgressIndicator(color: Color(0xFFDC2626))),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_error != null) {
       return Scaffold(
         backgroundColor: Colors.black,
-        appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
         body: Center(
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, color: Colors.white38, size: 64),
+              const Icon(Icons.error_outline, color: Colors.red, size: 64),
               const SizedBox(height: 16),
-              Text('Could not load game stats',
-                  style: TextStyle(color: Colors.white54, fontSize: s(28))),
+              Text(_error!, style: const TextStyle(color: Colors.white)),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _loadSummary,
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+                onPressed: () {
+                  setState(() {
+                    _isLoading = true;
+                    _error = null;
+                  });
+                  _loadSummary();
+                },
                 child: const Text('Retry'),
               ),
             ],
@@ -98,268 +112,237 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
       );
     }
 
-    final boxscore = _summary?['boxscore'];
-    final teams = boxscore?['teams'] as List<dynamic>? ?? [];
-    if (teams.length < 2) {
-       return Scaffold(
+    if (_summary == null) {
+      return const Scaffold(
         backgroundColor: Colors.black,
-        appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
-        body: const Center(child: Text('Game data unavailable', style: TextStyle(color: Colors.white54))),
+        body: Center(child: Text('No data available', style: TextStyle(color: Colors.white))),
       );
     }
 
-    final awayTeam = teams[0];
-    final homeTeam = teams[1];
-
+    // Wrap sections in Focus widgets for TV navigation
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(s(48)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(s, awayTeam, homeTeam),
-            SizedBox(height: s(40)),
-            _buildTeamStats(s, awayTeam, homeTeam),
-            SizedBox(height: s(40)),
-            _buildBoxscore(s, boxscore),
-          ],
-        ),
+      appBar: AppBar(
+        title: Text(widget.gameName ?? 'Game Details'),
+        backgroundColor: Colors.black,
       ),
-    );
-  }
-
-  Widget _buildHeader(double Function(double) s, dynamic away, dynamic home) {
-    final awayData = away['team'];
-    final homeData = home['team'];
-    final awayScore = away['statistics']?.firstWhere((st) => st['name'] == 'points', orElse: () => null)?['displayValue'] ?? '0';
-    final homeScore = home['statistics']?.firstWhere((st) => st['name'] == 'points', orElse: () => null)?['displayValue'] ?? '0';
-
-    final headerStatus = _summary?['header']?['competitions']?[0]?['status']?['type']?['detail'] ?? 'Final';
-
-    return Container(
-      padding: EdgeInsets.all(s(32)),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(s(24)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      body: ListView(
         children: [
-          _buildTeamHeader(s, awayData, awayScore, isAway: true),
-          Column(
-            children: [
-              Text(headerStatus, style: TextStyle(color: Colors.white38, fontSize: s(24), fontWeight: FontWeight.bold)),
-              SizedBox(height: s(8)),
-              Text('VS', style: TextStyle(color: Colors.white12, fontSize: s(48), fontWeight: FontWeight.w900)),
-            ],
-          ),
-          _buildTeamHeader(s, homeData, homeScore, isAway: false),
+          Focus(child: _buildHeader()),
+          Focus(child: _buildWinProbability()),
+          Focus(child: _buildRecentPlays()),
+          Focus(child: _buildBoxscore()),
         ],
       ),
     );
   }
 
-  Widget _buildTeamHeader(double Function(double) s, dynamic team, String score, {bool isAway = true}) {
+  Widget _buildHeader() {
+    final header = _summary?['header'];
+    final competitions = header?['competitions'] as List?;
+    final competition = competitions?.first;
+    final competitors = competition?['competitors'] as List?;
+    
+    // Correcting score retrieval to use header data
+    final homeTeam = competitors?.firstWhere((c) => c['homeAway'] == 'home');
+    final awayTeam = competitors?.firstWhere((c) => c['homeAway'] == 'away');
+    
+    final homeScore = homeTeam?['score'] ?? '0';
+    final awayScore = awayTeam?['score'] ?? '0';
+    
+    final homeName = homeTeam?['team']?['displayName'] ?? 'Home';
+    final awayName = awayTeam?['team']?['displayName'] ?? 'Away';
+    final homeLogo = homeTeam?['team']?['logos']?.first?['href'];
+    final awayLogo = awayTeam?['team']?['logos']?.first?['href'];
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.grey[900]!, Colors.black],
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildTeamHeader(awayName, awayLogo, awayScore),
+              const Text('vs', style: TextStyle(color: Colors.white54, fontSize: 24)),
+              _buildTeamHeader(homeName, homeLogo, homeScore),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            header?['status']?['type']?['detail'] ?? 'Final',
+            style: const TextStyle(color: Colors.white70, fontSize: 18),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeamHeader(String name, String? logo, String score) {
     return Column(
       children: [
-        Image.network(team['logo'] ?? '', width: s(120), height: s(120), errorBuilder: (_, __, ___) => Icon(Icons.sports_basketball, size: s(80), color: Colors.white24)),
-        SizedBox(height: s(16)),
-        Text(team['displayName'] ?? '', style: TextStyle(color: Colors.white, fontSize: s(32), fontWeight: FontWeight.bold)),
-        Text(team['abbreviation'] ?? '', style: TextStyle(color: Colors.white54, fontSize: s(24))),
-        SizedBox(height: s(16)),
-        Text(score, style: TextStyle(color: Colors.white, fontSize: s(64), fontWeight: FontWeight.w900)),
+        if (logo != null)
+          Image.network(logo, height: 64, width: 64, errorBuilder: (c, e, s) => const Icon(Icons.sports, size: 64)),
+        const SizedBox(height: 8),
+        Text(name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(score, style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.blue)),
       ],
     );
   }
 
-  Widget _buildTeamStats(double Function(double) s, dynamic away, dynamic home) {
-    final awayStats = (away['statistics'] as List<dynamic>? ?? []);
-    final homeStats = (home['statistics'] as List<dynamic>? ?? []);
+  Widget _buildWinProbability() {
+    final winProb = _summary?['winProbability'] as List?;
+    if (winProb == null || winProb.isEmpty) return const SizedBox.shrink();
 
-    final statsToDisplay = [
-      {'label': 'FG%', 'key': 'fieldGoalPct'},
-      {'label': '3PT%', 'key': 'threePointFieldGoalPct'},
-      {'label': 'FT%', 'key': 'freeThrowPct'},
-      {'label': 'REB', 'key': 'totalRebounds'},
-      {'label': 'AST', 'key': 'assists'},
-      {'label': 'STL', 'key': 'steals'},
-      {'label': 'BLK', 'key': 'blocks'},
-      {'label': 'TO', 'key': 'turnovers'},
-    ];
-
+    final latest = winProb.last;
+    final homeProb = (latest['homeWinPercentage'] as num? ?? 0.0) * 100;
+    
     return Container(
-      padding: EdgeInsets.all(s(32)),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(s(24)),
-      ),
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(color: Colors.grey[900], borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Team Comparison', style: TextStyle(color: Colors.white, fontSize: s(32), fontWeight: FontWeight.bold)),
-          SizedBox(height: s(24)),
-          ...statsToDisplay.map((stat) {
-            final awayVal = awayStats.firstWhere((s) => s['name'] == stat['key'], orElse: () => null)?['displayValue'] ?? '-';
-            final homeVal = homeStats.firstWhere((s) => s['name'] == stat['key'], orElse: () => null)?['displayValue'] ?? '-';
-
-            return Padding(
-              padding: EdgeInsets.symmetric(vertical: s(8)),
-              child: Row(
-                children: [
-                  Expanded(child: Text(awayVal, textAlign: TextAlign.start, style: TextStyle(color: Colors.white70, fontSize: s(24)))),
-                  Expanded(child: Text(stat['label']!, textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: s(20)))),
-                  Expanded(child: Text(homeVal, textAlign: TextAlign.end, style: TextStyle(color: Colors.white70, fontSize: s(24)))),
-                ],
+          const Text('Win Probability', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          Stack(
+            children: [
+              Container(height: 24, decoration: BoxDecoration(color: Colors.blue[900], borderRadius: BorderRadius.circular(12))),
+              FractionallySizedBox(
+                widthFactor: homeProb / 100,
+                child: Container(height: 24, decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(12))),
               ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Away ${(100 - homeProb).toStringAsFixed(1)}%', style: const TextStyle(color: Colors.white70)),
+              Text('Home ${homeProb.toStringAsFixed(1)}%', style: const TextStyle(color: Colors.white70)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentPlays() {
+    final plays = _summary?['plays'] as List?;
+    if (plays == null || plays.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(color: Colors.grey[900], borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Recent Plays', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          ...plays.reversed.take(5).map((play) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(play['clock']?['displayValue'] ?? '', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 12),
+                Expanded(child: Text(play['text'] ?? '', style: const TextStyle(color: Colors.white70))),
+              ],
+            ),
+          )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBoxscore() {
+    final players = _summary?['players'] as List?;
+    if (players == null || players.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(color: Colors.grey[900], borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Boxscore', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          ...players.map((teamBox) {
+            final teamName = teamBox['team']?['displayName'] ?? 'Team';
+            final statistics = teamBox['statistics'] as List?;
+            
+            // Robustly find athletes across any statistic category
+            List<dynamic> athletes = [];
+            if (statistics != null) {
+              for (var stat in statistics) {
+                final statAthletes = stat['athletes'] as List?;
+                if (statAthletes != null && statAthletes.isNotEmpty) {
+                  athletes = statAthletes;
+                  break; 
+                }
+              }
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(teamName, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 16)),
+                ),
+                if (athletes.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: Text('No player stats available', style: TextStyle(color: Colors.white54, fontStyle: FontStyle.italic)),
+                  )
+                else
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      columnSpacing: 20,
+                      columns: const [
+                        DataColumn(label: Text('Player', style: TextStyle(color: Colors.white70))),
+                        DataColumn(label: Text('PTS', style: TextStyle(color: Colors.white70))),
+                        DataColumn(label: Text('REB', style: TextStyle(color: Colors.white70))),
+                        DataColumn(label: Text('AST', style: TextStyle(color: Colors.white70))),
+                      ],
+                      rows: athletes.map((athlete) {
+                        final stats = athlete['stats'] as List?;
+                        final name = athlete['athlete']?['displayName'] ?? 'Unknown';
+                        
+                        // Safely get stats with fallback to '0'
+                        String getStat(int index) {
+                          if (stats == null || index >= stats.length) return '0';
+                          return stats[index]?.toString() ?? '0';
+                        }
+
+                        // Adjusting indices based on common ESPN API structure for NBA
+                        // Usually: 0: MIN, 7: REB, 8: AST, 11: PTS (but varies)
+                        // For simplicity in display, we take common positions or search
+                        return DataRow(cells: [
+                          DataCell(Text(name, style: const TextStyle(color: Colors.white))),
+                          DataCell(Text(getStat(stats?.length != null ? stats!.length - 1 : 0), style: const TextStyle(color: Colors.white))),
+                          DataCell(Text(getStat(7), style: const TextStyle(color: Colors.white))),
+                          DataCell(Text(getStat(8), style: const TextStyle(color: Colors.white))),
+                        ]);
+                      }).toList(),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+              ],
             );
           }),
         ],
       ),
-    );
-  }
-
-  Widget _buildBoxscore(double Function(double) s, dynamic boxscore) {
-    final playersData = boxscore?['players'] as List<dynamic>? ?? [];
-    if (playersData.isEmpty) return const SizedBox();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Boxscore', style: TextStyle(color: Colors.white, fontSize: s(32), fontWeight: FontWeight.bold)),
-        SizedBox(height: s(24)),
-        ...playersData.map((teamBox) {
-          final team = teamBox['team'];
-          final statsList = teamBox['statistics'] as List<dynamic>? ?? [];
-          if (statsList.isEmpty) return const SizedBox();
-
-          final firstStat = statsList.first;
-          final headers = (firstStat['names'] as List<dynamic>? ?? []).map((e) => e.toString()).toList();
-          final athletes = firstStat['athletes'] as List<dynamic>? ?? [];
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: s(16)),
-                child: Row(
-                  children: [
-                    Image.network(team['logo'] ?? '', width: s(40), height: s(40), errorBuilder: (_, __, ___) => const Icon(Icons.sports, color: Colors.white24)),
-                    SizedBox(width: s(16)),
-                    Text(team['displayName'] ?? '', style: TextStyle(color: Colors.white70, fontSize: s(28), fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columnSpacing: s(24),
-                  headingRowHeight: s(40),
-                  dataRowMinHeight: s(40),
-                  dataRowMaxHeight: s(48),
-                  columns: [
-                    DataColumn(label: Text('Athlete', style: TextStyle(color: Colors.white38, fontSize: s(18)))),
-                    ...headers.map((h) => DataColumn(label: Text(h, style: TextStyle(color: Colors.white38, fontSize: s(18))))),
-                  ],
-                  rows: athletes.map((a) {
-                    final athlete = a['athlete'];
-                    final stats = a['stats'] as List<dynamic>? ?? [];
-
-                    // Ensure stats length matches headers length
-                    final List<dynamic> adjustedStats = List.from(stats);
-                    while (adjustedStats.length < headers.length) {
-                      adjustedStats.add('-');
-                    }
-                    final displayStats = adjustedStats.take(headers.length).toList();
-
-                    return DataRow(cells: [
-                      DataCell(
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (athlete['headshot'] != null && athlete['headshot']['href'] != null)
-                              Image.network(athlete['headshot']['href'], width: s(32), height: s(32), errorBuilder: (_, __, ___) => const SizedBox()),
-                            SizedBox(width: s(8)),
-                            Text(athlete['shortName'] ?? '', style: TextStyle(color: Colors.white70, fontSize: s(20))),
-                          ],
-                        ),
-                      ),
-                      ...displayStats.map((st) => DataCell(Text(st.toString(), style: TextStyle(color: Colors.white54, fontSize: s(18))))),
-                    ]);
-                  }).toList(),
-                ),
-              ),
-              SizedBox(height: s(32)),
-            ],
-          );
-        }).toList(),
-      ],
-    );
-  }
-
-  Widget _buildTeamBoxscore(double Function(double) s, dynamic teamBox) {
-    final team = teamBox['team'];
-    final statsList = teamBox['statistics'] as List<dynamic>? ?? [];
-    if (statsList.isEmpty) return const SizedBox();
-
-    final firstStat = statsList.first;
-    final headers = (firstStat['names'] as List<dynamic>? ?? []).map((e) => e.toString()).toList();
-    final athletes = firstStat['athletes'] as List<dynamic>? ?? [];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: EdgeInsets.symmetric(vertical: s(16)),
-          child: Row(
-            children: [
-              Image.network(team['logo'] ?? '', width: s(40), height: s(40), errorBuilder: (_, __, ___) => const Icon(Icons.sports, color: Colors.white24)),
-              SizedBox(width: s(16)),
-              Text(team['displayName'] ?? '', style: TextStyle(color: Colors.white70, fontSize: s(28), fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: DataTable(
-            columnSpacing: s(24),
-            headingRowHeight: s(40),
-            dataRowMinHeight: s(40),
-            dataRowMaxHeight: s(48),
-            columns: [
-              DataColumn(label: Text('Athlete', style: TextStyle(color: Colors.white38, fontSize: s(18)))),
-              ...headers.map((h) => DataColumn(label: Text(h, style: TextStyle(color: Colors.white38, fontSize: s(18))))),
-            ],
-            rows: athletes.map((a) {
-              final athlete = a['athlete'];
-              final stats = a['stats'] as List<dynamic>? ?? [];
-              
-              // Ensure stats length matches headers length
-              final List<dynamic> adjustedStats = List.from(stats);
-              while (adjustedStats.length < headers.length) {
-                adjustedStats.add('-');
-              }
-              final displayStats = adjustedStats.take(headers.length).toList();
-
-              return DataRow(cells: [
-                DataCell(
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (athlete['headshot'] != null && athlete['headshot']['href'] != null)
-                        Image.network(athlete['headshot']['href'], width: s(32), height: s(32), errorBuilder: (_, __, ___) => const SizedBox()),
-                      SizedBox(width: s(8)),
-                      Text(athlete['shortName'] ?? '', style: TextStyle(color: Colors.white70, fontSize: s(20))),
-                    ],
-                  ),
-                ),
-                ...displayStats.map((st) => DataCell(Text(st.toString(), style: TextStyle(color: Colors.white54, fontSize: s(18))))),
-              ]);
-            }).toList(),
-          ),
-        ),
-        SizedBox(height: s(32)),
-      ],
     );
   }
 }

@@ -14,7 +14,19 @@ void main() async {
   final url = supabaseUrl.trim();
   final anonKey = supabaseAnonKey.trim();
   if (url.isNotEmpty && anonKey.isNotEmpty) {
-    await Supabase.initialize(url: url, anonKey: anonKey);
+    await Supabase.initialize(
+      url: url,
+      anonKey: anonKey,
+      debug: false,
+    );
+
+    // Verify session recovery
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session != null) {
+      debugPrint('[Main] 👤 Session recovered on startup for: ${session.user.email}');
+    } else {
+      debugPrint('[Main] 👤 No session found on startup');
+    }
   }
 
   // Initialize SettingsService

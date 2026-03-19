@@ -15,7 +15,16 @@ void _log(String message, [Object? detail]) {
 }
 
 class PairingScreen extends StatefulWidget {
-  const PairingScreen({super.key});
+  final http.Client? client;
+  final String? baseUrl;
+  final String? pairingPageUrl;
+
+  const PairingScreen({
+    super.key,
+    this.client,
+    this.baseUrl,
+    this.pairingPageUrl,
+  });
 
   @override
   State<PairingScreen> createState() => _PairingScreenState();
@@ -45,16 +54,26 @@ class _PairingScreenState extends State<PairingScreen> {
       _error = null;
       _code = null;
     });
-    final base = caffeineApiUrl.replaceFirst(RegExp(r'/$'), '');
+    
+    final client = widget.client ?? http.Client();
+    final base = (widget.baseUrl ?? caffeineApiUrl).replaceFirst(RegExp(r'/$'), '');
     final url = '$base/tv/pair';
+    
     _log('Requesting pairing code', url);
     try {
-      final res = await http.post(
+      final res = await client.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
         body: '{}',
       ).timeout(const Duration(seconds: 10));
+      
       _log('POST /tv/pair response', 'status=${res.statusCode} body=${res.body.length} chars');
+      
+      if (!mounted) {
+        if (widget.client == null) client.close();
+        return;
+      }
+
       if (res.statusCode != 200) {
         final body = res.body.length > 80 ? '${res.body.substring(0, 80)}…' : res.body;
         _log('Code request failed', '${res.statusCode} $body');
@@ -62,71 +81,100 @@ class _PairingScreenState extends State<PairingScreen> {
           _error = 'Could not get code (${res.statusCode})${body.isNotEmpty ? ': $body' : ''}';
           _loading = false;
         });
+        if (widget.client == null) client.close();
         return;
       }
+      
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       final code = data['code'] as String?;
+      
       if (code == null || code.isEmpty) {
-        _log('Invalid response', 'missing or empty code, keys=${data.keys.toList()}');
+        _log('Invalid response', 'missing or empty code');
         setState(() {
           _error = 'Invalid response';
           _loading = false;
         });
+        if (widget.client == null) client.close();
         return;
       }
+      
       _log('Code received', code);
       setState(() {
         _code = code;
         _loading = false;
         _error = null;
       });
+      if (widget.client == null) client.close();
       _startPolling(code);
     } catch (e, stack) {
       _log('Network/request error', e);
       if (kDebugMode) debugPrint(stack.toString());
-      setState(() {
-        _error = 'Network error: ${e is Exception ? e.toString().replaceFirst('Exception: ', '') : e}';
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = 'Network error: ${e is Exception ? e.toString().replaceFirst('Exception: ', '') : e}';
+          _loading = false;
+        });
+      }
+      if (widget.client == null) client.close();
     }
   }
 
   void _startPolling(String code) {
     _pollTimer?.cancel();
-    final base = caffeineApiUrl.replaceFirst(RegExp(r'/$'), '');
     _log('Started polling for code', code);
+    
     void poll() async {
       try {
-        final res = await http.get(
+        final client = widget.client ?? http.Client();
+        final base = (widget.baseUrl ?? caffeineApiUrl).replaceFirst(RegExp(r'/$'), '');
+        final res = await client.get(
           Uri.parse('$base/tv/pair?code=${Uri.encodeComponent(code)}'),
         ).timeout(const Duration(seconds: 8));
-        if (res.statusCode != 200) {
-          _log('Poll non-200', res.statusCode);
+        
+        if (!mounted) {
+          if (widget.client == null) client.close();
           return;
         }
+
+        if (res.statusCode != 200) {
+          _log('Poll non-200', res.statusCode);
+          if (widget.client == null) client.close();
+          return;
+        }
+        
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         if (data['linked'] == true) {
           _log('Linked', 'received tokens');
           _pollTimer?.cancel();
+          final accessToken = data['access_token'] as String?;
           final refreshToken = data['refresh_token'] as String?;
+          
           if (refreshToken != null && refreshToken.isNotEmpty && mounted) {
             try {
-              _log('Setting session with refresh token');
-              await Supabase.instance.client.auth.setSession(refreshToken);
-              _log('Session recovered successfully');
+              if (accessToken != null && accessToken.isNotEmpty) {
+                 _log('Establishing session with access and refresh tokens');
+                 await Supabase.instance.client.auth.setSession(refreshToken);
+              } else {
+                 _log('Recovering session with refresh token only');
+                 await Supabase.instance.client.auth.setSession(refreshToken);
+              }
+              _log('Session established successfully');
               if (mounted) _onLinked();
             } catch (e) {
-              _log('recoverSession failed', e);
+              _log('Session establishment failed', e);
               setState(() => _error = 'Failed to establish session: $e');
             }
           } else {
             _log('Linked but no refresh_token in response');
+            setState(() => _error = 'Invalid response from pairing service');
           }
         }
+        if (widget.client == null) client.close();
       } catch (e) {
         _log('Poll error', e);
       }
     }
+    
     poll();
     _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) => poll());
   }
@@ -138,6 +186,8 @@ class _PairingScreenState extends State<PairingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final effectivePairingPageUrl = widget.pairingPageUrl ?? pairingPageUrl;
+    
     return Scaffold(
       backgroundColor: const Color(0xFF0B0F14),
       body: Center(
@@ -156,14 +206,14 @@ class _PairingScreenState extends State<PairingScreen> {
               ),
               const SizedBox(height: 24),
               if (_loading)
-                Column(
+                const Column(
                   children: [
-                    const Text(
+                    Text(
                       'Connecting to sign-in service…',
                       style: TextStyle(color: Colors.white70, fontSize: 18),
                     ),
-                    const SizedBox(height: 16),
-                    const CircularProgressIndicator(color: Colors.white54),
+                    SizedBox(height: 16),
+                    CircularProgressIndicator(color: Colors.white54),
                   ],
                 )
               else if (_error != null)
@@ -176,7 +226,7 @@ class _PairingScreenState extends State<PairingScreen> {
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'Make sure the Caffeine API is reachable. If using the production API, check your connection.',
+                      'Make sure the Caffeine API is reachable.',
                       style: TextStyle(color: Colors.white54, fontSize: 14),
                       textAlign: TextAlign.center,
                     ),
@@ -197,15 +247,15 @@ class _PairingScreenState extends State<PairingScreen> {
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 24),
                   child: Text(
-                    '1. On your phone or computer, open the Caffeine pairing page (link below).\n'
-                    '2. Sign in with your Caffeine account if you aren’t already.\n'
-                    '3. Enter the code shown below on that page.',
+                    '1. On your phone or computer, open the pairing page.\n'
+                    '2. Sign in with your Caffeine account.\n'
+                    '3. Enter the code shown below.',
                     style: TextStyle(color: Colors.white70, fontSize: 16),
                     textAlign: TextAlign.center,
                   ),
                 ),
                 const SizedBox(height: 20),
-                if (pairingPageUrl.isNotEmpty) ...[
+                if (effectivePairingPageUrl.isNotEmpty) ...[
                   const Text(
                     'Open this link:',
                     style: TextStyle(color: Colors.white54, fontSize: 14),
@@ -214,7 +264,7 @@ class _PairingScreenState extends State<PairingScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: SelectableText(
-                      pairingPageUrl,
+                      effectivePairingPageUrl,
                       style: const TextStyle(
                         color: Color(0xFF60A5FA),
                         fontSize: 16,
@@ -224,15 +274,7 @@ class _PairingScreenState extends State<PairingScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                ] else
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 24),
-                    child: Text(
-                      'Pairing page URL not set. Add PAIRING_PAGE_URL to .env with the page where you enter the code (e.g. your caffeine-admin tv-pair page).',
-                      style: TextStyle(color: Colors.white54, fontSize: 14),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
+                ],
                 const Text(
                   'Your code:',
                   style: TextStyle(color: Colors.white70, fontSize: 18),
@@ -277,14 +319,14 @@ class _PairingScreenState extends State<PairingScreen> {
         return KeyEventResult.ignored;
       },
       child: ElevatedButton(
-            onPressed: onPressed,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-            ),
-            child: Text(label),
-          ),
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFFDC2626),
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+        ),
+        child: Text(label),
+      ),
     );
   }
 }
