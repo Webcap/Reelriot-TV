@@ -228,7 +228,71 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
       children: [
         Text('Boxscore', style: TextStyle(color: Colors.white, fontSize: s(32), fontWeight: FontWeight.bold)),
         SizedBox(height: s(24)),
-        ...playersData.map((teamBox) => _buildTeamBoxscore(s, teamBox)),
+        ...playersData.map((teamBox) {
+          final team = teamBox['team'];
+          final statsList = teamBox['statistics'] as List<dynamic>? ?? [];
+          if (statsList.isEmpty) return const SizedBox();
+
+          final firstStat = statsList.first;
+          final headers = (firstStat['names'] as List<dynamic>? ?? []).map((e) => e.toString()).toList();
+          final athletes = firstStat['athletes'] as List<dynamic>? ?? [];
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: s(16)),
+                child: Row(
+                  children: [
+                    Image.network(team['logo'] ?? '', width: s(40), height: s(40), errorBuilder: (_, __, ___) => const Icon(Icons.sports, color: Colors.white24)),
+                    SizedBox(width: s(16)),
+                    Text(team['displayName'] ?? '', style: TextStyle(color: Colors.white70, fontSize: s(28), fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columnSpacing: s(24),
+                  headingRowHeight: s(40),
+                  dataRowMinHeight: s(40),
+                  dataRowMaxHeight: s(48),
+                  columns: [
+                    DataColumn(label: Text('Athlete', style: TextStyle(color: Colors.white38, fontSize: s(18)))),
+                    ...headers.map((h) => DataColumn(label: Text(h, style: TextStyle(color: Colors.white38, fontSize: s(18))))),
+                  ],
+                  rows: athletes.map((a) {
+                    final athlete = a['athlete'];
+                    final stats = a['stats'] as List<dynamic>? ?? [];
+
+                    // Ensure stats length matches headers length
+                    final List<dynamic> adjustedStats = List.from(stats);
+                    while (adjustedStats.length < headers.length) {
+                      adjustedStats.add('-');
+                    }
+                    final displayStats = adjustedStats.take(headers.length).toList();
+
+                    return DataRow(cells: [
+                      DataCell(
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (athlete['headshot'] != null && athlete['headshot']['href'] != null)
+                              Image.network(athlete['headshot']['href'], width: s(32), height: s(32), errorBuilder: (_, __, ___) => const SizedBox()),
+                            SizedBox(width: s(8)),
+                            Text(athlete['shortName'] ?? '', style: TextStyle(color: Colors.white70, fontSize: s(20))),
+                          ],
+                        ),
+                      ),
+                      ...displayStats.map((st) => DataCell(Text(st.toString(), style: TextStyle(color: Colors.white54, fontSize: s(18))))),
+                    ]);
+                  }).toList(),
+                ),
+              ),
+              SizedBox(height: s(32)),
+            ],
+          );
+        }).toList(),
       ],
     );
   }
@@ -238,8 +302,9 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
     final statsList = teamBox['statistics'] as List<dynamic>? ?? [];
     if (statsList.isEmpty) return const SizedBox();
 
-    final headers = (statsList.first['labels'] as List<dynamic>? ?? []).map((e) => e.toString()).toList();
-    final athletes = statsList.first['athletes'] as List<dynamic>? ?? [];
+    final firstStat = statsList.first;
+    final headers = (firstStat['names'] as List<dynamic>? ?? []).map((e) => e.toString()).toList();
+    final athletes = firstStat['athletes'] as List<dynamic>? ?? [];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -268,19 +333,27 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
             rows: athletes.map((a) {
               final athlete = a['athlete'];
               final stats = a['stats'] as List<dynamic>? ?? [];
+              
+              // Ensure stats length matches headers length
+              final List<dynamic> adjustedStats = List.from(stats);
+              while (adjustedStats.length < headers.length) {
+                adjustedStats.add('-');
+              }
+              final displayStats = adjustedStats.take(headers.length).toList();
+
               return DataRow(cells: [
                 DataCell(
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (athlete['headshot'] != null)
+                      if (athlete['headshot'] != null && athlete['headshot']['href'] != null)
                         Image.network(athlete['headshot']['href'], width: s(32), height: s(32), errorBuilder: (_, __, ___) => const SizedBox()),
                       SizedBox(width: s(8)),
                       Text(athlete['shortName'] ?? '', style: TextStyle(color: Colors.white70, fontSize: s(20))),
                     ],
                   ),
                 ),
-                ...stats.map((st) => DataCell(Text(st.toString(), style: TextStyle(color: Colors.white54, fontSize: s(18))))),
+                ...displayStats.map((st) => DataCell(Text(st.toString(), style: TextStyle(color: Colors.white54, fontSize: s(18))))),
               ]);
             }).toList(),
           ),

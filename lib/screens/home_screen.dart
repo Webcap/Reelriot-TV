@@ -43,7 +43,7 @@ class HomeScreenState extends State<HomeScreen> {
       const _Tab(label: 'Home', icon: Icons.home_filled),
     ];
     
-    if (SettingsService().sportsEnabled) {
+    if (true) {
       tabs.add(const _Tab(label: 'Sports', icon: Icons.sports_soccer));
     }
     
@@ -131,7 +131,7 @@ class HomeScreenState extends State<HomeScreen> {
                 children: [
                   const SearchScreen(),
                   const _MainHomeView(),
-                  if (SettingsService().sportsEnabled) const SportsScreen(),
+                  if (true) const SportsScreen(),
                   const SettingsScreen(),
                   FavoritesScreen(key: _favoritesKey),
                 ],

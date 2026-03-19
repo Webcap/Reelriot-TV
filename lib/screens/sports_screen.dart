@@ -170,9 +170,9 @@ class _EspnGame {
 
 class _LeagueData {
   final _League league;
-  final List<_EspnGame> games;
+  List<_EspnGame> games;
 
-  const _LeagueData({required this.league, required this.games});
+  _LeagueData({required this.league, required this.games});
 
   bool get hasGames => games.isNotEmpty;
   bool get hasLive => games.any((g) => g.isLive);
@@ -181,20 +181,28 @@ class _LeagueData {
 // Aggregated Sports fetch
 // ---------------------------------------------------------------------------
 
+Future<Map<String, dynamic>> _fetchWithRetry({int maxRetries = 2}) async {
+  for (int i = 0; i < maxRetries; i++) {
+    final result = await _fetchAggregatedSports();
+    if (result.isNotEmpty) return result;
+    if (i < maxRetries - 1) {
+      await Future.delayed(const Duration(seconds: 2));
+    }
+  }
+  return {};
+}
+
 Future<Map<String, dynamic>> _fetchAggregatedSports() async {
   try {
     final base = caffeineApiUrl.endsWith('/') ? caffeineApiUrl : '$caffeineApiUrl/';
-    // The aggregator handles the date and fetches all leagues in parallel
-    final res = await http.get(Uri.parse('${base}sports/scoreboard/all')).timeout(const Duration(seconds: 15));
-    debugPrint('[SportsScreen] Fetching aggregated sports from: ${base}sports/scoreboard/all');
+    final url = '${base}sports/scoreboard/all';
+    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
     if (res.statusCode != 200) {
-      debugPrint('[SportsScreen] Error fetching aggregated sports: ${res.statusCode}');
       return {};
     }
     final body = jsonDecode(res.body) as Map<String, dynamic>;
-    debugPrint('[SportsScreen] Successfully fetched aggregated sports. Leagues in response: ${body.keys.length}');
     return body;
-  } catch (_) {
+  } catch (e) {
     return {};
   }
 }
@@ -224,8 +232,7 @@ class _SportsScreenState extends State<SportsScreen> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      // Fetch aggregated sports from caffeine-api
-      final allSportsData = await _fetchAggregatedSports();
+      final allSportsData = await _fetchWithRetry(maxRetries: 2);
       
       final leagueData = <_LeagueData>[];
       for (var l in _leagues) {
@@ -239,13 +246,26 @@ class _SportsScreenState extends State<SportsScreen> {
         }
 
         leagueData.add(_LeagueData(league: l, games: games));
-        if (games.isNotEmpty) {
-          debugPrint('[SportsScreen] League ${l.name}: ${games.length} games found.');
-        }
       }
 
-      // Only show leagues that have games today
+      // Sort games within each league: live first, then by date
+      for (var ld in leagueData) {
+        ld.games.sort((a, b) {
+          if (a.isLive && !b.isLive) return -1;
+          if (!a.isLive && b.isLive) return 1;
+          if (a.isCompleted && !b.isCompleted) return 1;
+          if (!a.isCompleted && b.isCompleted) return -1;
+          return (a.startTimeLocal ?? '').compareTo(b.startTimeLocal ?? '');
+        });
+      }
+
+      // Only show leagues that have games today, sort: live games first
       final active = leagueData.where((d) => d.hasGames).toList();
+      active.sort((a, b) {
+        if (a.hasLive && !b.hasLive) return -1;
+        if (!a.hasLive && b.hasLive) return 1;
+        return 0;
+      });
       if (mounted) {
         setState(() {
           _data = active.isEmpty ? leagueData : active;
@@ -253,7 +273,6 @@ class _SportsScreenState extends State<SportsScreen> {
         });
       }
     } catch (e) {
-      debugPrint('[SportsScreen] CRITICAL ERROR IN LOAD: $e');
       if (mounted) setState(() { _loading = false; _error = e.toString(); });
     }
   }
@@ -425,28 +444,39 @@ class _GameCard extends StatefulWidget {
 class _GameCardState extends State<_GameCard> {
   bool _focused = false;
 
+  void _onTap() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SportsGameDetailScreen(
+          sport: widget.league.sport,
+          league: widget.league.league,
+          eventId: widget.game.id,
+          gameName: widget.game.name,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.scale;
     final g = widget.game;
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SportsGameDetailScreen(
-              sport: widget.league.sport,
-              league: widget.league.league,
-              eventId: widget.game.id,
-              gameName: widget.game.name,
-            ),
-          ),
-        );
+    return FocusableActionDetector(
+      onShowFocusHighlight: (v) => setState(() => _focused = v),
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (intent) {
+            _onTap();
+            return null;
+          },
+        ),
       },
-      child: Focus(
-        onFocusChange: (v) => setState(() => _focused = v),
-      child: AnimatedContainer(
+      child: InkWell(
+        onTap: _onTap,
+        borderRadius: BorderRadius.circular(s(16)),
+        child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         width: s(360),
         decoration: BoxDecoration(
@@ -498,9 +528,9 @@ class _GameCardState extends State<_GameCard> {
             ),
           ],
         ),
+        ),
       ),
-    ),
-   );
+    );
   }
 }
 
