@@ -4,6 +4,7 @@ import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'package:caffeine_tv/constants.dart';
 import 'package:caffeine_tv/services/api_service.dart';
 import 'package:caffeine_tv/services/settings_service.dart';
+import 'package:caffeine_tv/services/ad_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -81,6 +82,9 @@ class _SplashScreenState extends State<SplashScreen>
       try {
         final config = await api.loadConfig().timeout(const Duration(seconds: 10));
         SettingsService().updateFromConfig(config);
+        
+        // Apply ad configuration
+        AdService.instance.updateEnabledStatus(SettingsService().adsEnabled);
       } catch (e) {
         debugPrint('[Splash] Config fetch failed: $e');
       }

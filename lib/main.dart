@@ -2,6 +2,7 @@ import 'package:caffeine_tv/env.dart';
 import 'package:caffeine_tv/screens/home_screen.dart';
 import 'package:caffeine_tv/screens/pairing_screen.dart';
 import 'package:caffeine_tv/screens/splash_screen.dart';
+import 'package:caffeine_tv/services/ad_service.dart';
 import 'package:caffeine_tv/services/settings_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -10,6 +11,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: '.env');
+
+  // Initialize AdService
+  await AdService.instance.initialize();
 
   final url = supabaseUrl.trim();
   final anonKey = supabaseAnonKey.trim();

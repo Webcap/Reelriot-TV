@@ -36,9 +36,22 @@ class SettingsService extends ChangeNotifier {
   bool _sportsEnabled = true;
   bool get sportsEnabled => _sportsEnabled;
 
+  bool _adsEnabled = true;
+  bool get adsEnabled => _adsEnabled;
+
   void updateFromConfig(Map<String, dynamic> config) {
-    _sportsEnabled = config['enable_ott'] == true ||
-        config['enable_ott'].toString().toLowerCase() == 'true';
+    // Check various keys for sports availability
+    _sportsEnabled = (config['enable_ott'] == true ||
+            config['enable_ott'].toString().toLowerCase() == 'true') ||
+        (config['sports_enabled'] == true ||
+            config['sports_enabled'].toString().toLowerCase() == 'true');
+
+    // Check various keys for ads availability
+    _adsEnabled = (config['enable_ads'] == true ||
+            config['enable_ads'].toString().toLowerCase() == 'true') ||
+        (config['ads_enabled'] == true ||
+            config['ads_enabled'].toString().toLowerCase() == 'true');
+
     notifyListeners();
   }
 }

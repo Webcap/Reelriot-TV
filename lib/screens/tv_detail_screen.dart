@@ -10,6 +10,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:caffeine_tv/services/bookmark_service.dart';
 import 'package:caffeine_tv/services/watch_history_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:caffeine_tv/services/ad_service.dart';
 
 class TvDetailScreen extends StatefulWidget {
   const TvDetailScreen({super.key, required this.tvId});
@@ -225,8 +226,13 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
     }
   }
 
-  void _playEpisode(int season, int episode, int? episodeId, String? episodeTitle, {Duration? startPosition}) {
+  void _playEpisode(int season, int episode, int? episodeId, String? episodeTitle, {Duration? startPosition}) async {
     if (_show == null) return;
+
+    // Show interstitial ad before navigation
+    await AdService.instance.showInterstitialAd();
+
+    if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => VideoLoaderScreen(

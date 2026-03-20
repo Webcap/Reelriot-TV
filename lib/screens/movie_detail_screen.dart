@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:caffeine_tv/services/bookmark_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:caffeine_tv/services/ad_service.dart';
 
 class MovieDetailScreen extends StatefulWidget {
   const MovieDetailScreen({super.key, required this.movieId});
@@ -69,8 +70,13 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     }
   }
 
-  void _play({Duration? startPosition}) {
+  void _play({Duration? startPosition}) async {
     if (_movie == null) return;
+    
+    // Show interstitial ad before navigation
+    await AdService.instance.showInterstitialAd();
+
+    if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => VideoLoaderScreen(

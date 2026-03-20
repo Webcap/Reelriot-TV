@@ -44,7 +44,7 @@ class HomeScreenState extends State<HomeScreen> {
       const _Tab(label: 'Home', icon: Icons.home_filled),
     ];
     
-    if (true) {
+    if (SettingsService().sportsEnabled) {
       tabs.add(const _Tab(label: 'Sports', icon: Icons.sports_soccer));
     }
     
@@ -132,7 +132,7 @@ class HomeScreenState extends State<HomeScreen> {
                 children: [
                   const SearchScreen(),
                   const _MainHomeView(),
-                  if (true) const SportsScreen(),
+                  if (SettingsService().sportsEnabled) const SportsScreen(),
                   const SettingsScreen(),
                   FavoritesScreen(key: _favoritesKey),
                 ],
@@ -484,29 +484,31 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
       // --- Featured Live Event ---
       MovieListItem? featuredItem;
-      try {
-        final featured = await Supabase.instance.client
-            .from('live_streams')
-            .select('*')
-            .eq('is_featured', true)
-            .maybeSingle();
+      if (SettingsService().sportsEnabled) {
+        try {
+          final featured = await Supabase.instance.client
+              .from('live_streams')
+              .select('*')
+              .eq('is_featured', true)
+              .maybeSingle();
 
-        if (featured != null) {
-          final streamUrl = featured['video_url'] ?? '';
-          final sport = featured['sport'] ?? 'Sports';
-          _liveStreamUrls[-100] = streamUrl;
+          if (featured != null) {
+            final streamUrl = featured['video_url'] ?? '';
+            final sport = featured['sport'] ?? 'Sports';
+            _liveStreamUrls[-100] = streamUrl;
 
-          featuredItem = MovieListItem(
-            id: -100, // Special ID for live events
-            title: featured['title'],
-            overview: "Experience the excitement of $sport live on Caffeine TV. Watch ${featured['title']} now!",
-            posterPath: featured['poster_url'] ?? featured['thumbnail_url'],
-            backdropPath: featured['poster_url'] ?? featured['thumbnail_url'],
-            mediaType: 'live',
-          );
+            featuredItem = MovieListItem(
+              id: -100, // Special ID for live events
+              title: featured['title'],
+              overview: "Experience the excitement of $sport live on Caffeine TV. Watch ${featured['title']} now!",
+              posterPath: featured['poster_url'] ?? featured['thumbnail_url'],
+              backdropPath: featured['poster_url'] ?? featured['thumbnail_url'],
+              mediaType: 'live',
+            );
+          }
+        } catch (e) {
+          debugPrint('[HomeScreen] ❌ Error fetching featured event: $e');
         }
-      } catch (e) {
-        debugPrint('[HomeScreen] ❌ Error fetching featured event: $e');
       }
 
       if (mounted) {

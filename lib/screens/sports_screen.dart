@@ -344,6 +344,29 @@ class _SportsScreenState extends State<SportsScreen> {
       ));
     }
 
+    final hasSports = _featuredEvent != null || (_data != null && _data!.isNotEmpty);
+
+    if (!hasSports) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.sports_soccer_outlined, color: Colors.white24, size: 80),
+            const SizedBox(height: 24),
+            Text(
+              'No Live Events currently available',
+              style: TextStyle(color: Colors.white54, fontSize: s(32), fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Check back later for live games and events.',
+              style: TextStyle(color: Colors.white24, fontSize: s(24)),
+            ),
+          ],
+        ),
+      );
+    }
+
     return SingleChildScrollView(
       padding: EdgeInsets.all(s(48)),
       child: Column(

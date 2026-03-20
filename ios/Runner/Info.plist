@@ -66,5 +66,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>com.startapp.sdk.APPLICATION_ID</key>
+	<string>207904245</string>
 </dict>
 </plist>

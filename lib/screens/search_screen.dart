@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:caffeine_tv/services/ad_service.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -29,6 +30,8 @@ class _SearchScreenState extends State<SearchScreen> {
   void initState() {
     super.initState();
     _loadHistory();
+    // Load banner ad for search screen
+    AdService.instance.loadBannerAd();
   }
 
   @override
@@ -174,6 +177,13 @@ class _SearchScreenState extends State<SearchScreen> {
               ],
             ),
           ),
+          if (AdService.instance.isBannerLoaded)
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 16),
+                child: AdService.instance.getBannerAd(),
+              ),
+            ),
         ],
       ),
     );

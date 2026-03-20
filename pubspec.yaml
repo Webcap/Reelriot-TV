@@ -42,6 +42,7 @@ dependencies:
   flutter_dotenv: ^6.0.0
   shared_preferences: ^2.0.15
   wakelock_plus: ^1.5.1
+  startapp_sdk: 1.0.1
 
 dev_dependencies:
   flutter_test:

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:caffeine_tv/screens/player_screen.dart';
+import 'package:caffeine_tv/services/ad_service.dart';
 
 class SportsGameDetailScreen extends StatefulWidget {
   final String sport;
@@ -63,8 +64,13 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
     }
   }
 
-  void _playLiveStream() {
+  void _playLiveStream() async {
     if (_streamUrl == null) return;
+
+    // Show interstitial ad before navigation
+    await AdService.instance.showInterstitialAd();
+
+    if (!mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
