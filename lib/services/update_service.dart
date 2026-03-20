@@ -1,5 +1,6 @@
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:flutter/foundation.dart';
 
 class UpdateService {
   static final UpdateService _instance = UpdateService._internal();
@@ -15,6 +16,8 @@ class UpdateService {
 
     final isUpdateAvailable = _isVersionHigher(latestVersion, currentVersion);
     
+    debugPrint('[UpdateService] 🔍 Checking update: Current=$currentVersion, Latest=$latestVersion, Available=$isUpdateAvailable');
+
     return UpdateInfo(
       isUpdateAvailable: isUpdateAvailable,
       latestVersion: latestVersion,

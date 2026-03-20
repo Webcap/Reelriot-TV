@@ -18,6 +18,8 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:caffeine_tv/widgets/exit_dialog.dart';
 import 'package:caffeine_tv/services/settings_service.dart';
+import 'package:caffeine_tv/services/update_service.dart';
+import 'package:caffeine_tv/screens/update_screen.dart';
 import 'dart:async';
 import 'dart:ui';
 import 'package:caffeine_tv/widgets/context_menu_dialog.dart';
@@ -349,6 +351,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
   bool _isHeroInView = true;
   StreamSubscription<AuthState>? _authSubscription;
   final Map<int, String> _liveStreamUrls = {};
+  UpdateInfo? _updateInfo;
 
   @override
   void initState() {
@@ -356,6 +359,27 @@ class _MainHomeViewState extends State<_MainHomeView> {
     _scrollController = ScrollController()..addListener(_onScroll);
     _loadContent();
     _listenToAuthChanges();
+  }
+
+  Future<void> _checkForUpdate() async {
+    try {
+      final rawConfig = await _api.loadConfig();
+      final config = CaffeineApiConfig.fromMap(rawConfig);
+      final info = await UpdateService().checkForUpdate(config);
+      debugPrint('[HomeScreen] 🏁 Update check result: available=${info.isUpdateAvailable}, version=${info.latestVersion}, forced=${info.isForced}');
+      if (mounted) {
+        setState(() => _updateInfo = info);
+        // If forced, jump to update screen immediately
+        if (info.isUpdateAvailable && info.isForced) {
+           Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => UpdateScreen(updateInfo: info)),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[HomeScreen] ⚠️ Error checking for update: $e');
+    }
   }
 
   void _listenToAuthChanges() {
@@ -405,6 +429,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     }
     
     try {
+      _checkForUpdate();
       final isTv = _selectedCategory == 'TV Shows';
       
       if (isTv) {
@@ -828,6 +853,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildTopNav(context),
+              _buildUpdateCard(context, s),
               SizedBox(height: s(150)),
               SizedBox(
                 height: s(620), // Fixed height to prevent layout shifts
@@ -1633,6 +1659,120 @@ class _MainHomeViewState extends State<_MainHomeView> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildUpdateCard(BuildContext context, double Function(double) s) {
+    if (_updateInfo == null || !_updateInfo!.isUpdateAvailable) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      children: [
+        SizedBox(height: s(48)),
+        Focus(
+          onKeyEvent: (node, event) {
+            if (event is KeyDownEvent &&
+                (event.logicalKey == LogicalKeyboardKey.enter ||
+                    event.logicalKey == LogicalKeyboardKey.select)) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => UpdateScreen(updateInfo: _updateInfo!)),
+              );
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: Builder(builder: (context) {
+            final focused = Focus.of(context).hasFocus;
+            return GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => UpdateScreen(updateInfo: _updateInfo!)),
+                );
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: double.infinity,
+                padding: EdgeInsets.all(s(24)),
+                decoration: BoxDecoration(
+                  color: focused ? Colors.white : Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(s(16)),
+                  border: Border.all(
+                    color: focused ? Colors.white : Colors.white12,
+                    width: s(2),
+                  ),
+                  boxShadow: focused
+                      ? [
+                          BoxShadow(
+                            color: Colors.amber.withValues(alpha: 0.3),
+                            blurRadius: s(30),
+                            spreadRadius: s(5),
+                          )
+                        ]
+                      : [],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(s(12)),
+                      decoration: BoxDecoration(
+                        color: focused ? Colors.amber.withValues(alpha: 0.2) : Colors.amber.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.system_update_alt,
+                        color: focused ? Colors.amber : Colors.amberAccent,
+                        size: s(32),
+                      ),
+                    ),
+                    SizedBox(width: s(24)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _updateInfo!.isForced ? 'Mandatory Update Required' : 'New Update Available',
+                            style: TextStyle(
+                              color: focused ? Colors.black : Colors.white,
+                              fontSize: s(26),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            'Version ${_updateInfo!.latestVersion} is now available with new features and improvements.',
+                            style: TextStyle(
+                              color: focused ? Colors.black87 : Colors.white60,
+                              fontSize: s(18),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: s(24)),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: s(20), vertical: s(10)),
+                      decoration: BoxDecoration(
+                        color: focused ? Colors.black : Colors.white10,
+                        borderRadius: BorderRadius.circular(s(8)),
+                      ),
+                      child: Text(
+                        'Update Now',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: s(18),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ),
+      ],
     );
   }
 
