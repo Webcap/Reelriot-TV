@@ -30,6 +30,7 @@ class HomeScreenState extends State<HomeScreen> {
 
   int _selectedIndex = 1;
   final GlobalKey<FavoritesScreenState> _favoritesKey = GlobalKey<FavoritesScreenState>();
+  final GlobalKey<_MainHomeViewState> _homeKey = GlobalKey<_MainHomeViewState>();
   late List<FocusNode> _navNodes;
 
   void setIndex(int index) {
@@ -131,7 +132,7 @@ class HomeScreenState extends State<HomeScreen> {
                 index: _selectedIndex,
                 children: [
                   const SearchScreen(),
-                  const _MainHomeView(),
+                  _MainHomeView(key: _homeKey),
                   if (SettingsService().sportsEnabled) const SportsScreen(),
                   const SettingsScreen(),
                   FavoritesScreen(key: _favoritesKey),
@@ -193,7 +194,15 @@ class HomeScreenState extends State<HomeScreen> {
                       if (event is! KeyDownEvent) return KeyEventResult.ignored;
                       if (event.logicalKey == LogicalKeyboardKey.enter ||
                           event.logicalKey == LogicalKeyboardKey.select) {
-                        setState(() => _selectedIndex = i);
+                        if (_selectedIndex == i) {
+                          // Already on this tab, trigger reset if it's Home
+                          if (tab.label == 'Home') {
+                            _homeKey.currentState?.resetToTop();
+                          }
+                        } else {
+                          setState(() => _selectedIndex = i);
+                        }
+
                         // Check if selected tab is favorites (label comparison since index might shift)
                         if (tab.label == 'Favorites') {
                           _favoritesKey.currentState?.refresh();
@@ -252,7 +261,7 @@ class _Tab {
 }
 
 class _MainHomeView extends StatefulWidget {
-  const _MainHomeView();
+  const _MainHomeView({super.key});
 
   @override
   State<_MainHomeView> createState() => _MainHomeViewState();
@@ -342,7 +351,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
           _api.fetchTrendingTv(),
           _api.fetchPopularTv(),
           _api.fetchAiringToday(),
-          _recService.getRecommendations(),
+          _recService.getRecommendations(mediaType: 'tv'),
           _historyService.getRecentlyWatchedShows(),
         ]);
 
@@ -439,7 +448,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
           _historyService.getHistory(mediaType: 'movie'),
           _api.fetchTrendingMovies(),
           _api.fetchPopularMovies(),
-          _recService.getRecommendations(),
+          _recService.getRecommendations(mediaType: 'movie'),
         ]);
 
         final history = results[0] as List<Map<String, dynamic>>;
@@ -594,6 +603,32 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
   void _resetAutoSlide() {
     _startAutoSlide();
+  }
+
+  void resetToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    setState(() {
+      _trendingIndex = 0;
+      if (_trending != null && _trending!.isNotEmpty) {
+        final item = _trending![0];
+        _focusedMovie = MovieDetail(
+          id: item.id,
+          title: item.title,
+          overview: item.overview,
+          posterPath: item.posterPath,
+          backdropPath: item.backdropPath,
+          voteAverage: item.voteAverage,
+          mediaType: item.mediaType,
+        );
+      }
+    });
+    _resetAutoSlide();
   }
 
   @override
@@ -1295,11 +1330,16 @@ class _MainHomeViewState extends State<_MainHomeView> {
   }
 
   Widget _buildAiRecommendationsRow(BuildContext context, double Function(double) s) {
-    if (_aiRecommendations == null || _aiRecommendations!.isEmpty || _aiAnchorTitle == null) {
+    if (_aiRecommendations == null || _aiRecommendations!.isEmpty) {
       return const SizedBox.shrink();
     }
     
-    final title = 'Because you watched $_aiAnchorTitle, we think you might like';
+    final String title;
+    if (_aiAnchorTitle != null && _aiAnchorTitle!.isNotEmpty) {
+      title = 'Because you watched $_aiAnchorTitle, we think you might like';
+    } else {
+      title = 'We think you might like';
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

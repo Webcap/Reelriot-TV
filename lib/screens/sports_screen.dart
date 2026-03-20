@@ -85,6 +85,9 @@ class _EspnGame {
   final String? homeLogo;
   final String? awayScore;
   final String? homeScore;
+  final String? displayClock;
+  final int? period;
+  final DateTime? startTimeUtc;
 
   const _EspnGame({
     required this.id,
@@ -101,6 +104,9 @@ class _EspnGame {
     this.homeLogo,
     this.awayScore,
     this.homeScore,
+    this.displayClock,
+    this.period,
+    this.startTimeUtc,
   });
 
   static String? _formatTime(String? dateStr) {
@@ -162,7 +168,44 @@ class _EspnGame {
       homeLogo: teamLogo(home),
       awayScore: awayS,
       homeScore: homeS,
+      displayClock: statusJson?['displayClock']?.toString(),
+      period: statusJson?['period'] is int ? statusJson!['period'] : (int.tryParse(statusJson?['period']?.toString() ?? '')),
+      startTimeUtc: DateTime.tryParse(json['date']?.toString() ?? ''),
     );
+  }
+
+  String get formattedStatus {
+    if (isLive) {
+      // Trust the ESPN API's natively sport-aware status text (shortDetail/detail)
+      // This correctly handles "Top 3rd" (MLB), "1st - 10:20" (NBA/NFL), "Halftime", etc.
+      return statusText ?? 'LIVE';
+    }
+    if (isCompleted) return 'FINAL';
+    return startTimeLocal ?? 'PRE';
+  }
+
+  /// Special check for "over but still shows live"
+  bool get isActuallyLive {
+    if (!isLive) return false;
+    // If API already says completed, it's not live.
+    if (isCompleted) return false;
+    
+    // Check if statusText says "Final" - sometimes ESPN says "Final" while state is still "in"
+    if (statusText?.toUpperCase().contains('FINAL') ?? false) {
+      return false;
+    }
+
+    // REMOVED: displayClock == '0.0' && period >= 4 check 
+    // This was too aggressive and marked games as FINAL during ties/halftime/etc.
+    // If state is "in" (isLive), we generally trust it.
+    
+    return true;
+  }
+
+  bool get isEffectivelyCompleted {
+    if (isCompleted) return true;
+    if (isLive && !isActuallyLive) return true;
+    return false;
   }
 }
 
@@ -270,11 +313,38 @@ class _SportsScreenState extends State<SportsScreen> {
       // Sort games within each league: live first, then by date
       for (var ld in leagueData) {
         ld.games.sort((a, b) {
-          if (a.isLive && !b.isLive) return -1;
-          if (!a.isLive && b.isLive) return 1;
-          if (a.isCompleted && !b.isCompleted) return 1;
-          if (!a.isCompleted && b.isCompleted) return -1;
-          return (a.startTimeLocal ?? '').compareTo(b.startTimeLocal ?? '');
+          final now = DateTime.now();
+
+          // Group 1: Upcoming soon (within 60 mins of starting)
+          final isAStartingSoon = !a.isActuallyLive && !a.isEffectivelyCompleted &&
+                                a.startTimeUtc != null && a.startTimeUtc!.isAfter(now) &&
+                                a.startTimeUtc!.difference(now).inMinutes <= 60;
+          final isBStartingSoon = !b.isActuallyLive && !b.isEffectivelyCompleted &&
+                                b.startTimeUtc != null && b.startTimeUtc!.isAfter(now) &&
+                                b.startTimeUtc!.difference(now).inMinutes <= 60;
+
+          if (isAStartingSoon != isBStartingSoon) {
+            return isAStartingSoon ? -1 : 1;
+          }
+
+          // Group 2: Actually Live games
+          if (a.isActuallyLive && !b.isActuallyLive) return -1;
+          if (!a.isActuallyLive && b.isActuallyLive) return 1;
+
+          // Group 3: Other scheduled games (not starting soon, not live, not completed)
+          final aSched = !a.isActuallyLive && !a.isEffectivelyCompleted;
+          final bSched = !b.isActuallyLive && !b.isEffectivelyCompleted;
+          if (aSched && !bSched) return -1;
+          if (!aSched && bSched) return 1;
+
+          // Group 4: Completed games last (sorted by start time within their group)
+          final timeA = a.startTimeUtc;
+          final timeB = b.startTimeUtc;
+          if (timeA == null && timeB == null) return 0;
+          if (timeA == null) return 1;
+          if (timeB == null) return -1;
+
+          return timeA.compareTo(timeB);
         });
       }
 
@@ -372,9 +442,21 @@ class _SportsScreenState extends State<SportsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Live Sports', style: TextStyle(color: Colors.white, fontSize: s(56), fontWeight: FontWeight.w900, letterSpacing: -0.5)),
-          SizedBox(height: s(8)),
-          Text(dateStr, style: TextStyle(color: Colors.white38, fontSize: s(24), fontWeight: FontWeight.w500)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Live Sports', style: TextStyle(color: Colors.white, fontSize: s(56), fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+                  SizedBox(height: s(8)),
+                  Text(dateStr, style: TextStyle(color: Colors.white38, fontSize: s(24), fontWeight: FontWeight.w500)),
+                ],
+              ),
+              _RefreshButton(onTap: _load),
+            ],
+          ),
           SizedBox(height: s(40)),
           if (_featuredEvent != null) ...[
             _buildFeaturedCard(s),
@@ -755,20 +837,28 @@ class _GameCardState extends State<_GameCard> {
             // Status row
             Row(
               children: [
-                if (g.isLive) ...[
-                  Container(width: s(8), height: s(8), decoration: const BoxDecoration(color: Color(0xFFDC2626), shape: BoxShape.circle)),
-                  SizedBox(width: s(6)),
-                  Text(g.statusText ?? 'LIVE', style: TextStyle(color: const Color(0xFFDC2626), fontSize: s(14), fontWeight: FontWeight.w700)),
-                ] else if (g.isCompleted) ...[
-                  Text('FINAL', style: TextStyle(color: Colors.white38, fontSize: s(14), fontWeight: FontWeight.w600)),
+                if (g.isActuallyLive) ...[
+                  Container(
+                    width: s(8), height: s(8), 
+                    decoration: const BoxDecoration(color: Color(0xFFDC2626), shape: BoxShape.circle)
+                  ),
+                  SizedBox(width: s(8)),
+                  Text(
+                    g.formattedStatus, 
+                    style: TextStyle(color: const Color(0xFFDC2626), fontSize: s(15), fontWeight: FontWeight.w800, letterSpacing: 0.5)
+                  ),
+                ] else if (g.isEffectivelyCompleted) ...[
+                  Text('FINAL', style: TextStyle(color: Colors.white38, fontSize: s(14), fontWeight: FontWeight.w700)),
+                  if (g.isLive) // Hidden behind "FINAL" but still showing stats as the card does
+                    Padding(
+                      padding: EdgeInsets.only(left: s(8)),
+                      child: Text('(LIVE API)', style: TextStyle(color: Colors.white12, fontSize: s(10))),
+                    ),
                 ] else ...[
                   Icon(Icons.schedule_rounded, color: Colors.white38, size: s(16)),
                   SizedBox(width: s(6)),
-                  Text(g.startTimeLocal ?? '—', style: TextStyle(color: Colors.white54, fontSize: s(14))),
+                  Text(g.startTimeLocal ?? '—', style: TextStyle(color: Colors.white54, fontSize: s(15), fontWeight: FontWeight.w600)),
                 ],
-                const Spacer(),
-                if (g.isLive || g.isCompleted)
-                  Text(g.statusText ?? '', style: TextStyle(color: Colors.white38, fontSize: s(13))),
               ],
             ),
             SizedBox(height: s(16)),
@@ -827,4 +917,67 @@ class _TeamRow extends StatelessWidget {
     decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(s(6))),
     child: Icon(Icons.sports, color: Colors.white38, size: s(20)),
   );
+}
+
+class _RefreshButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _RefreshButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final s = (double v) => (v * width) / 1920;
+
+    return Focus(
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select)) {
+          onTap();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Builder(
+        builder: (context) {
+          final focused = Focus.of(context).hasFocus;
+          return GestureDetector(
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: EdgeInsets.symmetric(horizontal: s(32), vertical: s(16)),
+              decoration: BoxDecoration(
+                color: focused ? Colors.white : Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(s(12)),
+                border: Border.all(
+                  color: focused ? Colors.white : Colors.white24,
+                  width: s(2),
+                ),
+                boxShadow: focused ? [
+                  BoxShadow(color: Colors.white.withOpacity(0.2), blurRadius: s(12), spreadRadius: s(2))
+                ] : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.refresh,
+                    color: focused ? Colors.black : Colors.white70,
+                    size: s(32),
+                  ),
+                  SizedBox(width: s(12)),
+                  Text(
+                    'Refresh',
+                    style: TextStyle(
+                      color: focused ? Colors.black : Colors.white70,
+                      fontWeight: FontWeight.w700,
+                      fontSize: s(24),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
 }

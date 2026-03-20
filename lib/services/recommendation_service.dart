@@ -14,13 +14,14 @@ class RecommendationResult {
 class RecommendationService {
   String get _baseUrl => caffeineApiUrl.replaceFirst(RegExp(r'/$'), '');
 
-  Future<RecommendationResult> getRecommendations({String? situation}) async {
+  Future<RecommendationResult> getRecommendations({String? situation, String? mediaType}) async {
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) return RecommendationResult(items: []);
 
     final url = Uri.parse('$_baseUrl/recommendations').replace(queryParameters: {
       'userId': userId,
       if (situation != null && situation.isNotEmpty) 'situation': situation,
+      if (mediaType != null && mediaType.isNotEmpty) 'mediaType': mediaType,
     });
 
     try {
