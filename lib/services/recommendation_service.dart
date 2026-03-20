@@ -16,10 +16,9 @@ class RecommendationService {
 
   Future<RecommendationResult> getRecommendations({String? situation, String? mediaType}) async {
     final userId = Supabase.instance.client.auth.currentUser?.id;
-    if (userId == null) return RecommendationResult(items: []);
 
     final url = Uri.parse('$_baseUrl/recommendations').replace(queryParameters: {
-      'userId': userId,
+      if (userId != null) 'userId': userId,
       if (situation != null && situation.isNotEmpty) 'situation': situation,
       if (mediaType != null && mediaType.isNotEmpty) 'mediaType': mediaType,
     });

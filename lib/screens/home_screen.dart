@@ -2,6 +2,8 @@ import 'package:caffeine_core/caffeine_core.dart';
 import 'package:caffeine_tv/screens/tv_detail_screen.dart';
 import 'package:caffeine_tv/screens/movie_detail_screen.dart';
 import 'package:caffeine_tv/screens/search_screen.dart';
+import 'package:caffeine_tv/screens/provider_screen.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:caffeine_tv/screens/favorites_screen.dart';
 import 'package:caffeine_tv/screens/settings_screen.dart';
 import 'package:caffeine_tv/screens/sports_screen.dart';
@@ -17,6 +19,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:caffeine_tv/widgets/exit_dialog.dart';
 import 'package:caffeine_tv/services/settings_service.dart';
 import 'dart:async';
+import 'dart:ui';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -275,6 +278,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
   List<MovieListItem>? _trending;
   List<MovieListItem>? _weeklyTrending;
   List<MovieListItem>? _popular;
+  List<MovieListItem>? _topRated;
+  List<MovieListItem>? _upcoming;
+  List<MovieListItem>? _nowPlaying;
   List<MovieListItem>? _airingToday;
   List<MovieListItem>? _aiRecommendations;
   String? _aiAnchorTitle;
@@ -334,6 +340,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
         _trending = null;
         _weeklyTrending = null;
         _popular = null;
+        _topRated = null;
+        _upcoming = null;
+        _nowPlaying = null;
         _airingToday = null;
         _aiRecommendations = null;
         _tvRecommendations = null;
@@ -350,6 +359,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
           _historyService.getHistory(mediaType: 'tv'),
           _api.fetchTrendingTv(),
           _api.fetchPopularTv(),
+          _api.fetchTopRatedTv(),
           _api.fetchAiringToday(),
           _recService.getRecommendations(mediaType: 'tv'),
           _historyService.getRecentlyWatchedShows(),
@@ -358,9 +368,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
         final history = results[0] as List<Map<String, dynamic>>;
         final trending = results[1] as TvListResponse;
         final popular = results[2] as TvListResponse;
-        final airingToday = results[3] as TvListResponse;
-        final aiResult = results[4] as RecommendationResult;
-        final watchingShows = results[5] as List<Map<String, dynamic>>;
+        final topRated = results[3] as TvListResponse;
+        final airingToday = results[4] as TvListResponse;
+        final aiResult = results[5] as RecommendationResult;
+        final watchingShows = results[6] as List<Map<String, dynamic>>;
 
         List<MovieListItem>? tvRecommendations;
         String? tvRecommendationsTitle;
@@ -433,6 +444,14 @@ class _MainHomeViewState extends State<_MainHomeView> {
               overview: t.overview,
             )).toList();
 
+            _topRated = topRated.results.map((t) => MovieListItem(
+              id: t.id,
+              title: t.name,
+              posterPath: t.posterPath,
+              backdropPath: t.backdropPath,
+              overview: t.overview,
+            )).toList();
+
             _airingToday = airingToday.results.map((t) => MovieListItem(
               id: t.id,
               title: t.name,
@@ -448,13 +467,19 @@ class _MainHomeViewState extends State<_MainHomeView> {
           _historyService.getHistory(mediaType: 'movie'),
           _api.fetchTrendingMovies(),
           _api.fetchPopularMovies(),
+          _api.fetchTopRatedMovies(),
+          _api.fetchUpcomingMovies(),
+          _api.fetchNowPlayingMovies(),
           _recService.getRecommendations(mediaType: 'movie'),
         ]);
 
         final history = results[0] as List<Map<String, dynamic>>;
         final trending = results[1] as MovieListResponse;
         final popular = results[2] as MovieListResponse;
-        final aiResult = results[3] as RecommendationResult;
+        final topRated = results[3] as MovieListResponse;
+        final upcoming = results[4] as MovieListResponse;
+        final nowPlaying = results[5] as MovieListResponse;
+        final aiResult = results[6] as RecommendationResult;
 
         final today = DateTime.now();
         bool isReleased(MovieListItem m) {
@@ -491,6 +516,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
               _weeklyTrending = releasedTrending;
             }
             _popular = releasedPopular;
+            _topRated = topRated.results;
+            _upcoming = upcoming.results;
+            _nowPlaying = nowPlaying.results;
           });
           _startAutoSlide();
         }
@@ -911,17 +939,34 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   SizedBox(height: s(96)),
                   _buildRow(context, _tvRecommendationsTitle ?? 'Recommended for You', _tvRecommendations),
                 ],
-                SizedBox(height: s(96)),
-                _buildAiringTodayRow(context, s),
                 if (_watchingShows != null && _watchingShows!.isNotEmpty) ...[
                   SizedBox(height: s(96)),
                   _buildWatchingShowsRow(context, s),
                 ],
+                SizedBox(height: s(96)),
+                _buildRow(context, 'Popular shows this week', _weeklyTrending),
+                SizedBox(height: s(96)),
+                _buildProviderCards(context, s),
+                SizedBox(height: s(96)),
+                _buildAiringTodayRow(context, s),
+                SizedBox(height: s(96)),
+                _buildRow(context, 'Top Rated TV Shows', _topRated),
+                SizedBox(height: s(96)),
+                _buildRow(context, 'Popular TV Shows', _popular),
+              ] else ...[
+                SizedBox(height: s(96)),
+                _buildRow(context, 'Popular movies this week', _weeklyTrending),
+                SizedBox(height: s(96)),
+                _buildRow(context, 'Now Playing', _nowPlaying),
+                SizedBox(height: s(96)),
+                _buildProviderCards(context, s),
+                SizedBox(height: s(96)),
+                _buildRow(context, 'Top Rated Movies', _topRated),
+                SizedBox(height: s(96)),
+                _buildRow(context, 'Upcoming Movies', _upcoming),
+                SizedBox(height: s(96)),
+                _buildRow(context, 'Popular Movies', _popular),
               ],
-              SizedBox(height: s(96)),
-              _buildRow(context, _selectedCategory == 'TV Shows' ? 'Popular shows this week' : 'Popular movies this week', _weeklyTrending),
-              SizedBox(height: s(72)),
-              _buildRow(context, _selectedCategory == 'TV Shows' ? 'Popular TV' : 'Popular Movies', _popular),
               SizedBox(height: s(150)),
             ],
           ),
@@ -983,61 +1028,85 @@ class _MainHomeViewState extends State<_MainHomeView> {
     final s = (double v) => _scale(context, v);
     final categories = ['Movies', 'TV Shows'];
     return Center(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: categories.map((cat) {
-          final isSelected = cat == _selectedCategory;
-          return Focus(
-            onKeyEvent: (node, event) {
-              if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select)) {
-                if (_selectedCategory != cat) {
-                  setState(() {
-                    _selectedCategory = cat;
-                  });
-                  _loadContent();
-                }
-                return KeyEventResult.handled;
-              }
-              return KeyEventResult.ignored;
-            },
-            child: Builder(
-              builder: (context) {
-                final focused = Focus.of(context).hasFocus;
-                return GestureDetector(
-                  onTap: () {
-                    if (_selectedCategory != cat) {
-                      setState(() => _selectedCategory = cat);
-                      _loadContent();
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(s(40)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: s(32), vertical: s(8)),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(s(40)),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.1),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: s(20),
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: categories.map((cat) {
+                final isSelected = cat == _selectedCategory;
+                return Focus(
+                  onKeyEvent: (node, event) {
+                    if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select)) {
+                      if (_selectedCategory != cat) {
+                        setState(() {
+                          _selectedCategory = cat;
+                        });
+                        _loadContent();
+                      }
+                      return KeyEventResult.handled;
                     }
+                    return KeyEventResult.ignored;
                   },
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: s(48)),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          cat,
-                          style: TextStyle(
-                            color: focused ? Colors.white : (isSelected ? Colors.white : Colors.white38),
-                            fontSize: s(48),
-                            fontWeight: isSelected || focused ? FontWeight.w600 : FontWeight.w400,
+                  child: Builder(
+                    builder: (context) {
+                      final focused = Focus.of(context).hasFocus;
+                      return GestureDetector(
+                        onTap: () {
+                          if (_selectedCategory != cat) {
+                            setState(() => _selectedCategory = cat);
+                            _loadContent();
+                          }
+                        },
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: s(48), vertical: s(8)),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                cat,
+                                style: TextStyle(
+                                  color: focused ? Colors.white : (isSelected ? Colors.white : Colors.white38),
+                                  fontSize: s(42),
+                                  fontWeight: isSelected || focused ? FontWeight.w600 : FontWeight.w400,
+                                ),
+                              ),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                margin: EdgeInsets.only(top: s(4)),
+                                height: s(4),
+                                width: focused ? s(64) : (isSelected ? s(42) : 0),
+                                color: focused || isSelected ? const Color(0xFFEC1D24) : Colors.transparent,
+                              ),
+                            ],
                           ),
                         ),
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          margin: EdgeInsets.only(top: s(4)),
-                          height: s(4),
-                          width: focused ? s(64) : (isSelected ? s(42) : 0),
-                          color: focused || isSelected ? const Color(0xFFEC1D24) : Colors.transparent,
-                        ),
-                      ],
-                    ),
+                      );
+                    }
                   ),
                 );
-              }
+              }).toList(),
             ),
-          );
-        }).toList(),
+          ),
+        ),
       ),
     );
   }
@@ -1547,6 +1616,105 @@ class _MainHomeViewState extends State<_MainHomeView> {
           ),
         ),
       ],
+    );
+  }
+  Widget _buildProviderCards(BuildContext context, double Function(double) s) {
+    final providers = [
+      {'name': 'Netflix', 'id': 8, 'logo': 'assets/svg/Netflix.svg', 'isSvg': true, 'color': const Color(0xFFE50914)},
+      {'name': 'Disney+', 'id': 337, 'logo': 'assets/svg/Disney.svg', 'isSvg': true, 'color': const Color(0xFF0063E5)},
+      {'name': 'Prime Video', 'id': 9, 'logo': 'assets/svg/Amazon_Prime_Video_logo.svg', 'isSvg': true, 'color': const Color(0xFF00A8E1)},
+      {'name': 'Max', 'id': 1899, 'logo': 'assets/svg/Max_logo.svg', 'isSvg': true, 'color': const Color(0xFF0047FF)},
+    ];
+
+    return SizedBox(
+      height: s(220),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.zero,
+        itemCount: providers.length,
+        separatorBuilder: (_, __) => SizedBox(width: s(40)),
+        itemBuilder: (context, index) {
+          final p = providers[index];
+          return Focus(
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select)) {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => ProviderScreen(
+                  providerId: p['id'] as int,
+                  providerName: p['name'] as String,
+                )));
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: Builder(
+              builder: (context) {
+                final focused = Focus.of(context).hasFocus;
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => ProviderScreen(
+                      providerId: p['id'] as int,
+                      providerName: p['name'] as String,
+                    )));
+                  },
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(s(24)),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: s(360),
+                        decoration: BoxDecoration(
+                          color: focused 
+                              ? Colors.white.withOpacity(0.15) 
+                              : Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(s(24)),
+                          border: Border.all(
+                            color: focused ? Colors.white : Colors.white10,
+                            width: focused ? s(4) : s(2),
+                          ),
+                          boxShadow: focused ? [
+                            BoxShadow(
+                              color: (p['color'] as Color).withOpacity(0.3),
+                              blurRadius: s(30),
+                              spreadRadius: s(5),
+                            )
+                          ] : [],
+                        ),
+                    padding: EdgeInsets.all(s(20)),
+                    child: Center(
+                      child: p['isSvg'] == true
+                          ? SvgPicture.asset(
+                              p['logo'] as String,
+                              height: s(100),
+                              fit: BoxFit.contain,
+                              placeholderBuilder: (BuildContext context) => Container(
+                                padding: EdgeInsets.all(s(30)),
+                                child: const CircularProgressIndicator(),
+                              ),
+                            )
+                          : Image.network(
+                              'https://image.tmdb.org/t/p/original${p['logo']}',
+                              height: s(100),
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => Text(
+                                p['name'] as String,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: s(36),
+                               fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
     );
   }
 }

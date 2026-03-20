@@ -140,6 +140,16 @@ class ApiService {
     return _fetchMovieList(url);
   }
 
+   Future<core.MovieListResponse> fetchMoviesByProvider(int providerId, {int page = 1, String sortBy = 'popularity.desc'}) async {
+    final url = core.Endpoints.discoverMoviesUrl(tmdbBaseUrl, _tmdbKey, page, language, withProviders: providerId, sortBy: sortBy);
+    return _fetchMovieList(url);
+  }
+
+  Future<core.TvListResponse> fetchTvByProvider(int providerId, {int page = 1, String sortBy = 'popularity.desc'}) async {
+    final url = core.Endpoints.discoverTvUrl(tmdbBaseUrl, _tmdbKey, page, language, withProviders: providerId, sortBy: sortBy);
+    return _fetchTvList(url);
+  }
+
   Future<core.TvListResponse> searchTv(String query) async {
     final url = core.Endpoints.tvSearchUrl(tmdbBaseUrl, _tmdbKey, query, false, language);
     return _fetchTvList(url);
