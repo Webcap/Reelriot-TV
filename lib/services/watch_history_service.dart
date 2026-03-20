@@ -22,6 +22,64 @@ class WatchHistoryService {
     if (user == null) return;
 
     try {
+      final now = DateTime.now().toIso8601String();
+      final elapsed = position.inSeconds;
+      final remaining = (duration - position).inSeconds;
+
+      String? title;
+      String? posterPath;
+      String? backdropPath;
+      String? overview;
+      int? id;
+      int? releaseYear;
+
+      if (isMovie) {
+        if (item is MovieDetail) {
+          id = item.id;
+          title = item.title;
+          posterPath = item.posterPath;
+          backdropPath = item.backdropPath;
+          overview = item.overview;
+          releaseYear = item.releaseDate != null && item.releaseDate!.length >= 4 
+              ? int.tryParse(item.releaseDate!.substring(0, 4)) 
+              : null;
+        } else if (item is MovieListItem) {
+          id = item.id;
+          title = item.title;
+          posterPath = item.posterPath;
+          backdropPath = item.backdropPath;
+          overview = item.overview;
+          releaseYear = item.releaseDate != null && item.releaseDate!.length >= 4 
+              ? int.tryParse(item.releaseDate!.substring(0, 4)) 
+              : null;
+        } else {
+          debugPrint('[WatchHistory] ⚠️ Item is not MovieDetail or MovieListItem, cannot save movie progress.');
+          return;
+        }
+      } else {
+        if (item is Map) {
+          debugPrint('[WatchHistory] ℹ️ Item is a Map (likely Live Stream), skipping watch history for now.');
+          return;
+        }
+        
+        if (item is TvShowDetail) {
+          id = item.id;
+          title = item.name;
+          posterPath = item.posterPath;
+          backdropPath = item.backdropPath;
+          overview = item.overview;
+        } else if (item is MovieListItem) {
+          id = item.id;
+          title = item.title;
+          posterPath = item.posterPath;
+          backdropPath = item.backdropPath;
+          overview = item.overview;
+        } else {
+           debugPrint('[WatchHistory] ⚠️ Item is not TvShowDetail or MovieListItem, cannot save show progress.');
+           return;
+        }
+      }
+
       // 1. Fetch ALL existing rows for this user
       final res = await _supabase
           .from('watch_history')
@@ -36,66 +94,43 @@ class WatchHistoryService {
         for (var row in res) {
           movies.addAll(row['movies'] as List? ?? []);
           tvShows.addAll(row['tv_shows'] as List? ?? []);
-          // Collect IDs if they exist to clean up later
           if (row['id'] != null) rowIdsToDelete.add(row['id']);
         }
       }
 
-      // 2. Prepare the item and deduplicate lists
-      final now = DateTime.now().toIso8601String();
-      final elapsed = position.inSeconds;
-      final remaining = (duration - position).inSeconds;
-      
       if (isMovie) {
-        if (item is! MovieDetail) {
-          debugPrint('[WatchHistory] ⚠️ Item is not MovieDetail, cannot save movie progress.');
-          return;
-        }
-        final movie = item;
-        movies.removeWhere((m) => (m as Map)['id'] == movie.id);
+        movies.removeWhere((m) => (m as Map)['id'] == id);
         movies.insert(0, {
-          'id': movie.id,
-          'title': movie.title,
-          'poster_path': movie.posterPath,
-          'backdrop_path': movie.backdropPath,
-          'overview': movie.overview,
-          'release_year': movie.releaseDate != null && movie.releaseDate!.length >= 4 
-              ? int.tryParse(movie.releaseDate!.substring(0, 4)) 
-              : null,
+          'id': id,
+          'title': title,
+          'poster_path': posterPath,
+          'backdrop_path': backdropPath,
+          'overview': overview,
+          'release_year': releaseYear,
           'elapsed': elapsed,
           'remaining': remaining,
           'date_watched': now,
         });
       } else {
-        // Handle TV Show or other items passed as Map
-        if (item is Map) {
-          debugPrint('[WatchHistory] ℹ️ Item is a Map (likely Live Stream), skipping watch history for now.');
-          // You could implement live stream history here if desired.
-          return;
-        }
-
-        if (item is! TvShowDetail) {
-           debugPrint('[WatchHistory] ⚠️ Item is not TvShowDetail, cannot save show progress.');
-           return;
-        }
-        
-        final show = item;
         tvShows.removeWhere((t) {
           final m = t as Map;
-          return m['id'] == show.id && m['season_num'] == season && m['episode_num'] == episode;
+          final currentId = m['series_id'] ?? m['id'];
+          return currentId == id && 
+                 m['season_num'] == season && 
+                 m['episode_num'] == episode;
         });
         tvShows.insert(0, {
-          'id': episodeId ?? show.id,
-          'series_name': show.name,
+          'id': episodeId ?? id,
+          'series_name': title,
           'episode_name': episodeName,
-          'poster_path': show.posterPath,
-          'backdrop_path': show.backdropPath,
+          'poster_path': posterPath,
+          'backdrop_path': backdropPath,
           'season_num': season,
           'episode_num': episode,
           'elapsed': elapsed,
           'remaining': remaining,
           'date_added': now,
-          'series_id': show.id,
+          'series_id': id,
         });
       }
 
@@ -147,6 +182,73 @@ class WatchHistoryService {
       debugPrint('[WatchHistory] ✅ Progress saved & consolidated for ${isMovie ? 'Movie' : 'TV Show'}');
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Error saving progress: $e');
+    }
+  }
+
+  Future<void> markAsComplete({
+    required dynamic item,
+    required bool isMovie,
+    int? season,
+    int? episode,
+    int? episodeId,
+    String? episodeName,
+  }) async {
+    // We use a dummy 1-hour duration to mark as fully watched
+    const duration = Duration(hours: 1);
+    await saveProgress(
+      item: item,
+      isMovie: isMovie,
+      season: season,
+      episode: episode,
+      episodeId: episodeId,
+      episodeName: episodeName,
+      position: duration,
+      duration: duration,
+    );
+  }
+
+  Future<void> removeFromHistory({
+    required int id,
+    required bool isMovie,
+    int? season,
+    int? episode,
+  }) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      final res = await _supabase.from('watch_history').select().eq('user_id', user.id);
+      if (res.isEmpty) return;
+
+      List<dynamic> movies = [];
+      List<dynamic> tvShows = [];
+      for (var row in res) {
+        movies.addAll(row['movies'] as List? ?? []);
+        tvShows.addAll(row['tv_shows'] as List? ?? []);
+      }
+
+      if (isMovie) {
+        movies.removeWhere((m) => (m as Map)['id'] == id);
+      } else {
+        tvShows.removeWhere((t) {
+          final m = t as Map;
+          final currentId = m['series_id'] ?? m['id'];
+          if (season != null && episode != null) {
+            return currentId == id && m['season_num'] == season && m['episode_num'] == episode;
+          }
+          return currentId == id;
+        });
+      }
+
+      await _supabase.from('watch_history').upsert({
+        'user_id': user.id,
+        'movies': movies,
+        'tv_shows': tvShows,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+      debugPrint('[WatchHistory] 🗑️ Removed $id from history');
+    } catch (e) {
+      debugPrint('[WatchHistory] ❌ Error removing from history: $e');
     }
   }
 

@@ -70,14 +70,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
     });
   }
 
-  Future<void> _saveCurrentProgress() async {
+  Future<void> _saveCurrentProgress({bool isFinished = false}) async {
     if (_controller.videoPlayerController == null) return;
     
-    final position = _controller.videoPlayerController!.value.position;
-    final duration = _controller.videoPlayerController!.value.duration;
-    
+    final duration = _controller.videoPlayerController!.value.duration ?? Duration.zero;
     if (duration == Duration.zero) return;
 
+    final position = isFinished 
+        ? duration 
+        : _controller.videoPlayerController!.value.position;
+    
     await _historyService.saveProgress(
       item: widget.item,
       isMovie: widget.isMovie,
@@ -86,7 +88,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       episodeId: widget.episodeId,
       episodeName: widget.episodeName,
       position: position,
-      duration: duration ?? Duration.zero,
+      duration: duration,
     );
   }
 
@@ -141,11 +143,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     debugPrint('[PlayerScreen] 📺 Playing: ${widget.url}');
     debugPrint('[PlayerScreen] 🔗 Referrer: ${widget.referrer ?? _getReferer(widget.url)}');
-
+ 
     _controller.addEventsListener((event) async {
       if (event.betterPlayerEventType == BetterPlayerEventType.finished) {
-        debugPrint('[PlayerScreen] 🎉 Video finished, saving final progress and closing');
-        await _saveCurrentProgress();
+        debugPrint('[PlayerScreen] 🎉 Video finished, saving final progress (100%) and closing');
+        await _saveCurrentProgress(isFinished: true);
         if (mounted) Navigator.of(context).pop();
       }
     });

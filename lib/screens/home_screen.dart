@@ -20,6 +20,7 @@ import 'package:caffeine_tv/widgets/exit_dialog.dart';
 import 'package:caffeine_tv/services/settings_service.dart';
 import 'dart:async';
 import 'dart:ui';
+import 'package:caffeine_tv/widgets/context_menu_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -273,6 +274,58 @@ class _MainHomeView extends StatefulWidget {
 class _MainHomeViewState extends State<_MainHomeView> {
   final ApiService _api = ApiService();
   final WatchHistoryService _historyService = WatchHistoryService();
+
+  void _showItemContextMenu({
+    required dynamic item,
+    required bool isMovie,
+    int? season,
+    int? episode,
+    int? episodeId,
+    String? episodeName,
+  }) {
+    final s = (double v) => _scale(context, v);
+    final title = isMovie 
+        ? (item is MovieDetail ? item.title : (item is MovieListItem ? item.title : (item as Map)['title'] ?? 'Movie'))
+        : (item is TvShowDetail ? item.name : (item is MovieListItem ? item.title : (item as Map)['title'] ?? 'TV Show'));
+
+    ContextMenuDialog.show(
+      context: context,
+      title: title,
+      s: s,
+      items: [
+        ContextMenuItem(
+          label: 'Mark as Completed',
+          icon: Icons.check_circle_outline,
+          onTap: () async {
+            await _historyService.markAsComplete(
+              item: item,
+              isMovie: isMovie,
+              season: season,
+              episode: episode,
+              episodeId: episodeId,
+              episodeName: episodeName,
+            );
+            _loadContent(quiet: true);
+          },
+        ),
+        ContextMenuItem(
+          label: 'Remove from History',
+          icon: Icons.delete_outline,
+          color: Colors.redAccent,
+          onTap: () async {
+            final id = item is MovieDetail ? item.id : (item is MovieListItem ? item.id : (item is TvShowDetail ? item.id : (item as Map)['media_id'] ?? item['id'] ?? item['mediaId']));
+            await _historyService.removeFromHistory(
+              id: id,
+              isMovie: isMovie,
+              season: season,
+              episode: episode,
+            );
+            _loadContent(quiet: true);
+          },
+        ),
+      ],
+    );
+  }
   String _selectedCategory = 'Movies';
   MovieDetail? _focusedMovie;
   List<MovieListItem>? _trending;
@@ -1267,6 +1320,14 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   posterPath: h['poster_path'],
                   title: h['title'] ?? '',
                   onFocus: () => _updateFocusedMovie(mediaId, isMovie: isMovie),
+                  onLongPress: () => _showItemContextMenu(
+                    item: h,
+                    isMovie: isMovie,
+                    season: h['season'],
+                    episode: h['episode'],
+                    episodeId: h['id'],
+                    episodeName: h['episode_name'],
+                  ),
                   onTap: () async {
                     final positionMs = h['position_ms'] as int? ?? 0;
                     final durationMs = h['duration_ms'] as int? ?? 0;
@@ -1378,6 +1439,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   posterPath: m.posterPath,
                   title: m.title ?? '',
                   onFocus: () => _updateFocusedMovie(m.id),
+                  onLongPress: () => _showItemContextMenu(item: m, isMovie: false),
                   onTap: () async {
                     await Navigator.of(context).push(
                       MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: m.id)),
@@ -1464,6 +1526,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   posterPath: m.posterPath,
                   title: m.title ?? '',
                   onFocus: () => _updateFocusedMovie(m.id),
+                  onLongPress: () => _showItemContextMenu(
+                    item: m, 
+                    isMovie: _selectedCategory != 'TV Shows',
+                  ),
                   onTap: () async {
                     if (_selectedCategory == 'TV Shows') {
                       await Navigator.of(context).push(
@@ -1514,6 +1580,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   posterPath: show['poster_path'],
                   title: show['name'] ?? '',
                   onFocus: () => _updateFocusedMovie(show['id'], isMovie: false),
+                  onLongPress: () => _showItemContextMenu(item: show, isMovie: false),
                   onTap: () async {
                     await Navigator.of(context).push(
                       MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: show['id'])),
@@ -1598,6 +1665,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   posterPath: m.posterPath,
                   title: m.title ?? '',
                   onFocus: () => _updateFocusedMovie(m.id),
+                  onLongPress: () => _showItemContextMenu(
+                    item: m, 
+                    isMovie: _selectedCategory != 'TV Shows',
+                  ),
                   onTap: () async {
                     if (_selectedCategory == 'TV Shows') {
                       await Navigator.of(context).push(
