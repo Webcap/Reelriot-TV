@@ -60,6 +60,13 @@ class ApiService {
     return core.MovieDetail.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
+  Future<core.MovieCollection> fetchMovieCollection(int collectionId) async {
+    final url = core.Endpoints.movieCollectionUrl(tmdbBaseUrl, _tmdbKey, collectionId, language);
+    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) throw Exception('Failed to load movie collection');
+    return core.MovieCollection.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
   Future<core.TvListResponse> fetchPopularTv() async {
     final url = core.Endpoints.popularTvUrl(tmdbBaseUrl, _tmdbKey, language);
     return _fetchTvList(url);

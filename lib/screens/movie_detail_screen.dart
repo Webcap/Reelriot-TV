@@ -32,6 +32,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   Duration? _movieHistory;
   bool _isWatched = false;
   final WatchHistoryService _historyService = WatchHistoryService();
+  MovieCollection? _collection;
 
   @override
   void initState() {
@@ -56,6 +57,19 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
           }
         }),
       ]);
+
+      // Fetch collection if it exists
+      if (m.belongsToCollection != null) {
+        final collectionId = m.belongsToCollection!['id'] as int;
+        try {
+          final col = await _api.fetchMovieCollection(collectionId);
+          if (mounted) {
+            setState(() => _collection = col);
+          }
+        } catch (e) {
+          debugPrint('[MovieDetail] ⚠️ Failed to load collection: $e');
+        }
+      }
 
       if (mounted) {
         setState(() {
@@ -254,125 +268,162 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Focus(
-                            descendantsAreFocusable: false,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  m.title?.toUpperCase() ?? 'MOVIE',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: s(100),
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: s(-2),
-                                    height: 0.9,
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(s(24)),
+                            child: BackdropFilter(
+                              filter: ColorFilter.mode(Colors.black.withOpacity(0.35), BlendMode.darken),
+                              child: Container(
+                                padding: EdgeInsets.all(s(40)),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.05),
+                                  borderRadius: BorderRadius.circular(s(24)),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.12),
+                                    width: s(1.5),
                                   ),
                                 ),
-                                SizedBox(height: s(24)),
-                                Row(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                     Container(
-                                       padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
-                                       decoration: BoxDecoration(
-                                         color: const Color(0xFFEC1D24),
-                                         borderRadius: BorderRadius.circular(s(4)),
-                                       ),
-                                       child: Text(
-                                         'IMDb ${(m.voteAverage ?? 0.0).toStringAsFixed(1)}',
-                                         style: TextStyle(
-                                           color: Colors.white,
-                                           fontSize: s(18),
-                                           fontWeight: FontWeight.bold,
-                                         ),
-                                       ),
-                                     ),
-                                     if (_isWatched) ...[
-                                       SizedBox(width: s(24)),
-                                       Container(
-                                         padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
-                                         decoration: BoxDecoration(
-                                           color: Colors.green.withOpacity(0.2),
-                                           borderRadius: BorderRadius.circular(s(4)),
-                                           border: Border.all(color: Colors.green, width: s(1)),
-                                         ),
-                                         child: Row(
-                                           mainAxisSize: MainAxisSize.min,
-                                           children: [
-                                             Icon(Icons.check_circle, color: Colors.green, size: s(18)),
-                                             SizedBox(width: s(8)),
-                                             Text(
-                                               'WATCHED',
-                                               style: TextStyle(
-                                                 color: Colors.green,
-                                                 fontSize: s(16),
-                                                 fontWeight: FontWeight.bold,
+                                    Focus(
+                                      descendantsAreFocusable: false,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            m.title?.toUpperCase() ?? 'MOVIE',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: s(100),
+                                              fontWeight: FontWeight.w900,
+                                              letterSpacing: s(-2),
+                                              height: 0.9,
+                                              shadows: [
+                                                Shadow(
+                                                  color: Colors.black.withOpacity(0.5),
+                                                  offset: Offset(0, s(4)),
+                                                  blurRadius: s(10),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          SizedBox(height: s(24)),
+                                          Row(
+                                            children: [
+                                               Container(
+                                                 padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+                                                 decoration: BoxDecoration(
+                                                   color: const Color(0xFFEC1D24),
+                                                   borderRadius: BorderRadius.circular(s(4)),
+                                                 ),
+                                                 child: Text(
+                                                   'IMDb ${(m.voteAverage ?? 0.0).toStringAsFixed(1)}',
+                                                   style: TextStyle(
+                                                     color: Colors.white,
+                                                     fontSize: s(18),
+                                                     fontWeight: FontWeight.bold,
+                                                   ),
+                                                 ),
                                                ),
-                                             ),
-                                           ],
-                                         ),
-                                       ),
-                                     ],
-                                    SizedBox(width: s(24)),
-                                    Text(
-                                      m.releaseDate?.split('-').first ?? '',
-                                      style: TextStyle(color: Colors.white70, fontSize: s(20)),
-                                    ),
-                                    if (m.runtime != null) ...[
-                                      SizedBox(width: s(24)),
-                                      Text(
-                                        '${m.runtime} m',
-                                        style: TextStyle(color: Colors.white70, fontSize: s(20)),
+                                               if (_isWatched) ...[
+                                                 SizedBox(width: s(24)),
+                                                 Container(
+                                                   padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+                                                   decoration: BoxDecoration(
+                                                     color: Colors.green.withOpacity(0.15),
+                                                     borderRadius: BorderRadius.circular(s(6)),
+                                                     border: Border.all(color: Colors.green.withOpacity(0.5), width: s(1.5)),
+                                                     boxShadow: [
+                                                       BoxShadow(
+                                                         color: Colors.green.withOpacity(0.1),
+                                                         blurRadius: s(8),
+                                                         spreadRadius: s(2),
+                                                       ),
+                                                     ],
+                                                   ),
+                                                   child: Row(
+                                                     mainAxisSize: MainAxisSize.min,
+                                                     children: [
+                                                       Icon(Icons.check_circle, color: Colors.green, size: s(18)),
+                                                       SizedBox(width: s(8)),
+                                                       Text(
+                                                         'WATCHED',
+                                                         style: TextStyle(
+                                                           color: Colors.green,
+                                                           fontSize: s(16),
+                                                           fontWeight: FontWeight.bold,
+                                                           letterSpacing: s(1),
+                                                         ),
+                                                       ),
+                                                     ],
+                                                   ),
+                                                 ),
+                                               ],
+                                              SizedBox(width: s(24)),
+                                              Text(
+                                                m.releaseDate?.split('-').first ?? '',
+                                                style: TextStyle(color: Colors.white70, fontSize: s(20)),
+                                              ),
+                                              if (m.runtime != null) ...[
+                                                SizedBox(width: s(24)),
+                                                Text(
+                                                  '${m.runtime} m',
+                                                  style: TextStyle(color: Colors.white70, fontSize: s(20)),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                          SizedBox(height: s(32)),
+                                          SizedBox(
+                                            width: s(850),
+                                            child: Text(
+                                              m.overview ?? '',
+                                              style: TextStyle(
+                                                color: Colors.white.withOpacity(0.85),
+                                                fontSize: s(22),
+                                                fontWeight: FontWeight.w400,
+                                                height: 1.6,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ],
+                                    ),
+                                    SizedBox(height: s(48)),
+                                    Row(
+                                      children: [
+                                        _ActionBtn(
+                                            label: _movieHistory != null && _movieHistory! > Duration.zero ? 'CONTINUE' : 'WATCH NOW',
+                                            icon: Icons.play_arrow,
+                                            isPrimary: true,
+                                            onTap: _handlePlay,
+                                            s: s,
+                                            autofocus: true,
+                                            progress: (_movieHistory != null && _movie?.id != null) 
+                                                ? (_movieHistory!.inSeconds / 7200).clamp(0.0, 1.0) 
+                                                : null,
+                                          ),
+                                        SizedBox(width: s(24)),
+                                        _ActionBtn(
+                                          label: _isFavorite ? 'FAVORITED' : 'FAVORITE',
+                                          icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
+                                          isPrimary: false,
+                                          onTap: _toggleFavorite,
+                                          s: s,
+                                        ),
+                                      ],
+                                    ),
                                   ],
                                 ),
-                                SizedBox(height: s(32)),
-                                SizedBox(
-                                  width: s(850),
-                                  child: Text(
-                                    m.overview ?? '',
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.8),
-                                      fontSize: s(22),
-                                      fontWeight: FontWeight.w400,
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          SizedBox(height: s(48)),
-                          Row(
-                            children: [
-                              _ActionBtn(
-                                  label: _movieHistory != null && _movieHistory! > Duration.zero ? 'CONTINUE' : 'WATCH NOW',
-                                  icon: Icons.play_arrow,
-                                  isPrimary: true,
-                                  onTap: _handlePlay,
-                                  s: s,
-                                  autofocus: true,
-                                  progress: (_movieHistory != null && _movie?.id != null) 
-                                      ? (_movieHistory!.inSeconds / 7200).clamp(0.0, 1.0) // Mock total for now or fetch?
-                                      : null,
-                                ),
-                              SizedBox(width: s(24)),
-                              _ActionBtn(
-                                label: _isFavorite ? 'FAVORITED' : 'FAVORITE',
-                                icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
-                                isPrimary: false,
-                                onTap: _toggleFavorite,
-                                s: s,
                               ),
-                            ],
+                            ),
                           ),
                           if (_credits != null && _credits!.cast.isNotEmpty) ...[
                              SizedBox(height: s(64)),
                              _SectionHeader(title: 'CAST', s: s),
                              SizedBox(height: s(24)),
                              SizedBox(
-                               height: s(220),
+                               height: s(260),
                                child: ListView.builder(
                                  scrollDirection: Axis.horizontal,
                                  itemCount: _credits!.cast.length,
@@ -405,40 +456,47 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                            },
                                            child: AnimatedContainer(
                                              duration: const Duration(milliseconds: 200),
-                                             width: s(160),
+                                             width: s(180),
                                              margin: EdgeInsets.only(right: s(32)),
                                              decoration: BoxDecoration(
-                                               borderRadius: BorderRadius.circular(s(16)),
+                                               borderRadius: BorderRadius.circular(s(20)),
                                                border: Border.all(
-                                                 color: focused ? Colors.white : Colors.white.withOpacity(0.05),
+                                                 color: focused ? Colors.white : Colors.white.withOpacity(0.12),
                                                  width: s(2),
                                                ),
-                                               color: focused ? Colors.white.withOpacity(0.1) : Colors.transparent,
+                                               color: focused ? Colors.white.withOpacity(0.25) : Colors.white.withOpacity(0.05),
+                                               boxShadow: focused ? [
+                                                 BoxShadow(
+                                                   color: Colors.black.withOpacity(0.3),
+                                                   blurRadius: s(15),
+                                                   spreadRadius: s(2),
+                                                 )
+                                               ] : [],
                                              ),
-                                             padding: EdgeInsets.all(s(8)),
+                                             padding: EdgeInsets.all(s(12)),
                                              child: Column(
                                                children: [
                                                  ClipOval(
                                                    child: actor.profilePath != null
                                                        ? CachedNetworkImage(
                                                            imageUrl: '$tmdbImageBaseUrl/w185${actor.profilePath}',
-                                                           width: s(110),
-                                                           height: s(110),
+                                                           width: s(120),
+                                                           height: s(120),
                                                            fit: BoxFit.cover,
                                                          )
                                                        : Container(
-                                                           width: s(110),
-                                                           height: s(110),
+                                                           width: s(120),
+                                                           height: s(120),
                                                            color: Colors.white12,
                                                            child: Icon(Icons.person, color: Colors.white54, size: s(48)),
                                                          ),
                                                  ),
-                                                 SizedBox(height: s(12)),
+                                                 SizedBox(height: s(16)),
                                                  Text(
                                                    actor.name,
                                                    style: TextStyle(
-                                                     color: focused ? Colors.white : Colors.white.withOpacity(0.8),
-                                                     fontSize: s(16),
+                                                     color: focused ? Colors.white : Colors.white.withOpacity(0.9),
+                                                     fontSize: s(18),
                                                      fontWeight: focused ? FontWeight.bold : FontWeight.w500,
                                                    ),
                                                    textAlign: TextAlign.center,
@@ -447,6 +505,37 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                                  ),
                                                ],
                                              ),
+                                           ),
+                                         );
+                                       },
+                                     ),
+                                   );
+                                 },
+                               ),
+                             ),
+                           ],
+                           if (_collection != null && _collection!.parts.length > 1) ...[
+                             SizedBox(height: s(64)),
+                             _SectionHeader(title: 'PART OF ${_collection!.name?.toUpperCase() ?? 'COLLECTION'}', s: s),
+                             SizedBox(height: s(24)),
+                             SizedBox(
+                               height: s(380),
+                               child: ListView.builder(
+                                 scrollDirection: Axis.horizontal,
+                                 itemCount: _collection!.parts.length,
+                                 itemBuilder: (context, index) {
+                                   final part = _collection!.parts[index];
+                                   // Skip current movie from the list if desired, but typically we show all parts
+                                   return Padding(
+                                     padding: EdgeInsets.only(right: s(24)),
+                                     child: PosterCard(
+                                       posterPath: part.posterPath,
+                                       title: part.title ?? '',
+                                       onTap: () {
+                                         if (part.id == widget.movieId) return; // Already on this movie
+                                         Navigator.of(context).pushReplacement(
+                                           MaterialPageRoute(
+                                             builder: (context) => MovieDetailScreen(movieId: part.id),
                                            ),
                                          );
                                        },
@@ -575,10 +664,20 @@ class _ActionBtnState extends State<_ActionBtn> {
                   padding: EdgeInsets.symmetric(horizontal: widget.s(40), vertical: widget.s(16)),
                   decoration: BoxDecoration(
                     color: widget.isPrimary 
-                        ? (focused ? Colors.white : const Color(0xFFEC1D24))
-                        : (focused ? Colors.white.withOpacity(0.2) : Colors.white10),
-                    borderRadius: BorderRadius.circular(widget.s(8)),
-                    border: widget.isPrimary ? null : Border.all(color: Colors.white24, width: widget.s(1)),
+                        ? (focused ? Colors.white : const Color(0xFFEC1D24).withOpacity(0.8))
+                        : (focused ? Colors.white.withOpacity(0.25) : Colors.white.withOpacity(0.08)),
+                    borderRadius: BorderRadius.circular(widget.s(12)),
+                    border: Border.all(
+                      color: focused ? Colors.white : Colors.white.withOpacity(0.15),
+                      width: widget.s(1.5),
+                    ),
+                    boxShadow: focused ? [
+                      BoxShadow(
+                        color: (widget.isPrimary ? const Color(0xFFEC1D24) : Colors.white).withOpacity(0.3),
+                        blurRadius: widget.s(15),
+                        spreadRadius: widget.s(2),
+                      )
+                    ] : [],
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,

@@ -150,7 +150,7 @@ class WatchHistoryService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getHistory({String? mediaType}) async {
+  Future<List<Map<String, dynamic>>> getHistory({String? mediaType, bool includeCompleted = false}) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return [];
 
@@ -187,8 +187,6 @@ class WatchHistoryService {
       });
 
       // Final deduplication: Keep only the absolute latest entry for each series or movie.
-      // This ensures that if the LATEST episode of a series is finished, we don't 
-      // fall back to suggesting a previous unfinished episode in 'Continue Watching'.
       final seenSeriesIds = <int>{};
       final seenMovieIds = <int>{};
       
@@ -210,8 +208,8 @@ class WatchHistoryService {
         }
       }
 
-      // Filter out completed (>= 90% like mobile)
-      final items = dedupedItems.where((item) {
+      // Filter out completed (>= 90% like mobile) unless includeCompleted is true
+      final items = includeCompleted ? dedupedItems : dedupedItems.where((item) {
         final m = item as Map;
         final elapsed = m['elapsed'] as int? ?? 0;
         final remaining = m['remaining'] as int? ?? 0;

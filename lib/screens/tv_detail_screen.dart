@@ -79,7 +79,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
     try {
       final results = await Future.wait([
         _api.fetchSeasonDetail(widget.tvId, num),
-        _historyService.getHistory(mediaType: 'tv'),
+        _historyService.getHistory(mediaType: 'tv', includeCompleted: true),
       ]);
 
       final detail = results[0] as TvSeasonDetailResponse;
@@ -336,87 +336,111 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (show.posterPath != null && show.posterPath!.isNotEmpty)
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(s(16)),
-                                    child: CachedNetworkImage(
-                                      imageUrl: '$tmdbImageBaseUrl/w500${show.posterPath}',
-                                      width: s(280),
-                                      height: s(420),
-                                      fit: BoxFit.cover,
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(s(24)),
+                              child: BackdropFilter(
+                                filter: ColorFilter.mode(Colors.black.withOpacity(0.35), BlendMode.darken),
+                                child: Container(
+                                  padding: EdgeInsets.all(s(40)),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.05),
+                                    borderRadius: BorderRadius.circular(s(24)),
+                                    border: Border.all(
+                                      color: Colors.white.withOpacity(0.12),
+                                      width: s(1.5),
                                     ),
                                   ),
-                                SizedBox(width: s(48)),
-                                Expanded(
-                                  child: Focus(
-                                    descendantsAreFocusable: false,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        // Title (H1 style)
-                                        Text(
-                                          show.name?.toUpperCase() ?? 'TV SHOW',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: s(90),
-                                            fontWeight: FontWeight.w900,
-                                            letterSpacing: s(-2),
-                                            height: 0.9,
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      if (show.posterPath != null && show.posterPath!.isNotEmpty)
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(s(16)),
+                                          child: CachedNetworkImage(
+                                            imageUrl: '$tmdbImageBaseUrl/w500${show.posterPath}',
+                                            width: s(280),
+                                            height: s(420),
+                                            fit: BoxFit.cover,
                                           ),
                                         ),
-                                        SizedBox(height: s(24)),
-                                        // Meta Row
-                                        Row(
-                                          children: [
-                                            Container(
-                                              padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFEC1D24), // brand red
-                                                borderRadius: BorderRadius.circular(s(4)),
-                                              ),
-                                              child: Text(
-                                                'IMDb ${(show.voteAverage ?? 0.0).toStringAsFixed(1)}',
+                                      SizedBox(width: s(48)),
+                                      Expanded(
+                                        child: Focus(
+                                          descendantsAreFocusable: false,
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              // Title (H1 style)
+                                              Text(
+                                                show.name?.toUpperCase() ?? 'TV SHOW',
                                                 style: TextStyle(
                                                   color: Colors.white,
-                                                  fontSize: s(18),
-                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: s(90),
+                                                  fontWeight: FontWeight.w900,
+                                                  letterSpacing: s(-2),
+                                                  height: 0.9,
+                                                  shadows: [
+                                                    Shadow(
+                                                      color: Colors.black.withOpacity(0.5),
+                                                      offset: Offset(0, s(4)),
+                                                      blurRadius: s(10),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
-                                            ),
-                                            SizedBox(width: s(24)),
-                                            Text(
-                                              show.firstAirDate?.split('-').first ?? '',
-                                              style: TextStyle(color: Colors.white70, fontSize: s(20)),
-                                            ),
-                                            SizedBox(width: s(24)),
-                                            Text(
-                                              '${show.numberOfSeasons ?? 0} Seasons',
-                                              style: TextStyle(color: Colors.white70, fontSize: s(20)),
-                                            ),
-                                          ],
-                                        ),
-                                        SizedBox(height: s(32)),
-                                        // Overview
-                                        SizedBox(
-                                          width: s(900),
-                                          child: Text(
-                                            show.overview ?? '',
-                                            style: TextStyle(
-                                              color: Colors.white.withOpacity(0.8),
-                                              fontSize: s(22),
-                                              fontWeight: FontWeight.w400,
-                                              height: 1.5,
-                                            ),
+                                              SizedBox(height: s(24)),
+                                              // Meta Row
+                                              Row(
+                                                children: [
+                                                  Container(
+                                                    padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFFEC1D24), // brand red
+                                                      borderRadius: BorderRadius.circular(s(4)),
+                                                    ),
+                                                    child: Text(
+                                                      'IMDb ${(show.voteAverage ?? 0.0).toStringAsFixed(1)}',
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: s(18),
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  SizedBox(width: s(24)),
+                                                  Text(
+                                                    show.firstAirDate?.split('-').first ?? '',
+                                                    style: TextStyle(color: Colors.white70, fontSize: s(20)),
+                                                  ),
+                                                  SizedBox(width: s(24)),
+                                                  Text(
+                                                    '${show.numberOfSeasons ?? 0} Seasons',
+                                                    style: TextStyle(color: Colors.white70, fontSize: s(20)),
+                                                  ),
+                                                ],
+                                              ),
+                                              SizedBox(height: s(32)),
+                                              // Overview
+                                              SizedBox(
+                                                width: s(900),
+                                                child: Text(
+                                                  show.overview ?? '',
+                                                  style: TextStyle(
+                                                    color: Colors.white.withOpacity(0.85),
+                                                    fontSize: s(22),
+                                                    fontWeight: FontWeight.w400,
+                                                    height: 1.6,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
                             SizedBox(height: s(64)),
                             // Action Buttons (Favorite/Share) - Play is handled per episode
@@ -450,10 +474,10 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                 currentSeason: _selectedSeason!,
                                 totalSeasons: show.numberOfSeasons!,
                                 s: s,
-                                onSelected: (num) {
+                                onSelected: (n) {
                                   setState(() {
-                                    _selectedSeason = num;
-                                    _loadSeason(num);
+                                    _selectedSeason = n;
+                                    _loadSeason(n);
                                   });
                                 },
                               ),
@@ -503,14 +527,14 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                             child: AnimatedContainer(
                                               duration: const Duration(milliseconds: 200),
                                               decoration: BoxDecoration(
-                                                color: focused ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.02),
+                                                color: focused ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.04),
                                                 borderRadius: BorderRadius.circular(s(16)),
                                                 border: Border.all(
-                                                  color: focused ? Colors.white : Colors.white.withOpacity(0.05),
-                                                  width: s(2),
+                                                  color: focused ? Colors.white : Colors.white.withOpacity(0.1),
+                                                  width: s(1.5),
                                                 ),
                                                 boxShadow: focused
-                                                    ? [BoxShadow(color: const Color(0xFFEC1D24).withOpacity(0.25), blurRadius: 16)]
+                                                    ? [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 15, spreadRadius: 2)]
                                                     : [],
                                               ),
                                               child: Stack(
@@ -567,7 +591,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                                                       final elapsed = history['elapsed'] as int? ?? 0;
                                                                       final remaining = history['remaining'] as int? ?? 0;
                                                                       final total = elapsed + remaining;
-                                                                      if (total > 0 && (elapsed / total) >= 0.95) {
+                                                                      if (total > 0 && (elapsed / total) >= 0.9) {
                                                                         return Icon(Icons.check_circle, color: Colors.green, size: s(24));
                                                                       }
                                                                       return const SizedBox.shrink();
@@ -853,10 +877,20 @@ class _ActionBtnState extends State<_ActionBtn> {
                 duration: const Duration(milliseconds: 200),
                 decoration: BoxDecoration(
                   color: widget.isPrimary 
-                      ? (focused ? Colors.white : const Color(0xFFEC1D24))
-                      : (focused ? Colors.white.withOpacity(0.2) : Colors.white10),
-                  borderRadius: BorderRadius.circular(widget.s(8)),
-                  border: widget.isPrimary ? null : Border.all(color: Colors.white24, width: widget.s(1)),
+                      ? (focused ? Colors.white : Colors.white.withOpacity(0.15))
+                      : (focused ? Colors.white.withOpacity(0.25) : Colors.white.withOpacity(0.08)),
+                  borderRadius: BorderRadius.circular(widget.s(12)),
+                  border: Border.all(
+                    color: focused ? Colors.white : Colors.white.withOpacity(0.15),
+                    width: widget.s(focused ? 1.5 : 1),
+                  ),
+                  boxShadow: focused ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: widget.s(15),
+                      spreadRadius: widget.s(2),
+                    )
+                  ] : [],
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(widget.s(8)),
@@ -964,14 +998,14 @@ class _SeasonSelectorState extends State<_SeasonSelector> {
           duration: const Duration(milliseconds: 200),
           padding: EdgeInsets.symmetric(horizontal: s(24), vertical: s(12)),
           decoration: BoxDecoration(
-            color: _isFocused ? Colors.white : Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(s(8)),
+            color: _isFocused ? Colors.white.withOpacity(0.2) : Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(s(12)),
             border: Border.all(
-              color: _isFocused ? Colors.white : Colors.white24,
-              width: s(2),
+              color: _isFocused ? Colors.white : Colors.white.withOpacity(0.15),
+              width: s(1.5),
             ),
             boxShadow: _isFocused
-                ? [BoxShadow(color: Colors.white.withOpacity(0.3), blurRadius: 15)]
+                ? [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 15, spreadRadius: 2)]
                 : [],
           ),
           child: Row(
