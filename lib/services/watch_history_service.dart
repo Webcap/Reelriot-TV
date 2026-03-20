@@ -186,25 +186,38 @@ class WatchHistoryService {
         return (doubleB as String).compareTo(doubleA as String);
       });
 
-      // Final deduplication for merging across rows
-      final seenIds = <String>{};
-      rawItems = rawItems.where((item) {
+      // Final deduplication: Keep only the absolute latest entry for each series or movie.
+      // This ensures that if the LATEST episode of a series is finished, we don't 
+      // fall back to suggesting a previous unfinished episode in 'Continue Watching'.
+      final seenSeriesIds = <int>{};
+      final seenMovieIds = <int>{};
+      
+      final dedupedItems = <dynamic>[];
+      for (final item in rawItems) {
         final m = item as Map;
-        final id = m['id'];
-        final type = m.containsKey('series_name') ? 'tv' : 'movie';
-        final seriesId = m['series_id'] ?? m['id'];
-        final key = type == 'tv' ? '${seriesId}_${m['season_num']}_${m['episode_num']}' : '$id';
-        return seenIds.add(key);
-      }).toList();
+        final isTv = m.containsKey('series_name');
+        
+        if (isTv) {
+          final sId = (m['series_id'] ?? m['id']) as int;
+          if (seenSeriesIds.add(sId)) {
+            dedupedItems.add(item);
+          }
+        } else {
+          final mId = (m['id']) as int;
+          if (seenMovieIds.add(mId)) {
+            dedupedItems.add(item);
+          }
+        }
+      }
 
-      // Filter out completed (>= 95% like mobile)
-      final items = rawItems.where((item) {
+      // Filter out completed (>= 90% like mobile)
+      final items = dedupedItems.where((item) {
         final m = item as Map;
         final elapsed = m['elapsed'] as int? ?? 0;
         final remaining = m['remaining'] as int? ?? 0;
         final total = elapsed + remaining;
         if (total <= 0) return true;
-        return (elapsed / total) < 0.95;
+        return (elapsed / total) < 0.9;
       }).toList();
 
       // Normalize keys for the UI (media_id, type)
@@ -290,7 +303,7 @@ class WatchHistoryService {
         return {
           'elapsed': Duration(seconds: elapsed),
           'remaining': Duration(seconds: remaining),
-          'is_finished': (elapsed + remaining) > 0 && (elapsed / (elapsed + remaining)) >= 0.95,
+          'is_finished': (elapsed + remaining) > 0 && (elapsed / (elapsed + remaining)) >= 0.9,
         };
       }
     } catch (e) {
@@ -347,5 +360,54 @@ class WatchHistoryService {
       debugPrint('[WatchHistory] ❌ Error fetching last watched: $e');
     }
     return null;
+  }
+
+  /// Returns a list of unique TV shows the user has recently watched.
+  Future<List<Map<String, dynamic>>> getRecentlyWatchedShows() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return [];
+
+    try {
+      final res = await _supabase
+          .from('watch_history')
+          .select('tv_shows')
+          .eq('user_id', user.id);
+
+      if (res.isEmpty) return [];
+
+      final allTvShows = <dynamic>[];
+      for (var row in res) {
+        allTvShows.addAll(row['tv_shows'] as List? ?? []);
+      }
+
+      // Sort by date_added newest first
+      allTvShows.sort((a, b) {
+        final da = (a as Map)['date_added'] as String? ?? '';
+        final db = (b as Map)['date_added'] as String? ?? '';
+        return db.compareTo(da);
+      });
+
+      final seenSeriesIds = <int>{};
+      final shows = <Map<String, dynamic>>[];
+
+      for (var t in allTvShows) {
+        final m = t as Map;
+        final sId = (m['series_id'] ?? m['id']) as int;
+        if (seenSeriesIds.add(sId)) {
+          shows.add({
+            'id': sId,
+            'name': m['series_name'],
+            'poster_path': m['poster_path'],
+            'backdrop_path': m['backdrop_path'],
+            'date_added': m['date_added'],
+          });
+        }
+      }
+
+      return shows;
+    } catch (e) {
+      debugPrint('[WatchHistory] ❌ Error fetching recently watched shows: $e');
+      return [];
+    }
   }
 }

@@ -273,6 +273,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
   String? _tvRecommendationsTitle;
   final RecommendationService _recService = RecommendationService();
   List<Map<String, dynamic>>? _history;
+  List<Map<String, dynamic>>? _watchingShows;
   bool _loading = true;
   Timer? _autoSlideTimer;
   int _trendingIndex = 0;
@@ -328,6 +329,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
         _aiRecommendations = null;
         _tvRecommendations = null;
         _tvRecommendationsTitle = null;
+        _watchingShows = null;
       });
     }
     
@@ -341,6 +343,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
           _api.fetchPopularTv(),
           _api.fetchAiringToday(),
           _recService.getRecommendations(),
+          _historyService.getRecentlyWatchedShows(),
         ]);
 
         final history = results[0] as List<Map<String, dynamic>>;
@@ -348,6 +351,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
         final popular = results[2] as TvListResponse;
         final airingToday = results[3] as TvListResponse;
         final aiResult = results[4] as RecommendationResult;
+        final watchingShows = results[5] as List<Map<String, dynamic>>;
 
         List<MovieListItem>? tvRecommendations;
         String? tvRecommendationsTitle;
@@ -388,6 +392,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
             _aiAnchorTitle = aiResult.anchorTitle;
             _tvRecommendations = tvRecommendations;
             _tvRecommendationsTitle = tvRecommendationsTitle;
+            _watchingShows = watchingShows;
             
             if (trendingList.isNotEmpty) {
               final first = trendingList.first;
@@ -537,7 +542,16 @@ class _MainHomeViewState extends State<_MainHomeView> {
   Future<void> _reloadHistory() async {
     final mediaType = _selectedCategory == 'TV Shows' ? 'tv' : 'movie';
     final h = await _historyService.getHistory(mediaType: mediaType);
-    if (mounted) setState(() => _history = h);
+    List<Map<String, dynamic>>? ws;
+    if (mediaType == 'tv') {
+      ws = await _historyService.getRecentlyWatchedShows();
+    }
+    if (mounted) {
+      setState(() {
+        _history = h;
+        _watchingShows = ws;
+      });
+    }
   }
 
   void _precacheImages([List<MovieListItem>? items]) {
@@ -864,6 +878,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 ],
                 SizedBox(height: s(96)),
                 _buildAiringTodayRow(context, s),
+                if (_watchingShows != null && _watchingShows!.isNotEmpty) ...[
+                  SizedBox(height: s(96)),
+                  _buildWatchingShowsRow(context, s),
+                ],
               ],
               SizedBox(height: s(96)),
               _buildRow(context, _selectedCategory == 'TV Shows' ? 'Popular shows this week' : 'Popular movies this week', _weeklyTrending),
@@ -1347,6 +1365,50 @@ class _MainHomeViewState extends State<_MainHomeView> {
                         MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
                       );
                     }
+                    if (mounted) _loadContent(quiet: true);
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWatchingShowsRow(BuildContext context, double Function(double) s) {
+    if (_watchingShows == null || _watchingShows!.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'My TV Shows',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: s(48),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        SizedBox(height: s(42)),
+        SizedBox(
+          height: s(480),
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            primary: false,
+            itemCount: _watchingShows!.length,
+            itemBuilder: (context, index) {
+              final show = _watchingShows![index];
+              return Padding(
+                padding: EdgeInsets.only(right: s(36)),
+                child: PosterCard(
+                  posterPath: show['poster_path'],
+                  title: show['name'] ?? '',
+                  onFocus: () => _updateFocusedMovie(show['id'], isMovie: false),
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: show['id'])),
+                    );
                     if (mounted) _loadContent(quiet: true);
                   },
                 ),
