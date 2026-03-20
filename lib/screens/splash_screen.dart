@@ -5,6 +5,8 @@ import 'package:caffeine_tv/constants.dart';
 import 'package:caffeine_tv/services/api_service.dart';
 import 'package:caffeine_tv/services/settings_service.dart';
 import 'package:caffeine_tv/services/ad_service.dart';
+import 'package:caffeine_tv/services/update_service.dart';
+import 'package:caffeine_tv/screens/update_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -85,6 +87,19 @@ class _SplashScreenState extends State<SplashScreen>
         
         // Apply ad configuration
         AdService.instance.updateEnabledStatus(SettingsService().adsEnabled);
+
+        // 1.1 Check for Forced Update
+        final apiConfig = core.CaffeineApiConfig.fromMap(config);
+        final updateInfo = await UpdateService().checkForUpdate(apiConfig);
+        
+        if (updateInfo.isUpdateAvailable && updateInfo.isForced) {
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => UpdateScreen(updateInfo: updateInfo)),
+            );
+            return; // Stop bootstrap
+          }
+        }
       } catch (e) {
         debugPrint('[Splash] Config fetch failed: $e');
       }

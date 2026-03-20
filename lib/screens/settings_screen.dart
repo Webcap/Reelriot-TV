@@ -1,7 +1,11 @@
+import 'package:caffeine_core/caffeine_core.dart';
 import 'package:caffeine_tv/services/settings_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/api_service.dart';
+import '../services/update_service.dart';
+import 'update_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -247,7 +251,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ],
-              const SizedBox(height: 48),
+              const SizedBox(height: 32),
+              // Update Section
+              Focus(
+                onKeyEvent: (_, event) {
+                  if (event is KeyDownEvent &&
+                      (event.logicalKey == LogicalKeyboardKey.enter ||
+                          event.logicalKey == LogicalKeyboardKey.select)) {
+                    _checkForUpdate(context);
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: Builder(builder: (context) {
+                  final focused = Focus.of(context).hasFocus;
+                  return ElevatedButton.icon(
+                    onPressed: () => _checkForUpdate(context),
+                    icon: _loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Icon(Icons.system_update_alt),
+                    label: const Text('Check for update'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: focused ? Colors.white : Colors.white10,
+                      foregroundColor: focused ? Colors.black : Colors.white,
+                      side: focused ? const BorderSide(color: Colors.white, width: 2) : const BorderSide(color: Colors.white12),
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 16),
               Focus(
                 onKeyEvent: (_, event) {
                   if (event is KeyDownEvent &&
@@ -303,6 +334,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _checkForUpdate(BuildContext context) async {
+    if (_loading) return;
+    setState(() => _loading = true);
+
+    try {
+      final api = ApiService();
+      final rawConfig = await api.loadConfig();
+      final config = CaffeineApiConfig.fromMap(rawConfig);
+      
+      final info = await UpdateService().checkForUpdate(config);
+
+      if (!mounted) return;
+
+      if (info.isUpdateAvailable) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => UpdateScreen(updateInfo: info)),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('App is up to date!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to check for updates: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
   }
 
   void _signOut(BuildContext context) {
