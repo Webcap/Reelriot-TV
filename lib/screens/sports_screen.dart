@@ -237,6 +237,16 @@ class _SportsScreenState extends State<SportsScreen> {
     try {
       final allSportsData = await _fetchWithRetry(maxRetries: 2);
       
+      // Fetch all active stream IDs from Supabase
+      final activeStreamResponse = await Supabase.instance.client
+          .from('live_streams')
+          .select('id')
+          .not('video_url', 'is', null);
+      
+      final activeStreamIds = (activeStreamResponse as List)
+          .map((item) => item['id'].toString())
+          .toSet();
+
       final leagueData = <_LeagueData>[];
       for (var l in _leagues) {
         final key = '${l.sport}:${l.league}';
@@ -245,10 +255,16 @@ class _SportsScreenState extends State<SportsScreen> {
         List<_EspnGame> games = [];
         if (rawData != null && rawData['events'] != null) {
           final events = rawData['events'] as List<dynamic>;
-          games = events.whereType<Map<String, dynamic>>().map(_EspnGame.fromJson).toList();
+          games = events
+              .whereType<Map<String, dynamic>>()
+              .map(_EspnGame.fromJson)
+              .where((g) => activeStreamIds.contains(g.id)) // Filter by stream availability
+              .toList();
         }
 
-        leagueData.add(_LeagueData(league: l, games: games));
+        if (games.isNotEmpty) {
+          leagueData.add(_LeagueData(league: l, games: games));
+        }
       }
 
       // Sort games within each league: live first, then by date
@@ -262,13 +278,14 @@ class _SportsScreenState extends State<SportsScreen> {
         });
       }
 
-      // Only show leagues that have games today, sort: live games first
-      final active = leagueData.where((d) => d.hasGames).toList();
-      active.sort((a, b) {
+      // Sort leagues: live games first
+      leagueData.sort((a, b) {
         if (a.hasLive && !b.hasLive) return -1;
         if (!a.hasLive && b.hasLive) return 1;
         return 0;
       });
+      
+      final active = leagueData;
       // Fetch featured event from Supabase
       Map<String, dynamic>? featured;
       try {
@@ -276,6 +293,8 @@ class _SportsScreenState extends State<SportsScreen> {
             .from('live_streams')
             .select('*')
             .eq('is_featured', true)
+            .not('video_url', 'is', null)
+            .neq('video_url', '')
             .maybeSingle();
       } catch (e) {
         debugPrint('[SportsScreen] Error fetching featured event: $e');

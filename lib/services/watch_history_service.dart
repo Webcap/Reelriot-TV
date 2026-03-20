@@ -246,6 +246,11 @@ class WatchHistoryService {
   }
 
   Future<Duration?> getSavedProgress(int mediaId, bool isMovie, {int? season, int? episode}) async {
+    final info = await getWatchProgressInfo(mediaId, isMovie, season: season, episode: episode);
+    return info?['elapsed'] as Duration?;
+  }
+
+  Future<Map<String, dynamic>?> getWatchProgressInfo(int mediaId, bool isMovie, {int? season, int? episode}) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return null;
 
@@ -262,14 +267,14 @@ class WatchHistoryService {
         allItems.addAll(row[isMovie ? 'movies' : 'tv_shows'] as List? ?? []);
       }
       
+      Map? match;
       if (isMovie) {
-        final match = allItems.firstWhere(
+        match = allItems.firstWhere(
           (m) => (m as Map)['id'] == mediaId,
           orElse: () => null,
         );
-        if (match != null) return Duration(seconds: match['elapsed'] as int? ?? 0);
       } else {
-        final match = allItems.firstWhere(
+        match = allItems.firstWhere(
           (t) {
             final m = t as Map;
             final currentId = m['series_id'] ?? m['id'];
@@ -277,10 +282,19 @@ class WatchHistoryService {
           },
           orElse: () => null,
         );
-        if (match != null) return Duration(seconds: match['elapsed'] as int? ?? 0);
+      }
+
+      if (match != null) {
+        final elapsed = match['elapsed'] as int? ?? 0;
+        final remaining = match['remaining'] as int? ?? 0;
+        return {
+          'elapsed': Duration(seconds: elapsed),
+          'remaining': Duration(seconds: remaining),
+          'is_finished': (elapsed + remaining) > 0 && (elapsed / (elapsed + remaining)) >= 0.95,
+        };
       }
     } catch (e) {
-      debugPrint('[WatchHistory] ❌ Error fetching progress: $e');
+      debugPrint('[WatchHistory] ❌ Error fetching progress info: $e');
     }
     return null;
   }

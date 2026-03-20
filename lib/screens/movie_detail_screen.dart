@@ -29,6 +29,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   bool _isFavorite = false;
   String? _error;
   Duration? _movieHistory;
+  bool _isWatched = false;
   final WatchHistoryService _historyService = WatchHistoryService();
 
   @override
@@ -47,7 +48,12 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
       await Future.wait([
         _api.fetchMovieRecommendations(widget.movieId).then((r) => recs = r.results).catchError((_) => recs = []),
         _api.fetchMovieCredits(widget.movieId).then((c) => credits = c).catchError((_) => credits = CreditsResponse(id: widget.movieId, cast: [])),
-        _historyService.getSavedProgress(widget.movieId, true).then((p) => _movieHistory = p),
+        _historyService.getWatchProgressInfo(widget.movieId, true).then((p) {
+          if (p != null) {
+            _movieHistory = p['elapsed'] as Duration?;
+            _isWatched = p['is_finished'] as bool? ?? false;
+          }
+        }),
       ]);
 
       if (mounted) {
@@ -260,21 +266,47 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                 SizedBox(height: s(24)),
                                 Row(
                                   children: [
-                                    Container(
-                                      padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFEC1D24),
-                                        borderRadius: BorderRadius.circular(s(4)),
-                                      ),
-                                      child: Text(
-                                        'IMDb ${(m.voteAverage ?? 0.0).toStringAsFixed(1)}',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: s(18),
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
+                                     Container(
+                                       padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+                                       decoration: BoxDecoration(
+                                         color: const Color(0xFFEC1D24),
+                                         borderRadius: BorderRadius.circular(s(4)),
+                                       ),
+                                       child: Text(
+                                         'IMDb ${(m.voteAverage ?? 0.0).toStringAsFixed(1)}',
+                                         style: TextStyle(
+                                           color: Colors.white,
+                                           fontSize: s(18),
+                                           fontWeight: FontWeight.bold,
+                                         ),
+                                       ),
+                                     ),
+                                     if (_isWatched) ...[
+                                       SizedBox(width: s(24)),
+                                       Container(
+                                         padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+                                         decoration: BoxDecoration(
+                                           color: Colors.green.withOpacity(0.2),
+                                           borderRadius: BorderRadius.circular(s(4)),
+                                           border: Border.all(color: Colors.green, width: s(1)),
+                                         ),
+                                         child: Row(
+                                           mainAxisSize: MainAxisSize.min,
+                                           children: [
+                                             Icon(Icons.check_circle, color: Colors.green, size: s(18)),
+                                             SizedBox(width: s(8)),
+                                             Text(
+                                               'WATCHED',
+                                               style: TextStyle(
+                                                 color: Colors.green,
+                                                 fontSize: s(16),
+                                                 fontWeight: FontWeight.bold,
+                                               ),
+                                             ),
+                                           ],
+                                         ),
+                                       ),
+                                     ],
                                     SizedBox(width: s(24)),
                                     Text(
                                       m.releaseDate?.split('-').first ?? '',

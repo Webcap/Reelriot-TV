@@ -538,13 +538,36 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                                           child: Column(
                                                             crossAxisAlignment: CrossAxisAlignment.start,
                                                             children: [
-                                                              Text(
-                                                                'E${ep.episodeNumber} - ${ep.name ?? ""}',
-                                                                style: TextStyle(
-                                                                  color: Colors.white,
-                                                                  fontSize: s(22),
-                                                                  fontWeight: focused ? FontWeight.bold : FontWeight.w600,
-                                                                ),
+                                                              Row(
+                                                                children: [
+                                                                  Expanded(
+                                                                    child: Text(
+                                                                      'E${ep.episodeNumber} - ${ep.name ?? ""}',
+                                                                      style: TextStyle(
+                                                                        color: Colors.white,
+                                                                        fontSize: s(22),
+                                                                        fontWeight: focused ? FontWeight.bold : FontWeight.w600,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                  Builder(
+                                                                    builder: (context) {
+                                                                      final history = _seasonHistory?.firstWhere(
+                                                                        (h) => h['episode'] == ep.episodeNumber,
+                                                                        orElse: () => {},
+                                                                      );
+                                                                      if (history == null || history.isEmpty) return const SizedBox.shrink();
+                                                                      
+                                                                      final elapsed = history['elapsed'] as int? ?? 0;
+                                                                      final remaining = history['remaining'] as int? ?? 0;
+                                                                      final total = elapsed + remaining;
+                                                                      if (total > 0 && (elapsed / total) >= 0.95) {
+                                                                        return Icon(Icons.check_circle, color: Colors.green, size: s(24));
+                                                                      }
+                                                                      return const SizedBox.shrink();
+                                                                    },
+                                                                  ),
+                                                                ],
                                                               ),
                                                               SizedBox(height: s(8)),
                                                               if (ep.overview != null && ep.overview!.isNotEmpty)
