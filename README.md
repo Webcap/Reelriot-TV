@@ -2,18 +2,35 @@
 
 Android TV Flutter app for Caffeine (movies and TV; auth via pairing code).
 
-## Configuration
+## Configuration (Flavors)
 
-Copy `.env.example` to `.env` and set:
+The app uses Flutter Flavors to separate Development and Production environments.
 
-- `CAFFEINE_API_URL` – API base URL. **When running the app on the Android TV emulator**, the device cannot use `localhost`. Point this to your host machine instead:
-  - **Emulator**: `http://10.0.2.2:3000` (replace `3000` with your API port). Ensure caffeine-api is running on your machine and listening on `0.0.0.0` or the same port.
-  - **Production**: e.g. `https://caffeine.synqholdings.com/`
-- `SUPABASE_URL`, `SUPABASE_ANON_KEY` (or `SUPABASE_ANNON_KEY`) – from your Supabase project.
-- `TMDB_API_KEY` – for metadata.
-- `PAIRING_PAGE_URL` (optional) – URL of the web page where users enter the TV code (e.g. caffeine-admin tv-pair page).
+1.  **Production (`prod`)**: Uses `.env.prod`. Point this to your live API.
+2.  **Development (`dev`)**: Uses `.env.dev`. Point this to your local API (e.g., `http://10.0.2.2:3000`).
 
-If the pairing screen shows **"Could not get code"**, check: (1) API is running and reachable, (2) `CAFFEINE_API_URL` from the emulator: use `http://10.0.2.2:PORT` for local API.
+Set the following variables in both `.env.dev` and `.env.prod`:
+- `CAFFEINE_API_URL`
+- `SUPABASE_URL`, `SUPABASE_ANNON_KEY`
+- `TMDB_API_KEY`
+- `PAIRING_PAGE_URL`
+
+## Running with Flavors
+
+To run a specific flavor, use the `--flavor` flag and the corresponding target file:
+
+### Development
+```bash
+flutter run --flavor dev -t lib/main_dev.dart
+```
+
+### Production
+```bash
+flutter run --flavor prod -t lib/main_prod.dart
+```
+
+> [!NOTE]
+> Using `flutter run` without flags will use the default `main.dart` and `.env`, but it is recommended to use the flavor commands above for consistent environment separation.
 
 ## Getting Started
 

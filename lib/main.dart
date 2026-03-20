@@ -9,8 +9,12 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() async {
+  await bootstrap('.env');
+}
+
+Future<void> bootstrap(String envFile) async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env');
+  await dotenv.load(fileName: envFile);
 
   // Initialize AdService
   await AdService.instance.initialize();

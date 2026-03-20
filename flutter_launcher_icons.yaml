@@ -1,0 +1,18 @@
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/CaffeineTVLogo.png"
+  web:
+    generate: true
+    image_path: "assets/images/CaffeineTVLogo.png"
+    background_color: "#000000"
+    theme_color: "#DC2626"
+  flavors:
+    dev:
+      android: true
+      ios: true
+      image_path: "assets/images/CaffeineTVLogo.png"
+    prod:
+      android: true
+      ios: true
+      image_path: "assets/images/CaffeineTVLogo.png"
