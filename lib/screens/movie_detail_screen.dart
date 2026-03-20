@@ -91,7 +91,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     await AdService.instance.showInterstitialAd();
 
     if (!mounted) return;
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => VideoLoaderScreen(
           movie: _movie!,
@@ -99,6 +99,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
         ),
       ),
     );
+    _load();
   }
 
   void _handlePlay() async {

@@ -142,8 +142,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     debugPrint('[PlayerScreen] 📺 Playing: ${widget.url}');
     debugPrint('[PlayerScreen] 🔗 Referrer: ${widget.referrer ?? _getReferer(widget.url)}');
 
-    _controller.addEventsListener((event) {
+    _controller.addEventsListener((event) async {
       if (event.betterPlayerEventType == BetterPlayerEventType.finished) {
+        debugPrint('[PlayerScreen] 🎉 Video finished, saving final progress and closing');
+        await _saveCurrentProgress();
         if (mounted) Navigator.of(context).pop();
       }
     });

@@ -56,7 +56,7 @@ class _ProviderLoadingWidgetState extends State<ProviderLoadingWidget>
       padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 40),
       constraints: const BoxConstraints(
         maxWidth: 440,
-        minHeight: 340,
+        minHeight: 200,
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,

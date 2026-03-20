@@ -233,7 +233,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
     await AdService.instance.showInterstitialAd();
 
     if (!mounted) return;
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => VideoLoaderScreen(
           tvShow: _show!,
@@ -245,6 +245,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
         ),
       ),
     );
+    _load();
   }
 
   @override
