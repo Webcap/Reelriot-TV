@@ -36,7 +36,7 @@ android {
         create("dev") {
             dimension = "version"
             applicationIdSuffix = ".dev"
-            resValue("string", "app_name", "Caffeine TV Dev")
+            resValue("string", "app_name", "Caffeine TV (DEV)")
         }
         create("prod") {
             dimension = "version"
