@@ -409,7 +409,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     }
   }
 
-  Future<void> _loadContent({bool quiet = false}) async {
+  Future<void> _loadContent({bool quiet = false, bool forceRefresh = false}) async {
     if (!quiet) {
       setState(() {
         _loading = true;
@@ -429,12 +429,16 @@ class _MainHomeViewState extends State<_MainHomeView> {
     }
     
     try {
-      _checkForUpdate();
+      if (forceRefresh) {
+        _checkForUpdate();
+      } else {
+         _checkForUpdate();
+      }
       final isTv = _selectedCategory == 'TV Shows';
       
       if (isTv) {
         final results = await Future.wait([
-          _historyService.getHistory(mediaType: 'tv'),
+          _historyService.getHistory(mediaType: 'tv', forceRefresh: forceRefresh),
           _api.fetchTrendingTv(),
           _api.fetchPopularTv(),
           _api.fetchTopRatedTv(),
@@ -450,6 +454,50 @@ class _MainHomeViewState extends State<_MainHomeView> {
         final airingToday = results[4] as TvListResponse;
         final aiResult = results[5] as RecommendationResult;
         final watchingShows = results[6] as List<Map<String, dynamic>>;
+
+        // --- Process "Up Next" Logic (Next Episode) ---
+        for (int i = 0; i < watchingShows.length && i < 10; i++) {
+          final show = watchingShows[i];
+          if (show['is_completed'] == true) {
+            try {
+              final showId = show['id'];
+              final seasonNum = show['season_num'] as int? ?? 1;
+              final episodeNum = show['episode_num'] as int? ?? 1;
+
+              // Check if there's a next episode in the same season
+              final seasonDetail = await _api.fetchSeasonDetail(showId, seasonNum);
+              TvEpisode? nextEp;
+              for (var e in seasonDetail.episodes) {
+                if (e.episodeNumber == episodeNum + 1) {
+                  nextEp = e;
+                  break;
+                }
+              }
+
+              if (nextEp != null) {
+                watchingShows[i]['episode_num'] = nextEp.episodeNumber;
+                watchingShows[i]['episode_name'] = nextEp.name;
+                // Since this is the next episode, it's not completed yet
+                watchingShows[i]['is_completed'] = false;
+              } else {
+                // Check if there's a next season
+                final tvDetail = await _api.fetchTvDetail(showId);
+                if (seasonNum < (tvDetail.numberOfSeasons ?? 0)) {
+                  final nextSeasonDetail = await _api.fetchSeasonDetail(showId, seasonNum + 1);
+                  if (nextSeasonDetail.episodes.isNotEmpty) {
+                    final firstEp = nextSeasonDetail.episodes.first;
+                    watchingShows[i]['season_num'] = seasonNum + 1;
+                    watchingShows[i]['episode_num'] = firstEp.episodeNumber;
+                    watchingShows[i]['episode_name'] = firstEp.name;
+                    watchingShows[i]['is_completed'] = false;
+                  }
+                }
+              }
+            } catch (e) {
+              debugPrint('[HomeScreen] ❌ Error calculating next episode: $e');
+            }
+          }
+        }
 
         List<MovieListItem>? tvRecommendations;
         String? tvRecommendationsTitle;
@@ -542,7 +590,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
         }
       } else {
         final results = await Future.wait([
-          _historyService.getHistory(mediaType: 'movie'),
+          _historyService.getHistory(mediaType: 'movie', forceRefresh: forceRefresh),
           _api.fetchTrendingMovies(),
           _api.fetchPopularMovies(),
           _api.fetchTopRatedMovies(),
@@ -654,9 +702,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
     }
   }
 
-  Future<void> _reloadHistory() async {
+  Future<void> _reloadHistory({bool forceRefresh = false}) async {
     final mediaType = _selectedCategory == 'TV Shows' ? 'tv' : 'movie';
-    final h = await _historyService.getHistory(mediaType: mediaType);
+    final h = await _historyService.getHistory(mediaType: mediaType, forceRefresh: forceRefresh);
     List<Map<String, dynamic>>? ws;
     if (mediaType == 'tv') {
       ws = await _historyService.getRecentlyWatchedShows();
@@ -964,9 +1012,11 @@ class _MainHomeViewState extends State<_MainHomeView> {
                                       MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: _focusedMovie!.id)),
                                     );
                                   }
-                                  push.then((_) {
-                                    HomeScreenState.of(context)?.setIndex(1);
-                                    _reloadHistory();
+                                   push.then((_) async {
+                                    // Give the player/service 2 seconds to finish any background saving 
+                                    // before we force a refresh of the UI data.
+                                    await Future.delayed(const Duration(seconds: 2));
+                                    _reloadHistory(forceRefresh: true);
                                   });
                                 },
                               ),
@@ -1020,7 +1070,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 ],
                 if (_watchingShows != null && _watchingShows!.isNotEmpty) ...[
                   SizedBox(height: s(96)),
-                  _buildWatchingShowsRow(context, s),
+                  _buildUpNextRow(context, s),
                 ],
                 SizedBox(height: s(96)),
                 _buildRow(context, 'Popular shows this week', _weeklyTrending),
@@ -1577,14 +1627,14 @@ class _MainHomeViewState extends State<_MainHomeView> {
     );
   }
 
-  Widget _buildWatchingShowsRow(BuildContext context, double Function(double) s) {
+  Widget _buildUpNextRow(BuildContext context, double Function(double) s) {
     if (_watchingShows == null || _watchingShows!.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'My TV Shows',
+          'Up Next',
           style: TextStyle(
             color: Colors.white,
             fontSize: s(48),
@@ -1593,24 +1643,71 @@ class _MainHomeViewState extends State<_MainHomeView> {
         ),
         SizedBox(height: s(42)),
         SizedBox(
-          height: s(480),
+          height: s(520), // Increased height for subtitle
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             primary: false,
             itemCount: _watchingShows!.length,
             itemBuilder: (context, index) {
               final show = _watchingShows![index];
+              final season = show['season_num'] as int?;
+              final episode = show['episode_num'] as int?;
+              final epName = show['episode_name'] as String?;
+              
+              String? subtitle;
+              if (season != null && episode != null) {
+                subtitle = 'S${season.toString().padLeft(2, '0')} E${episode.toString().padLeft(2, '0')}${epName != null ? ' • $epName' : ''}';
+              }
+
               return Padding(
                 padding: EdgeInsets.only(right: s(36)),
                 child: PosterCard(
                   posterPath: show['poster_path'],
                   title: show['name'] ?? '',
+                  subtitle: subtitle,
                   onFocus: () => _updateFocusedMovie(show['id'], isMovie: false),
                   onLongPress: () => _showItemContextMenu(item: show, isMovie: false),
                   onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: show['id'])),
-                    );
+                    if (season != null && episode != null) {
+                      // Get show detail for VideoLoaderScreen
+                      final detail = await _api.fetchTvDetail(show['id']);
+                      if (!mounted) return;
+                      
+                      // Check if we have history for this specific episode to resume
+                      final history = await _historyService.getHistory(mediaType: 'tv');
+                      final itemHistory = history.firstWhere(
+                        (h) => h['media_id'] == show['id'] && h['season'] == season && h['episode'] == episode,
+                        orElse: () => {},
+                      );
+
+                      Duration? startAt;
+                      if (itemHistory.isNotEmpty && (itemHistory['position_ms'] ?? 0) > 0) {
+                        if (!mounted) return;
+                        startAt = await _showResumeDialog(
+                          context, 
+                          Duration(milliseconds: itemHistory['position_ms']), 
+                          itemHistory['duration_ms'] ?? 0
+                        );
+                        if (startAt == null) return;
+                      }
+
+                      if (!mounted) return;
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => VideoLoaderScreen(
+                            tvShow: detail,
+                            season: season,
+                            episode: episode,
+                            startPosition: startAt,
+                          ),
+                        ),
+                      );
+                    } else {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: show['id'])),
+                      );
+                    }
                     if (mounted) _loadContent(quiet: true);
                   },
                 ),

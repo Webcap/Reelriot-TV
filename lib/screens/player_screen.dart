@@ -65,7 +65,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _startProgressTimer() {
-    _saveTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    _saveTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       _saveCurrentProgress();
     });
   }

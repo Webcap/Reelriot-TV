@@ -294,8 +294,12 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
           startPosition: startPosition,
         ),
       ),
-    );
-    _load();
+    ).then((_) async {
+      await Future.delayed(const Duration(seconds: 2));
+      _load();
+    });
+
+
   }
 
   @override

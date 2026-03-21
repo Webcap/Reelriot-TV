@@ -65,10 +65,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
 
-      // 2. Fetch watch history and aggregate time
+      // 2. Fetch watch history and aggregate time from completed_watch_history
       final historyRes = await Supabase.instance.client
-          .from('watch_history')
-          .select('position_ms, type')
+          .from('completed_watch_history')
+          .select('time_watched_ms, media_type')
           .eq('user_id', user.id);
 
       if ((historyRes as List).isNotEmpty) {
@@ -76,8 +76,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         int tvTime = 0;
         
         for (var row in (historyRes as List)) {
-          final ms = row['position_ms'] as int? ?? 0;
-          if (row['type'] == 'movie') {
+          final ms = row['time_watched_ms'] as int? ?? 0;
+          if (row['media_type'] == 'movie') {
             movieTime += ms;
           } else {
             tvTime += ms;

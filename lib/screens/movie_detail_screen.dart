@@ -98,8 +98,10 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
           startPosition: startPosition,
         ),
       ),
-    );
-    _load();
+    ).then((_) async {
+      await Future.delayed(const Duration(seconds: 2));
+      _load();
+    });
   }
 
   void _handlePlay() async {

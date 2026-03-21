@@ -3,10 +3,25 @@ import 'package:caffeine_core/caffeine_core.dart';
 import 'package:flutter/foundation.dart';
 
 class WatchHistoryService {
-  final SupabaseClient _supabase;
+  static final WatchHistoryService _instance = WatchHistoryService._internal();
 
-  WatchHistoryService({SupabaseClient? client}) 
-      : _supabase = client ?? Supabase.instance.client;
+  factory WatchHistoryService({SupabaseClient? client}) {
+    if (client != null) {
+      _instance._supabase = client;
+    }
+    return _instance;
+  }
+
+  WatchHistoryService._internal()
+      : _supabase = Supabase.instance.client;
+
+  SupabaseClient _supabase;
+
+  // ── Concurrency & Caching ──────────────────────────────────────────
+  bool _isSaving = false;
+  Map<String, dynamic>? _pendingSave;
+  List<Map<String, dynamic>>? _cachedHistory;
+  DateTime? _lastFetchTime;
 
   Future<void> saveProgress({
     required dynamic item,
@@ -19,169 +34,218 @@ class WatchHistoryService {
     required Duration duration,
   }) async {
     final user = _supabase.auth.currentUser;
+    if (user == null || item == null) return;
+
+    if (item is Map) {
+      debugPrint('[WatchHistory] ℹ️ Item is a Map (likely Live Stream), skipping watch history for now.');
+      return;
+    }
+
+    final saveData = {
+      'item': item,
+      'isMovie': isMovie,
+      'season': season,
+      'episode': episode,
+      'episodeId': episodeId,
+      'episodeName': episodeName,
+      'position': position,
+      'duration': duration,
+    };
+
+    if (_isSaving) {
+      _pendingSave = saveData;
+      return;
+    }
+
+    _isSaving = true;
+    try {
+      await _executeSave(saveData);
+    } finally {
+      _isSaving = false;
+      if (_pendingSave != null) {
+        final nextSave = _pendingSave!;
+        _pendingSave = null;
+        saveProgress(
+          item: nextSave['item'],
+          isMovie: nextSave['isMovie'],
+          season: nextSave['season'],
+          episode: nextSave['episode'],
+          episodeId: nextSave['episodeId'],
+          episodeName: nextSave['episodeName'],
+          position: nextSave['position'],
+          duration: nextSave['duration'],
+        );
+      }
+    }
+  }
+
+  Future<void> _executeSave(Map<String, dynamic> data) async {
+    final user = _supabase.auth.currentUser;
     if (user == null) return;
 
     try {
-      final now = DateTime.now().toIso8601String();
-      final elapsed = position.inSeconds;
-      final remaining = (duration - position).inSeconds;
+      final dynamic item = data['item'];
+      final bool isMovie = data['isMovie'];
+      final int? season = data['season'];
+      final int? episode = data['episode'];
+      final String? episodeName = data['episodeName'];
+      final Duration position = data['position'];
+      final Duration duration = data['duration'];
+
+      final elapsed = position.inMilliseconds;
+      final total = duration.inMilliseconds;
+      final progress = total > 0 ? (elapsed / total) : 0.0;
+      final isFinished = progress >= 0.90; 
 
       String? title;
       String? posterPath;
       String? backdropPath;
-      String? overview;
-      int? id;
-      int? releaseYear;
+      int? mediaId;
 
       if (isMovie) {
         if (item is MovieDetail) {
-          id = item.id;
+          mediaId = item.id;
           title = item.title;
           posterPath = item.posterPath;
           backdropPath = item.backdropPath;
-          overview = item.overview;
-          releaseYear = item.releaseDate != null && item.releaseDate!.length >= 4 
-              ? int.tryParse(item.releaseDate!.substring(0, 4)) 
-              : null;
         } else if (item is MovieListItem) {
-          id = item.id;
+          mediaId = item.id;
           title = item.title;
           posterPath = item.posterPath;
           backdropPath = item.backdropPath;
-          overview = item.overview;
-          releaseYear = item.releaseDate != null && item.releaseDate!.length >= 4 
-              ? int.tryParse(item.releaseDate!.substring(0, 4)) 
-              : null;
         } else {
-          debugPrint('[WatchHistory] ⚠️ Item is not MovieDetail or MovieListItem, cannot save movie progress.');
           return;
         }
       } else {
-        if (item is Map) {
-          debugPrint('[WatchHistory] ℹ️ Item is a Map (likely Live Stream), skipping watch history for now.');
-          return;
-        }
-        
         if (item is TvShowDetail) {
-          id = item.id;
+          mediaId = item.id;
           title = item.name;
           posterPath = item.posterPath;
           backdropPath = item.backdropPath;
-          overview = item.overview;
-        } else if (item is MovieListItem) {
-          id = item.id;
-          title = item.title;
+        } else if (item is TvListItem) {
+          mediaId = item.id;
+          title = item.name;
           posterPath = item.posterPath;
           backdropPath = item.backdropPath;
-          overview = item.overview;
         } else {
-           debugPrint('[WatchHistory] ⚠️ Item is not TvShowDetail or MovieListItem, cannot save show progress.');
-           return;
+          return;
         }
       }
 
-      // 1. Fetch ALL existing rows for this user
-      final res = await _supabase
-          .from('watch_history')
-          .select()
-          .eq('user_id', user.id);
+      final now = DateTime.now().toIso8601String();
 
-      List<dynamic> movies = [];
-      List<dynamic> tvShows = [];
-      final List<dynamic> rowIdsToDelete = [];
+      _cachedHistory = null;
+      _lastFetchTime = null;
 
-      if (res.isNotEmpty) {
-        for (var row in res) {
-          movies.addAll(row['movies'] as List? ?? []);
-          tvShows.addAll(row['tv_shows'] as List? ?? []);
-          if (row['id'] != null) rowIdsToDelete.add(row['id']);
+      if (isFinished) {
+        // --- COMPLETED ---
+        if (isMovie) {
+          await _supabase.from('continue_watching_history')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('media_type', 'movie')
+            .eq('media_id', mediaId);
+        } else {
+          await _supabase.from('continue_watching_history')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('media_type', 'tv')
+            .eq('media_id', mediaId)
+            .eq('season_num', season ?? 0)
+            .eq('episode_num', episode ?? 0);
         }
-      }
 
-      if (isMovie) {
-        movies.removeWhere((m) => (m as Map)['id'] == id);
-        movies.insert(0, {
-          'id': id,
+        List<dynamic>? watchDates;
+        int timesWatched = 1;
+        int prevTimeWatchedMs = 0;
+
+        final completionQuery = _supabase.from('completed_watch_history')
+            .select()
+            .eq('user_id', user.id)
+            .eq('media_type', isMovie ? 'movie' : 'tv')
+            .eq('media_id', mediaId);
+
+        final res = await (isMovie ? completionQuery : completionQuery.eq('season_num', season ?? 0).eq('episode_num', episode ?? 0)).maybeSingle();
+        
+        if (res != null) {
+          var wDatesRaw = res['watch_dates'];
+          if (wDatesRaw is List) {
+            watchDates = List.from(wDatesRaw);
+          } else {
+            watchDates = [];
+          }
+          final lastWatchedStr = watchDates.isNotEmpty ? watchDates.last as String : '';
+          
+          timesWatched = (res['times_watched'] as int) + 1;
+          prevTimeWatchedMs = res['time_watched_ms'] as int;
+
+          if (lastWatchedStr.isNotEmpty) {
+            final lastWatched = DateTime.parse(lastWatchedStr);
+            if (DateTime.now().difference(lastWatched).inMinutes < 5) {
+              return; 
+            }
+          }
+        }
+        
+        watchDates ??= [];
+        watchDates.add(now);
+
+        final upsertData = {
+          if (res != null && res['id'] != null) 'id': res['id'],
+          'user_id': user.id,
+          'media_type': isMovie ? 'movie' : 'tv',
+          'media_id': mediaId,
+          'season_num': season,
+          'episode_num': episode,
           'title': title,
           'poster_path': posterPath,
           'backdrop_path': backdropPath,
-          'overview': overview,
-          'release_year': releaseYear,
-          'elapsed': elapsed,
-          'remaining': remaining,
-          'date_watched': now,
-        });
+          'time_watched_ms': prevTimeWatchedMs + elapsed,
+          'times_watched': timesWatched,
+          'watch_dates': watchDates,
+          'updated_at': now,
+        };
+
+        await _supabase.from('completed_watch_history').upsert(
+          upsertData, 
+          onConflict: 'user_id,media_id,season_num,episode_num'
+        );
+        debugPrint('[WatchHistory] ✅ Marked ${isMovie ? 'Movie' : 'TV Show'} as Completed');
+
       } else {
-        tvShows.removeWhere((t) {
-          final m = t as Map;
-          final currentId = m['series_id'] ?? m['id'];
-          return currentId == id && 
-                 m['season_num'] == season && 
-                 m['episode_num'] == episode;
-        });
-        tvShows.insert(0, {
-          'id': episodeId ?? id,
-          'series_name': title,
+        // --- CONTINUE WATCHING ---
+        final cwQuery = _supabase.from('continue_watching_history')
+            .select()
+            .eq('user_id', user.id)
+            .eq('media_type', isMovie ? 'movie' : 'tv')
+            .eq('media_id', mediaId);
+            
+        final res = await (isMovie ? cwQuery : cwQuery.eq('season_num', season ?? 0).eq('episode_num', episode ?? 0)).maybeSingle();
+
+        final upsertData = {
+          if (res != null && res['id'] != null) 'id': res['id'],
+          'user_id': user.id,
+          'media_type': isMovie ? 'movie' : 'tv',
+          'media_id': mediaId,
+          'season_num': season,
+          'episode_num': episode,
+          'title': title,
           'episode_name': episodeName,
           'poster_path': posterPath,
           'backdrop_path': backdropPath,
-          'season_num': season,
-          'episode_num': episode,
-          'elapsed': elapsed,
-          'remaining': remaining,
-          'date_added': now,
-          'series_id': id,
-        });
+          'elapsed_ms': elapsed,
+          'duration_ms': total,
+          'updated_at': now,
+        };
+
+        await _supabase.from('continue_watching_history').upsert(
+          upsertData,
+          onConflict: 'user_id,media_id,season_num,episode_num'
+        );
+        debugPrint('[WatchHistory] ✅ Saved Continue Watching Progress');
       }
-
-      // Sort before deduplication to ensure newest wins
-      movies.sort((a, b) {
-        final da = (a as Map)['date_watched'] as String? ?? '';
-        final db = (b as Map)['date_watched'] as String? ?? '';
-        return db.compareTo(da);
-      });
-      tvShows.sort((a, b) {
-        final da = (a as Map)['date_added'] as String? ?? '';
-        final db = (b as Map)['date_added'] as String? ?? '';
-        return db.compareTo(da);
-      });
-
-      // Final deduplication for merging across rows
-      final seenMovieIds = <dynamic>{};
-      movies = movies.where((m) => seenMovieIds.add((m as Map)['id'])).toList();
-      
-      final seenTvKeys = <String>{};
-      tvShows = tvShows.where((t) {
-        final m = t as Map;
-        final sId = m['series_id'] ?? m['id'];
-        return seenTvKeys.add('${sId}_${m['season_num']}_${m['episode_num']}');
-      }).toList();
-
-      // 3. Consolidated Upsert
-      await _supabase.from('watch_history').upsert({
-        'user_id': user.id,
-        'movies': movies,
-        'tv_shows': tvShows,
-        'updated_at': now,
-      });
-
-      // 4. Cleanup redundant rows if we found multiple
-      if (res.length > 1 && rowIdsToDelete.isNotEmpty) {
-        try {
-           // To consolidate, we delete the old existing row IDs.
-           // Since we already performed a fresh upsert, we can remove the ones we found.
-           for (final id in rowIdsToDelete) {
-             await _supabase.from('watch_history').delete().eq('id', id);
-           }
-           debugPrint('[WatchHistory] 🧹 Cleaned up ${rowIdsToDelete.length} redundant rows');
-        } catch (e) {
-           debugPrint('[WatchHistory] ⚠️ Cleanup failed: $e');
-        }
-      }
-
-      debugPrint('[WatchHistory] ✅ Progress saved & consolidated for ${isMovie ? 'Movie' : 'TV Show'}');
     } catch (e) {
-      debugPrint('[WatchHistory] ❌ Error saving progress: $e');
+      debugPrint('[WatchHistory] ❌ Error in _executeSave: $e');
     }
   }
 
@@ -193,7 +257,6 @@ class WatchHistoryService {
     int? episodeId,
     String? episodeName,
   }) async {
-    // We use a dummy 1-hour duration to mark as fully watched
     const duration = Duration(hours: 1);
     await saveProgress(
       item: item,
@@ -217,141 +280,121 @@ class WatchHistoryService {
     if (user == null) return;
 
     try {
-      final res = await _supabase.from('watch_history').select().eq('user_id', user.id);
-      if (res.isEmpty) return;
-
-      List<dynamic> movies = [];
-      List<dynamic> tvShows = [];
-      for (var row in res) {
-        movies.addAll(row['movies'] as List? ?? []);
-        tvShows.addAll(row['tv_shows'] as List? ?? []);
-      }
-
       if (isMovie) {
-        movies.removeWhere((m) => (m as Map)['id'] == id);
+        await _supabase.from('continue_watching_history')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('media_type', 'movie')
+          .eq('media_id', id);
       } else {
-        tvShows.removeWhere((t) {
-          final m = t as Map;
-          final currentId = m['series_id'] ?? m['id'];
-          if (season != null && episode != null) {
-            return currentId == id && m['season_num'] == season && m['episode_num'] == episode;
-          }
-          return currentId == id;
-        });
+        await _supabase.from('continue_watching_history')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('media_type', 'tv')
+          .eq('media_id', id)
+          .eq('season_num', season ?? 0)
+          .eq('episode_num', episode ?? 0);
       }
-
-      await _supabase.from('watch_history').upsert({
-        'user_id': user.id,
-        'movies': movies,
-        'tv_shows': tvShows,
-        'updated_at': DateTime.now().toIso8601String(),
-      });
-      debugPrint('[WatchHistory] 🗑️ Removed $id from history');
+      
+      _cachedHistory = null;
+      _lastFetchTime = null;
+      debugPrint('[WatchHistory] 🗑️ Removed from Continue Watching');
     } catch (e) {
-      debugPrint('[WatchHistory] ❌ Error removing from history: $e');
+      debugPrint('[WatchHistory] ❌ Error removing: $e');
     }
   }
 
-  Future<List<Map<String, dynamic>>> getHistory({String? mediaType, bool includeCompleted = false}) async {
+  Future<List<Map<String, dynamic>>> getHistory({String? mediaType, bool includeCompleted = false, bool forceRefresh = false}) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return [];
 
     try {
-      final res = await _supabase
-          .from('watch_history')
-          .select('movies, tv_shows')
-          .eq('user_id', user.id);
+      final cacheAge = _lastFetchTime != null 
+          ? DateTime.now().difference(_lastFetchTime!) 
+          : const Duration(hours: 1);
 
-      if (res.isEmpty) return [];
+      if (!forceRefresh && _cachedHistory != null && cacheAge < const Duration(minutes: 1)) {
+        return _cachedHistory!;
+      }
+
+      var cwQuery = _supabase.from('continue_watching_history').select().eq('user_id', user.id);
+      if (mediaType != null) {
+        cwQuery = cwQuery.eq('media_type', mediaType);
+      }
+      final cwRes = await cwQuery.order('updated_at', ascending: false);
       
-      List<dynamic> allMovies = [];
-      List<dynamic> allTvShows = [];
-
-      for (var row in res) {
-        allMovies.addAll(row['movies'] as List? ?? []);
-        allTvShows.addAll(row['tv_shows'] as List? ?? []);
+      List<dynamic> completedRes = [];
+      if (includeCompleted) {
+        var compQuery = _supabase.from('completed_watch_history').select().eq('user_id', user.id);
+        if (mediaType != null) {
+          compQuery = compQuery.eq('media_type', mediaType);
+        }
+        completedRes = await compQuery.order('updated_at', ascending: false);
       }
 
-      List<dynamic> rawItems = [];
-      if (mediaType == 'movie') {
-        rawItems = allMovies;
-      } else if (mediaType == 'tv') {
-        rawItems = allTvShows;
-      } else {
-        rawItems = [...allMovies, ...allTvShows];
+      final normalized = <Map<String, dynamic>>[];
+
+      for (var row in cwRes) {
+        normalized.add({
+          'type': row['media_type'],
+          'media_id': row['media_id'],
+          'title': row['title'],
+          'series_name': row['media_type'] == 'tv' ? row['title'] : null,
+          'season': row['season_num'],
+          'episode': row['episode_num'],
+          'episode_name': row['episode_name'],
+          'poster_path': row['poster_path'],
+          'backdrop_path': row['backdrop_path'],
+          'position_ms': row['elapsed_ms'] ?? 0,
+          'duration_ms': row['duration_ms'] ?? 0,
+          'date_watched': row['updated_at'],
+          'date_added': row['updated_at'],
+          'id': row['media_id'],
+          'is_completed': false,
+        });
       }
 
-      // Sort before deduplication to ensure newest wins
-      rawItems.sort((a, b) {
-        final doubleA = (a as Map)['date_watched'] ?? a['date_added'] ?? '';
-        final doubleB = (b as Map)['date_watched'] ?? b['date_added'] ?? '';
-        return (doubleB as String).compareTo(doubleA as String);
-      });
+      for (var row in completedRes) {
+        normalized.add({
+          'type': row['media_type'],
+          'media_id': row['media_id'],
+          'title': row['title'],
+          'series_name': row['media_type'] == 'tv' ? row['title'] : null,
+          'season': row['season_num'],
+          'episode': row['episode_num'],
+          'episode_name': null,
+          'poster_path': row['poster_path'],
+          'backdrop_path': row['backdrop_path'],
+          'position_ms': row['time_watched_ms'] ?? 0,
+          'duration_ms': row['time_watched_ms'] ?? 0, 
+          'date_watched': row['updated_at'],
+          'date_added': row['updated_at'],
+          'id': row['media_id'],
+          'is_completed': true,
+        });
+      }
 
-      // Final deduplication: Keep only the absolute latest entry for each series or movie.
+      normalized.sort((a, b) => (b['updated_at'] ?? b['date_watched'] ?? '').compareTo(a['updated_at'] ?? a['date_watched'] ?? ''));
+
       final seenSeriesIds = <int>{};
       final seenMovieIds = <int>{};
+      final dedupedItems = <Map<String, dynamic>>[];
       
-      final dedupedItems = <dynamic>[];
-      for (final item in rawItems) {
-        final m = item as Map;
-        final isTv = m.containsKey('series_name');
-        
+      for (final m in normalized) {
+        final isTv = m['type'] == 'tv';
         if (isTv) {
-          final sId = (m['series_id'] ?? m['id']) as int;
-          if (seenSeriesIds.add(sId)) {
-            dedupedItems.add(item);
-          }
+          final sId = m['media_id'] as int;
+          if (seenSeriesIds.add(sId)) dedupedItems.add(m);
         } else {
-          final mId = (m['id']) as int;
-          if (seenMovieIds.add(mId)) {
-            dedupedItems.add(item);
-          }
+          final mId = m['media_id'] as int;
+          if (seenMovieIds.add(mId)) dedupedItems.add(m);
         }
       }
 
-      // Filter out completed (>= 90% like mobile) unless includeCompleted is true
-      final items = includeCompleted ? dedupedItems : dedupedItems.where((item) {
-        final m = item as Map;
-        final elapsed = m['elapsed'] as int? ?? 0;
-        final remaining = m['remaining'] as int? ?? 0;
-        final total = elapsed + remaining;
-        if (total <= 0) return true;
-        return (elapsed / total) < 0.9;
-      }).toList();
+      _cachedHistory = dedupedItems;
+      _lastFetchTime = DateTime.now();
 
-      // Normalize keys for the UI (media_id, type)
-      final normalized = items.map((item) {
-        final m = Map<String, dynamic>.from(item as Map);
-        final isTv = m.containsKey('series_name');
-        m['type'] = isTv ? 'tv' : 'movie';
-        
-        // For TV shows, the TMDB ID for the series is either in 'series_id' 
-        // or 'id' (if saved by the TV app). Mobile app uses 'series_id'.
-        if (isTv) {
-          m['media_id'] = m['series_id'] ?? m['id'];
-          m['title'] = m['series_name'];
-          m['season'] = m['season_num'];
-          m['episode'] = m['episode_num'];
-        } else {
-          m['media_id'] = m['id'];
-        }
-
-        // position_ms and duration_ms for existing UI compatibility
-        m['position_ms'] = (m['elapsed'] as int? ?? 0) * 1000;
-        m['duration_ms'] = ((m['elapsed'] as int? ?? 0) + (m['remaining'] as int? ?? 0)) * 1000;
-        return m;
-      }).toList();
-
-      // Sort by date
-      normalized.sort((a, b) {
-        final da = a['date_watched'] ?? a['date_added'] ?? '';
-        final db = b['date_watched'] ?? b['date_added'] ?? '';
-        return db.compareTo(da);
-      });
-
-      debugPrint('[WatchHistory] 🔍 Fetched ${normalized.length} items (Filter: $mediaType)');
-      return normalized;
+      return dedupedItems;
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Error fetching history: $e');
       return [];
@@ -368,44 +411,48 @@ class WatchHistoryService {
     if (user == null) return null;
 
     try {
-      final res = await _supabase
-          .from('watch_history')
-          .select(isMovie ? 'movies' : 'tv_shows')
-          .eq('user_id', user.id);
-
-      if (res.isEmpty) return null;
+      var cwQuery = _supabase.from('continue_watching_history')
+        .select()
+        .eq('user_id', user.id)
+        .eq('media_type', isMovie ? 'movie' : 'tv')
+        .eq('media_id', mediaId);
       
-      List<dynamic> allItems = [];
-      for (var row in res) {
-        allItems.addAll(row[isMovie ? 'movies' : 'tv_shows'] as List? ?? []);
-      }
-      
-      Map? match;
-      if (isMovie) {
-        match = allItems.firstWhere(
-          (m) => (m as Map)['id'] == mediaId,
-          orElse: () => null,
-        );
-      } else {
-        match = allItems.firstWhere(
-          (t) {
-            final m = t as Map;
-            final currentId = m['series_id'] ?? m['id'];
-            return currentId == mediaId && m['season_num'] == season && m['episode_num'] == episode;
-          },
-          orElse: () => null,
-        );
+      if (!isMovie && season != null && episode != null) {
+        cwQuery = cwQuery.eq('season_num', season).eq('episode_num', episode);
       }
 
-      if (match != null) {
-        final elapsed = match['elapsed'] as int? ?? 0;
-        final remaining = match['remaining'] as int? ?? 0;
+      final cwRes = await cwQuery.maybeSingle();
+
+      if (cwRes != null) {
+        final elapsed = cwRes['elapsed_ms'] as int? ?? 0;
+        final remaining = (cwRes['duration_ms'] as int? ?? 0) - elapsed;
         return {
-          'elapsed': Duration(seconds: elapsed),
-          'remaining': Duration(seconds: remaining),
-          'is_finished': (elapsed + remaining) > 0 && (elapsed / (elapsed + remaining)) >= 0.9,
+          'elapsed': Duration(milliseconds: elapsed),
+          'remaining': Duration(milliseconds: remaining < 0 ? 0 : remaining),
+          'is_finished': false,
         };
       }
+
+      var compQuery = _supabase.from('completed_watch_history')
+        .select()
+        .eq('user_id', user.id)
+        .eq('media_type', isMovie ? 'movie' : 'tv')
+        .eq('media_id', mediaId);
+
+      if (!isMovie && season != null && episode != null) {
+        compQuery = compQuery.eq('season_num', season).eq('episode_num', episode);
+      }
+
+      final compRes = await compQuery.maybeSingle();
+
+      if (compRes != null) {
+        return {
+          'elapsed': Duration.zero,
+          'remaining': Duration.zero,
+          'is_finished': true,
+        };
+      }
+
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Error fetching progress info: $e');
     }
@@ -417,93 +464,54 @@ class WatchHistoryService {
     if (user == null) return;
 
     try {
-      final column = mediaType == 'movie' ? 'movies' : 'tv_shows';
-      await _supabase.from('watch_history').update({column: []}).eq('user_id', user.id);
+      await _supabase.from('continue_watching_history').delete().eq('user_id', user.id).eq('media_type', mediaType);
+      await _supabase.from('completed_watch_history').delete().eq('user_id', user.id).eq('media_type', mediaType);
+      
+      _cachedHistory = null;
+      _lastFetchTime = null;
       debugPrint('[WatchHistory] 🧹 Cleared $mediaType history');
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Error clearing history: $e');
     }
   }
 
-  Future<Map<String, dynamic>?> getLastWatchedEpisodeForShow(int tvId) async {
+  Future<Map<String, dynamic>?> getLastWatchedEpisodeForShow(int tvId, {bool forceRefresh = false}) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return null;
 
     try {
-      final res = await _supabase
-          .from('watch_history')
-          .select('tv_shows')
-          .eq('user_id', user.id);
-
-      if (res.isEmpty) return null;
-      
-      List<dynamic> allTvShows = [];
-      for (var row in res) {
-        allTvShows.addAll(row['tv_shows'] as List? ?? []);
-      }
-      
-      final matches = allTvShows.where((t) {
-        final currentId = (t as Map)['series_id'] ?? t['id'];
-        return currentId == tvId;
-      }).toList();
+      final history = await getHistory(mediaType: 'tv', includeCompleted: true, forceRefresh: forceRefresh);
+      final matches = history.where((h) => h['media_id'] == tvId).toList();
       if (matches.isEmpty) return null;
 
-      // Sort by date_added to find the absolute last one watched
-      matches.sort((a, b) {
-        final da = (a as Map)['date_added'] as String? ?? '';
-        final db = (b as Map)['date_added'] as String? ?? '';
-        return db.compareTo(da);
-      });
-
-      return Map<String, dynamic>.from(matches.first as Map);
+      return matches.first;
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Error fetching last watched: $e');
     }
     return null;
   }
 
-  /// Returns a list of unique TV shows the user has recently watched.
   Future<List<Map<String, dynamic>>> getRecentlyWatchedShows() async {
     final user = _supabase.auth.currentUser;
     if (user == null) return [];
 
     try {
-      final res = await _supabase
-          .from('watch_history')
-          .select('tv_shows')
-          .eq('user_id', user.id);
-
-      if (res.isEmpty) return [];
-
-      final allTvShows = <dynamic>[];
-      for (var row in res) {
-        allTvShows.addAll(row['tv_shows'] as List? ?? []);
-      }
-
-      // Sort by date_added newest first
-      allTvShows.sort((a, b) {
-        final da = (a as Map)['date_added'] as String? ?? '';
-        final db = (b as Map)['date_added'] as String? ?? '';
-        return db.compareTo(da);
-      });
-
-      final seenSeriesIds = <int>{};
+      final history = await getHistory(mediaType: 'tv', includeCompleted: true);
+      
       final shows = <Map<String, dynamic>>[];
-
-      for (var t in allTvShows) {
-        final m = t as Map;
-        final sId = (m['series_id'] ?? m['id']) as int;
-        if (seenSeriesIds.add(sId)) {
-          shows.add({
-            'id': sId,
-            'name': m['series_name'],
-            'poster_path': m['poster_path'],
-            'backdrop_path': m['backdrop_path'],
-            'date_added': m['date_added'],
-          });
-        }
+      for (var m in history) {
+        shows.add({
+          'id': m['media_id'],
+          'name': m['title'] ?? m['series_name'],
+          'poster_path': m['poster_path'],
+          'backdrop_path': m['backdrop_path'],
+          'date_added': m['date_added'],
+          'season_num': m['season_num'],
+          'episode_num': m['episode_num'],
+          'episode_name': m['episode_name'],
+          'is_completed': m['is_completed'] ?? false,
+        });
       }
-
       return shows;
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Error fetching recently watched shows: $e');

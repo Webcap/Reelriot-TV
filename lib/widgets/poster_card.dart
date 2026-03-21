@@ -8,6 +8,7 @@ class PosterCard extends StatefulWidget {
     super.key,
     required this.posterPath,
     required this.title,
+    this.subtitle,
     this.onTap,
     this.onLongPress,
     this.onFocus,
@@ -16,6 +17,7 @@ class PosterCard extends StatefulWidget {
 
   final String? posterPath;
   final String title;
+  final String? subtitle;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final VoidCallback? onFocus;
@@ -105,6 +107,19 @@ class _PosterCardState extends State<PosterCard> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  if (widget.subtitle != null) ...[
+                    SizedBox(height: s(4)),
+                    Text(
+                      widget.subtitle!,
+                      style: TextStyle(
+                        color: hasFocus ? Colors.white70 : Colors.white38,
+                        fontSize: s(18),
+                        fontWeight: FontWeight.w400,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ],
               ),
             ),
