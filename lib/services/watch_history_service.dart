@@ -20,8 +20,8 @@ class WatchHistoryService {
   // ── Concurrency & Caching ──────────────────────────────────────────
   bool _isSaving = false;
   Map<String, dynamic>? _pendingSave;
-  List<Map<String, dynamic>>? _cachedHistory;
-  DateTime? _lastFetchTime;
+  final Map<String, List<Map<String, dynamic>>> _cachedHistory = {};
+  final Map<String, DateTime> _lastFetchTime = {};
 
   Future<void> saveProgress({
     required dynamic item,
@@ -134,8 +134,8 @@ class WatchHistoryService {
 
       final now = DateTime.now().toIso8601String();
 
-      _cachedHistory = null;
-      _lastFetchTime = null;
+      _cachedHistory.clear();
+      _lastFetchTime.clear();
 
       if (isFinished) {
         // --- COMPLETED ---
@@ -296,8 +296,8 @@ class WatchHistoryService {
           .eq('episode_num', episode ?? 0);
       }
       
-      _cachedHistory = null;
-      _lastFetchTime = null;
+      _cachedHistory.clear();
+      _lastFetchTime.clear();
       debugPrint('[WatchHistory] 🗑️ Removed from Continue Watching');
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Error removing: $e');
@@ -308,13 +308,16 @@ class WatchHistoryService {
     final user = _supabase.auth.currentUser;
     if (user == null) return [];
 
+    final cacheKey = mediaType ?? 'all';
+
     try {
-      final cacheAge = _lastFetchTime != null 
-          ? DateTime.now().difference(_lastFetchTime!) 
+      final lastFetch = _lastFetchTime[cacheKey];
+      final cacheAge = lastFetch != null 
+          ? DateTime.now().difference(lastFetch) 
           : const Duration(hours: 1);
 
-      if (!forceRefresh && _cachedHistory != null && cacheAge < const Duration(minutes: 1)) {
-        return _cachedHistory!;
+      if (!forceRefresh && _cachedHistory.containsKey(cacheKey) && cacheAge < const Duration(minutes: 1)) {
+        return _cachedHistory[cacheKey]!;
       }
 
       var cwQuery = _supabase.from('continue_watching_history').select().eq('user_id', user.id);
@@ -391,8 +394,8 @@ class WatchHistoryService {
         }
       }
 
-      _cachedHistory = dedupedItems;
-      _lastFetchTime = DateTime.now();
+      _cachedHistory[cacheKey] = dedupedItems;
+      _lastFetchTime[cacheKey] = DateTime.now();
 
       return dedupedItems;
     } catch (e) {
@@ -467,8 +470,8 @@ class WatchHistoryService {
       await _supabase.from('continue_watching_history').delete().eq('user_id', user.id).eq('media_type', mediaType);
       await _supabase.from('completed_watch_history').delete().eq('user_id', user.id).eq('media_type', mediaType);
       
-      _cachedHistory = null;
-      _lastFetchTime = null;
+      _cachedHistory.clear();
+      _lastFetchTime.clear();
       debugPrint('[WatchHistory] 🧹 Cleared $mediaType history');
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Error clearing history: $e');

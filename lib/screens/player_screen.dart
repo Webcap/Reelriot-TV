@@ -40,7 +40,9 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
-  late BetterPlayerController _controller;
+  BetterPlayerController? _controller;
+  bool _hasError = false;
+  String? _errorMessage;
   final WatchHistoryService _historyService = WatchHistoryService();
   final FocusNode _mainFocusNode = FocusNode();
   Timer? _saveTimer;
@@ -54,7 +56,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _setupController();
     _startProgressTimer();
     
-    _visibilitySubscription = _controller.controlsVisibilityStream.listen((visible) {
+    _visibilitySubscription = _controller?.controlsVisibilityStream.listen((visible) {
       if (mounted) setState(() => _controlsVisible = visible);
     });
 
@@ -71,14 +73,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _saveCurrentProgress({bool isFinished = false}) async {
-    if (_controller.videoPlayerController == null) return;
+    if (_controller == null || _controller!.videoPlayerController == null) return;
     
-    final duration = _controller.videoPlayerController!.value.duration ?? Duration.zero;
+    final duration = _controller!.videoPlayerController!.value.duration ?? Duration.zero;
     if (duration == Duration.zero) return;
 
     final position = isFinished 
         ? duration 
-        : _controller.videoPlayerController!.value.position;
+        : _controller!.videoPlayerController!.value.position;
     
     await _historyService.saveProgress(
       item: widget.item,
@@ -93,6 +95,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _setupController() {
+    if (widget.url.isEmpty) {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Invalid video URL';
+      });
+      return;
+    }
+
     _controller = BetterPlayerController(
       BetterPlayerConfiguration(
         autoPlay: true,
@@ -144,7 +154,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     debugPrint('[PlayerScreen] 📺 Playing: ${widget.url}');
     debugPrint('[PlayerScreen] 🔗 Referrer: ${widget.referrer ?? _getReferer(widget.url)}');
  
-    _controller.addEventsListener((event) async {
+    _controller!.addEventsListener((event) async {
       if (event.betterPlayerEventType == BetterPlayerEventType.finished) {
         debugPrint('[PlayerScreen] 🎉 Video finished, saving final progress (100%) and closing');
         await _saveCurrentProgress(isFinished: true);
@@ -163,9 +173,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _showSettings() {
+    if (_controller == null) return;
     showDialog(
       context: context,
-      builder: (context) => PlayerSettingsOverlay(controller: _controller),
+      builder: (context) => PlayerSettingsOverlay(controller: _controller!),
     );
   }
 
@@ -174,7 +185,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _saveTimer?.cancel();
     _saveCurrentProgress();
     _visibilitySubscription?.cancel();
-    _controller.dispose();
+    _controller?.dispose();
     _mainFocusNode.dispose();
     WakelockPlus.disable(); 
     super.dispose();
@@ -200,33 +211,33 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // Dedicated media remote buttons (work whether controls are visible or not)
         if (TvKeys.isPlayPause(key)) {
           debugPrint('[PlayerScreen] ⏯️ Media Play/Pause key');
-          if (_controller.isPlaying() == true) {
-            _controller.pause();
+          if (_controller?.isPlaying() == true) {
+            _controller?.pause();
           } else {
-            _controller.play();
+            _controller?.play();
           }
-          if (!_controlsVisible) _controller.setControlsVisibility(true);
+          if (!_controlsVisible) _controller?.setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 
         if (TvKeys.isMediaFastForward(key)) {
           debugPrint('[PlayerScreen] ⏩ Media Fast Forward key');
-          final pos = _controller.videoPlayerController?.value.position;
+          final pos = _controller?.videoPlayerController?.value.position;
           if (pos != null) {
-            _controller.seekTo(pos + const Duration(seconds: 10));
+            _controller?.seekTo(pos + const Duration(seconds: 10));
           }
-          if (!_controlsVisible) _controller.setControlsVisibility(true);
+          if (!_controlsVisible) _controller?.setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 
         if (TvKeys.isMediaRewind(key)) {
           debugPrint('[PlayerScreen] ⏪ Media Rewind key');
-          final pos = _controller.videoPlayerController?.value.position;
+          final pos = _controller?.videoPlayerController?.value.position;
           if (pos != null) {
             final target = pos - const Duration(seconds: 10);
-            _controller.seekTo(target < Duration.zero ? Duration.zero : target);
+            _controller?.seekTo(target < Duration.zero ? Duration.zero : target);
           }
-          if (!_controlsVisible) _controller.setControlsVisibility(true);
+          if (!_controlsVisible) _controller?.setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 
@@ -240,11 +251,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (TvKeys.isNavigation(key)) {
           if (!_controlsVisible) {
             debugPrint('[PlayerScreen] 🚀 Showing controls');
-            _controller.setControlsVisibility(true);
+            _controller?.setControlsVisibility(true);
             return KeyEventResult.handled;
           } else {
             // Safety: keep-alive the visibility timer.
-            _controller.setControlsVisibility(true);
+            _controller?.setControlsVisibility(true);
           }
           return KeyEventResult.ignored;
         }
@@ -253,7 +264,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: BetterPlayer(controller: _controller),
+        body: _hasError 
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 64),
+                  const SizedBox(height: 16),
+                  Text(
+                    _errorMessage ?? 'An error occurred',
+                    style: const TextStyle(color: Colors.white, fontSize: 18),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.white12),
+                    child: const Text('Go Back'),
+                  ),
+                ],
+              ),
+            )
+          : _controller == null 
+            ? const Center(child: CircularProgressIndicator())
+            : BetterPlayer(controller: _controller!),
       ),
     );
   }

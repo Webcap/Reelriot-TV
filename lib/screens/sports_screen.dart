@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:caffeine_tv/screens/player_screen.dart';
+import 'package:caffeine_tv/services/ad_service.dart';
 
 // ---------------------------------------------------------------------------
 // ESPN league config
@@ -88,6 +89,11 @@ class _EspnGame {
   final String? displayClock;
   final int? period;
   final DateTime? startTimeUtc;
+  final String? sport;
+  final String? league;
+  final String? videoUrl;
+  final String? referrer;
+  final String? eventTitle;
 
   const _EspnGame({
     required this.id,
@@ -107,7 +113,43 @@ class _EspnGame {
     this.displayClock,
     this.period,
     this.startTimeUtc,
+    this.sport,
+    this.league,
+    this.videoUrl,
+    this.referrer,
+    this.eventTitle,
   });
+
+  _EspnGame copyWith({
+    String? videoUrl,
+    String? referrer,
+    String? eventTitle,
+  }) {
+    return _EspnGame(
+      id: id,
+      name: name,
+      shortName: shortName,
+      isLive: isLive,
+      isCompleted: isCompleted,
+      scoreLine: scoreLine,
+      statusText: statusText,
+      startTimeLocal: startTimeLocal,
+      awayTeam: awayTeam,
+      homeTeam: homeTeam,
+      awayLogo: awayLogo,
+      homeLogo: homeLogo,
+      awayScore: awayScore,
+      homeScore: homeScore,
+      displayClock: displayClock,
+      period: period,
+      startTimeUtc: startTimeUtc,
+      sport: sport,
+      league: league,
+      videoUrl: videoUrl ?? this.videoUrl,
+      referrer: referrer ?? this.referrer,
+      eventTitle: eventTitle ?? this.eventTitle,
+    );
+  }
 
   static String? _formatTime(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return null;
@@ -121,7 +163,7 @@ class _EspnGame {
     return '$h12:${m.toString().padLeft(2, '0')} ${am ? 'AM' : 'PM'}';
   }
 
-  factory _EspnGame.fromJson(Map<String, dynamic> json) {
+  factory _EspnGame.fromJson(Map<String, dynamic> json, {String? sport, String? league}) {
     final comps = json['competitions'] as List<dynamic>? ?? [];
     final comp = comps.isNotEmpty && comps.first is Map ? comps.first as Map<String, dynamic> : <String, dynamic>{};
     final compets = comp['competitors'] as List<dynamic>? ?? [];
@@ -171,6 +213,8 @@ class _EspnGame {
       displayClock: statusJson?['displayClock']?.toString(),
       period: statusJson?['period'] is int ? statusJson!['period'] : (int.tryParse(statusJson?['period']?.toString() ?? '')),
       startTimeUtc: DateTime.tryParse(json['date']?.toString() ?? ''),
+      sport: sport,
+      league: league,
     );
   }
 
@@ -268,6 +312,8 @@ class _SportsScreenState extends State<SportsScreen> {
   Map<String, dynamic>? _featuredEvent;
   bool _loading = true;
   String? _error;
+  String? _selectedSport;
+  List<String> _availableSports = [];
 
   @override
   void initState() {
@@ -280,17 +326,31 @@ class _SportsScreenState extends State<SportsScreen> {
     try {
       final allSportsData = await _fetchWithRetry(maxRetries: 2);
       
-      // Fetch all active stream IDs from Supabase
+      // Fetch all active stream data from Supabase
       final activeStreamResponse = await Supabase.instance.client
           .from('live_streams')
-          .select('id')
+          .select('id, video_url, referrer')
           .not('video_url', 'is', null);
       
-      final activeStreamIds = (activeStreamResponse as List)
-          .map((item) => item['id'].toString())
-          .toSet();
+      final Map<String, Map<String, String?>> streamInfo = {
+        for (var item in (activeStreamResponse as List))
+          item['id'].toString(): {
+            'url': item['video_url']?.toString(),
+            'referrer': item['referrer']?.toString(),
+          }
+      };
+      
+      final activeStreamIds = streamInfo.keys.toSet();
+
+      // Fetch additional event metadata (UFC titles etc.) from live_events
+      final liveEventsResponse = await Supabase.instance.client
+          .from('live_events')
+          .select('title, sport');
+      
+      final List<Map<String, dynamic>> liveEvents = (liveEventsResponse as List).cast<Map<String, dynamic>>();
 
       final leagueData = <_LeagueData>[];
+      final sportsSet = <String>{};
       for (var l in _leagues) {
         final key = '${l.sport}:${l.league}';
         final rawData = allSportsData[key];
@@ -300,13 +360,41 @@ class _SportsScreenState extends State<SportsScreen> {
           final events = rawData['events'] as List<dynamic>;
           games = events
               .whereType<Map<String, dynamic>>()
-              .map(_EspnGame.fromJson)
-              .where((g) => activeStreamIds.contains(g.id)) // Filter by stream availability
+              .map((e) {
+                final id = e['id']?.toString() ?? '';
+                final g = _EspnGame.fromJson(e, sport: l.sport, league: l.league);
+                final info = streamInfo[id];
+                
+                // Try to find matching live_event for title enhancement
+                String? enhancedTitle;
+                if (l.sport.toLowerCase() == 'mma') {
+                  final keywords = g.name.toLowerCase().split(' ').where((w) => w.length > 3).toList();
+                  final match = liveEvents.firstWhere(
+                    (le) => le['sport']?.toString().toLowerCase() == 'ufc' && 
+                            keywords.every((k) => le['title']?.toString().toLowerCase().contains(k) ?? false),
+                    orElse: () => {},
+                  );
+                  enhancedTitle = match['title']?.toString();
+                }
+
+                return g.copyWith(
+                  videoUrl: info?['url'],
+                  referrer: info?['referrer'],
+                  eventTitle: enhancedTitle,
+                );
+              })
+              .where((g) {
+                final isMma = g.sport?.toLowerCase() == 'mma' || g.league?.toLowerCase() == 'ufc';
+                return isMma || activeStreamIds.contains(g.id);
+              }) // Filter by stream availability (except for MMA)
               .toList();
         }
 
         if (games.isNotEmpty) {
           leagueData.add(_LeagueData(league: l, games: games));
+          for (var _ in games) {
+            sportsSet.add(l.sport.toUpperCase());
+          }
         }
       }
 
@@ -372,7 +460,8 @@ class _SportsScreenState extends State<SportsScreen> {
 
       if (mounted) {
         setState(() {
-          _data = active.isEmpty ? leagueData : active;
+          _availableSports = sportsSet.toList()..sort();
+          _data = active;
           _featuredEvent = featured;
           _loading = false;
         });
@@ -458,18 +547,92 @@ class _SportsScreenState extends State<SportsScreen> {
             ],
           ),
           SizedBox(height: s(40)),
-          if (_featuredEvent != null) ...[
+          if (_featuredEvent != null && (_selectedSport == null || _featuredEvent!['sport']?.toString().toUpperCase() == _selectedSport)) ...[
             _buildFeaturedCard(s),
             SizedBox(height: s(48)),
           ],
+          _buildSportFilters(s),
+          SizedBox(height: s(40)),
           if (_data != null)
-            ..._data!.map((d) => _LeagueSection(
-              data: d,
-              scale: s,
-            )).toList(),
+            ..._buildCategorizedSections(s),
         ],
       ),
     );
+  }
+
+  Widget _buildSportFilters(double Function(double) s) {
+    return SizedBox(
+      height: s(60),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          _FilterChip(
+            label: 'ALL',
+            selected: _selectedSport == null,
+            scale: s,
+            onTap: () => setState(() => _selectedSport = null),
+          ),
+          SizedBox(width: s(16)),
+          ..._availableSports.map((sport) => Padding(
+                padding: EdgeInsets.only(right: s(16)),
+                child: _FilterChip(
+                  label: sport,
+                  selected: _selectedSport == sport,
+                  scale: s,
+                  onTap: () => setState(() => _selectedSport = sport),
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildCategorizedSections(double Function(double) s) {
+    if (_data == null) return [];
+
+    final allGames = <_EspnGame, _League>{};
+    for (var ld in _data!) {
+      if (_selectedSport != null && ld.league.sport.toUpperCase() != _selectedSport) continue;
+      for (var g in ld.games) {
+        allGames[g] = ld.league;
+      }
+    }
+
+    final liveGames = allGames.entries.where((e) => e.key.isActuallyLive).toList();
+    final upcomingGames = allGames.entries.where((e) => !e.key.isActuallyLive && !e.key.isEffectivelyCompleted).toList();
+    final completedGames = allGames.entries.where((e) => e.key.isEffectivelyCompleted).toList();
+
+    return [
+      if (liveGames.isNotEmpty)
+        _StatusSection(
+          title: 'LIVE NOW',
+          games: liveGames,
+          scale: s,
+          isLive: true,
+        ),
+      if (upcomingGames.isNotEmpty)
+        _StatusSection(
+          title: 'UPCOMING',
+          games: upcomingGames,
+          scale: s,
+        ),
+      if (completedGames.isNotEmpty)
+        _StatusSection(
+          title: 'COMPLETED',
+          games: completedGames,
+          scale: s,
+        ),
+      if (liveGames.isEmpty && upcomingGames.isEmpty && completedGames.isEmpty)
+        Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: s(100)),
+            child: Text(
+              'No games found for this category',
+              style: TextStyle(color: Colors.white24, fontSize: s(28)),
+            ),
+          ),
+        ),
+    ];
   }
 
   String _dayName(int d) => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d - 1];
@@ -679,16 +842,26 @@ class _SportsScreenState extends State<SportsScreen> {
 // League section widget
 // ---------------------------------------------------------------------------
 
-class _LeagueSection extends StatelessWidget {
-  final _LeagueData data;
-  final double Function(double) scale;
+// ---------------------------------------------------------------------------
+// Status section widget (Categorized by Live/Upcoming/Completed)
+// ---------------------------------------------------------------------------
 
-  const _LeagueSection({required this.data, required this.scale});
+class _StatusSection extends StatelessWidget {
+  final String title;
+  final List<MapEntry<_EspnGame, _League>> games;
+  final double Function(double) scale;
+  final bool isLive;
+
+  const _StatusSection({
+    required this.title,
+    required this.games,
+    required this.scale,
+    this.isLive = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final s = scale;
-    final league = data.league;
 
     return Padding(
       padding: EdgeInsets.only(bottom: s(48)),
@@ -698,43 +871,56 @@ class _LeagueSection extends StatelessWidget {
           // Section header
           Row(
             children: [
-              Container(
-                padding: EdgeInsets.all(s(10)),
-                decoration: BoxDecoration(
-                  color: league.color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(s(10)),
+              if (isLive)
+                Container(
+                  width: s(4),
+                  height: s(32),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDC2626),
+                    borderRadius: BorderRadius.circular(s(2)),
+                  ),
                 ),
-                child: Icon(league.icon, color: league.color, size: s(32)),
+              if (isLive) SizedBox(width: s(12)),
+              Text(
+                title,
+                style: TextStyle(
+                  color: isLive ? const Color(0xFFDC2626) : Colors.white70,
+                  fontSize: s(34),
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: isLive ? 1.2 : 0,
+                ),
               ),
-              SizedBox(width: s(16)),
-              Text(league.name, style: TextStyle(color: Colors.white, fontSize: s(34), fontWeight: FontWeight.w800)),
-              SizedBox(width: s(16)),
-              if (data.hasLive)
-                _LiveBadge(scale: s),
+              const Spacer(),
+              Text(
+                '${games.length} EVENTS',
+                style: TextStyle(
+                  color: Colors.white24,
+                  fontSize: s(18),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
-          SizedBox(height: s(20)),
-          // Games list
-          if (data.hasGames)
-            SizedBox(
-              height: s(200),
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: data.games.length,
-                separatorBuilder: (_, __) => SizedBox(width: s(16)),
-                itemBuilder: (ctx, i) => _GameCard(
-                  game: data.games[i],
+          SizedBox(height: s(24)),
+          // Games scroll
+          SizedBox(
+            height: s(200),
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: games.length,
+              separatorBuilder: (_, __) => SizedBox(width: s(16)),
+              itemBuilder: (ctx, i) {
+                final game = games[i].key;
+                final league = games[i].value;
+                return _GameCard(
+                  game: game,
                   league: league,
                   accentColor: league.color,
                   scale: s,
-                ),
-              ),
-            )
-          else
-            Container(
-              padding: EdgeInsets.symmetric(vertical: s(24)),
-              child: Text('No games scheduled today', style: TextStyle(color: Colors.white30, fontSize: s(20))),
+                );
+              },
             ),
+          ),
         ],
       ),
     );
@@ -751,9 +937,9 @@ class _LiveBadge extends StatelessWidget {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(6)),
       decoration: BoxDecoration(
-        color: const Color(0xFFDC2626).withValues(alpha: 0.15),
+        color: const Color(0xFFDC2626).withOpacity(0.15),
         borderRadius: BorderRadius.circular(s(20)),
-        border: Border.all(color: const Color(0xFFDC2626).withValues(alpha: 0.4)),
+        border: Border.all(color: const Color(0xFFDC2626).withOpacity(0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -787,7 +973,37 @@ class _GameCard extends StatefulWidget {
 class _GameCardState extends State<_GameCard> {
   bool _focused = false;
 
-  void _onTap() {
+  void _onTap() async {
+    final g = widget.game;
+    final isMma = g.sport?.toLowerCase() == 'mma' || g.league?.toLowerCase() == 'ufc';
+
+    if (isMma) {
+      if (g.videoUrl != null && g.videoUrl!.isNotEmpty) {
+        // Show interstitial ad before navigation
+        await AdService.instance.showInterstitialAd();
+        
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PlayerScreen(
+              url: g.videoUrl!,
+              title: g.name,
+              item: const {},
+              isMovie: false,
+              referrer: g.referrer,
+            ),
+          ),
+        );
+      } else {
+        // MMA with no stream: do nothing or show toast
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Stream currently unavailable for this event')),
+        );
+      }
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -805,6 +1021,7 @@ class _GameCardState extends State<_GameCard> {
   Widget build(BuildContext context) {
     final s = widget.scale;
     final g = widget.game;
+    final isMma = g.sport?.toLowerCase() == 'mma' || g.league?.toLowerCase() == 'ufc';
 
     return FocusableActionDetector(
       onShowFocusHighlight: (v) => setState(() => _focused = v),
@@ -820,68 +1037,126 @@ class _GameCardState extends State<_GameCard> {
         onTap: _onTap,
         borderRadius: BorderRadius.circular(s(16)),
         child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: s(360),
-        decoration: BoxDecoration(
-          color: _focused ? widget.accentColor.withValues(alpha: 0.15) : const Color(0xFF0B0F14),
-          borderRadius: BorderRadius.circular(s(16)),
-          border: Border.all(
-            color: _focused ? widget.accentColor : (g.isLive ? const Color(0xFFDC2626).withValues(alpha: 0.4) : Colors.white12),
-            width: _focused ? 2 : 1,
+          duration: const Duration(milliseconds: 150),
+          width: s(360),
+          decoration: BoxDecoration(
+            color: _focused ? widget.accentColor.withOpacity(0.15) : const Color(0xFF0B0F14),
+            borderRadius: BorderRadius.circular(s(16)),
+            border: Border.all(
+              color: _focused ? widget.accentColor : (g.isLive ? const Color(0xFFDC2626).withOpacity(0.4) : Colors.white12),
+              width: _focused ? 2 : 1,
+            ),
           ),
-        ),
-        padding: EdgeInsets.all(s(20)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Status row
-            Row(
-              children: [
-                if (g.isActuallyLive) ...[
-                  Container(
-                    width: s(8), height: s(8), 
-                    decoration: const BoxDecoration(color: Color(0xFFDC2626), shape: BoxShape.circle)
+          padding: EdgeInsets.all(s(20)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Status row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      if (g.isActuallyLive) ...[
+                        Container(
+                          width: s(8), height: s(8), 
+                          decoration: const BoxDecoration(color: Color(0xFFDC2626), shape: BoxShape.circle)
+                        ),
+                        SizedBox(width: s(8)),
+                        Text(
+                          g.formattedStatus, 
+                          style: TextStyle(color: const Color(0xFFDC2626), fontSize: s(15), fontWeight: FontWeight.w800, letterSpacing: 0.5)
+                        ),
+                      ] else if (g.isEffectivelyCompleted) ...[
+                        Text('FINAL', style: TextStyle(color: Colors.white38, fontSize: s(14), fontWeight: FontWeight.w700)),
+                      ] else ...[
+                        Icon(Icons.schedule_rounded, color: Colors.white38, size: s(16)),
+                        SizedBox(width: s(6)),
+                        Text(g.startTimeLocal ?? '—', style: TextStyle(color: Colors.white54, fontSize: s(15), fontWeight: FontWeight.w600)),
+                      ],
+                    ],
                   ),
-                  SizedBox(width: s(8)),
-                  Text(
-                    g.formattedStatus, 
-                    style: TextStyle(color: const Color(0xFFDC2626), fontSize: s(15), fontWeight: FontWeight.w800, letterSpacing: 0.5)
-                  ),
-                ] else if (g.isEffectivelyCompleted) ...[
-                  Text('FINAL', style: TextStyle(color: Colors.white38, fontSize: s(14), fontWeight: FontWeight.w700)),
-                  if (g.isLive) // Hidden behind "FINAL" but still showing stats as the card does
-                    Padding(
-                      padding: EdgeInsets.only(left: s(8)),
-                      child: Text('(LIVE API)', style: TextStyle(color: Colors.white12, fontSize: s(10))),
+                  if (isMma)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (g.videoUrl == null)
+                          Container(
+                            margin: EdgeInsets.only(right: s(8)),
+                            padding: EdgeInsets.symmetric(horizontal: s(8), vertical: s(2)),
+                            decoration: BoxDecoration(
+                              color: Colors.white10,
+                              borderRadius: BorderRadius.circular(s(4)),
+                              border: Border.all(color: Colors.white24),
+                            ),
+                            child: Text('UNAVAILABLE', style: TextStyle(color: Colors.white38, fontSize: s(10), fontWeight: FontWeight.w900)),
+                          ),
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: s(8), vertical: s(2)),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDC2626).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(s(4)),
+                            border: Border.all(color: const Color(0xFFDC2626).withOpacity(0.3)),
+                          ),
+                          child: Text('UFC / MMA', style: TextStyle(color: const Color(0xFFDC2626), fontSize: s(10), fontWeight: FontWeight.w900)),
+                        ),
+                      ],
                     ),
-                ] else ...[
-                  Icon(Icons.schedule_rounded, color: Colors.white38, size: s(16)),
-                  SizedBox(width: s(6)),
-                  Text(g.startTimeLocal ?? '—', style: TextStyle(color: Colors.white54, fontSize: s(15), fontWeight: FontWeight.w600)),
                 ],
+              ),
+              SizedBox(height: s(16)),
+              if (isMma) ...[
+                Text(
+                  _cleanMmaTitle(g.name).toUpperCase(),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: s(18),
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const Spacer(),
+                Text(
+                  _cleanMmaTitle(g.eventTitle ?? g.name),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: s(16),
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ] else ...[
+                // Away team
+                _TeamRow(
+                  name: g.awayTeam ?? 'Away',
+                  logoUrl: g.awayLogo,
+                  score: g.isLive || g.isCompleted ? g.awayScore : null,
+                  scale: s,
+                ),
+                SizedBox(height: s(10)),
+                // Home team
+                _TeamRow(
+                  name: g.homeTeam ?? 'Home',
+                  logoUrl: g.homeLogo,
+                  score: g.isLive || g.isCompleted ? g.homeScore : null,
+                  scale: s,
+                ),
               ],
-            ),
-            SizedBox(height: s(16)),
-            // Away team
-            _TeamRow(
-              name: g.awayTeam ?? 'Away',
-              logoUrl: g.awayLogo,
-              score: g.isLive || g.isCompleted ? g.awayScore : null,
-              scale: s,
-            ),
-            SizedBox(height: s(10)),
-            // Home team
-            _TeamRow(
-              name: g.homeTeam ?? 'Home',
-              logoUrl: g.homeLogo,
-              score: g.isLive || g.isCompleted ? g.homeScore : null,
-              scale: s,
-            ),
-          ],
-        ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  String _cleanMmaTitle(String name) {
+    if (name.contains(':')) {
+      return name.split(':').last.trim();
+    }
+    return name;
   }
 }
 
@@ -917,6 +1192,84 @@ class _TeamRow extends StatelessWidget {
     decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(s(6))),
     child: Icon(Icons.sports, color: Colors.white38, size: s(20)),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Filter Chip Component
+// ---------------------------------------------------------------------------
+
+class _FilterChip extends StatefulWidget {
+  final String label;
+  final bool selected;
+  final double Function(double) scale;
+  final VoidCallback onTap;
+
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.scale,
+    required this.onTap,
+  });
+
+  @override
+  State<_FilterChip> createState() => _FilterChipState();
+}
+
+class _FilterChipState extends State<_FilterChip> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.scale;
+    final isSelected = widget.selected;
+
+    return FocusableActionDetector(
+      onShowFocusHighlight: (v) => setState(() => _focused = v),
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (intent) {
+            widget.onTap();
+            return null;
+          },
+        ),
+      },
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(s(30)),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: EdgeInsets.symmetric(horizontal: s(32), vertical: s(12)),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? const Color(0xFFDC2626)
+                : (_focused ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.05)),
+            borderRadius: BorderRadius.circular(s(30)),
+            border: Border.all(
+              color: isSelected ? Colors.transparent : (_focused ? Colors.white70 : Colors.white10),
+              width: s(2),
+            ),
+            boxShadow: [
+              if (_focused || isSelected)
+                BoxShadow(
+                  color: (isSelected ? const Color(0xFFDC2626) : Colors.white).withOpacity(0.2),
+                  blurRadius: s(16),
+                  spreadRadius: s(2),
+                )
+            ],
+          ),
+          child: Text(
+            widget.label,
+            style: TextStyle(
+              color: isSelected ? Colors.white : (_focused ? Colors.white : Colors.white54),
+              fontSize: s(20),
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _RefreshButton extends StatelessWidget {
