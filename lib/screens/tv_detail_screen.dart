@@ -135,7 +135,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
       final detail = results[0] as TvSeasonDetailResponse;
       final history = results[1] as List<Map<String, dynamic>>;
       
-      final currentSeasonHistory = history.where((h) => h['media_id'] == widget.tvId && h['season'] == num).toList();
+      final currentSeasonHistory = history.where((h) => h['media_id'] == widget.tvId && h['season_num'] == num).toList();
 
       if (mounted) {
         setState(() {
@@ -180,10 +180,10 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
     int? nextEpisodeId;
 
     if (_lastWatched != null) {
-      final season = _lastWatched!['season'] as int? ?? 1;
-      final episode = _lastWatched!['episode'] as int? ?? 1;
-      final elapsed = _lastWatched!['elapsed'] as int? ?? 0;
-      final total = elapsed + (_lastWatched!['remaining'] as int? ?? 0);
+      final season = _lastWatched!['season_num'] as int? ?? 1;
+      final episode = _lastWatched!['episode_num'] as int? ?? 1;
+      final elapsed = _lastWatched!['elapsed_ms'] as int? ?? 0;
+      final total = _lastWatched!['duration_ms'] as int? ?? 0;
       
       final isFinished = total > 0 && (elapsed / total) >= 0.95;
       final progress = total > 0 ? (elapsed / total).clamp(0.0, 1.0) : 0.0;
@@ -249,7 +249,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
         builder: (context) => AlertDialog(
           backgroundColor: const Color(0xFF1A1A1A),
           title: const Text('Resume Playback?', style: TextStyle(color: Colors.white)),
-          content: Text('Do you want to resume from ${Duration(seconds: elapsed).toString().split('.').first}?', style: const TextStyle(color: Colors.white70)),
+          content: Text('Do you want to resume from ${Duration(milliseconds: elapsed).toString().split('.').first}?', style: const TextStyle(color: Colors.white70)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -267,7 +267,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
       if (resume == null) return;
       
       if (resume) {
-        _playEpisode(season, episode, episodeId, episodeTitle, startPosition: Duration(seconds: elapsed));
+        _playEpisode(season, episode, episodeId, episodeTitle, startPosition: Duration(milliseconds: elapsed));
       } else {
         _playEpisode(season, episode, episodeId, episodeTitle, startPosition: Duration.zero);
       }
@@ -554,11 +554,11 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                     Column(
                       children: episodes.map((ep) {
                         final history = _seasonHistory?.firstWhere(
-                          (h) => h['episode'] == ep.episodeNumber,
+                          (h) => h['episode_num'] == ep.episodeNumber,
                           orElse: () => {},
                         );
-                        final elapsed = (history != null && history.isNotEmpty) ? history['elapsed'] as int? ?? 0 : 0;
-                        final duration = (history != null && history.isNotEmpty) ? history['duration'] as int? ?? 0 : 0;
+                        final elapsed = (history != null && history.isNotEmpty) ? history['elapsed_ms'] as int? ?? 0 : 0;
+                        final duration = (history != null && history.isNotEmpty) ? history['duration_ms'] as int? ?? 0 : 0;
                         final progress = duration > 0 ? (elapsed / duration).clamp(0.0, 1.0) : 0.0;
                         final isWatched = progress > 0.95;
 

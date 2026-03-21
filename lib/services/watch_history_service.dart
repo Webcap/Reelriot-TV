@@ -340,8 +340,8 @@ class WatchHistoryService {
           'media_id': row['media_id'],
           'title': row['title'],
           'series_name': row['media_type'] == 'tv' ? row['title'] : null,
-          'season': row['season_num'],
-          'episode': row['episode_num'],
+          'season_num': row['season_num'],
+          'episode_num': row['episode_num'],
           'episode_name': row['episode_name'],
           'poster_path': row['poster_path'],
           'backdrop_path': row['backdrop_path'],
@@ -360,9 +360,9 @@ class WatchHistoryService {
           'media_id': row['media_id'],
           'title': row['title'],
           'series_name': row['media_type'] == 'tv' ? row['title'] : null,
-          'season': row['season_num'],
-          'episode': row['episode_num'],
-          'episode_name': null,
+          'season_num': row['season_num'],
+          'episode_num': row['episode_num'],
+          'episode_name': null, // We don't store episode name in completed_watch_history yet
           'poster_path': row['poster_path'],
           'backdrop_path': row['backdrop_path'],
           'position_ms': row['time_watched_ms'] ?? 0,
@@ -374,7 +374,7 @@ class WatchHistoryService {
         });
       }
 
-      normalized.sort((a, b) => (b['updated_at'] ?? b['date_watched'] ?? '').compareTo(a['updated_at'] ?? a['date_watched'] ?? ''));
+      normalized.sort((a, b) => (b['date_watched'] ?? '').compareTo(a['date_watched'] ?? ''));
 
       final seenSeriesIds = <int>{};
       final seenMovieIds = <int>{};

@@ -454,6 +454,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
         final airingToday = results[4] as TvListResponse;
         final aiResult = results[5] as RecommendationResult;
         final watchingShows = results[6] as List<Map<String, dynamic>>;
+        debugPrint('[HomeScreen] 📺 Found ${watchingShows.length} watching shows');
 
         // --- Process "Up Next" Logic (Next Episode) ---
         for (int i = 0; i < watchingShows.length && i < 10; i++) {
@@ -499,7 +500,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
           }
         }
 
-        List<MovieListItem>? tvRecommendations;
+         List<MovieListItem>? tvRecommendations;
         String? tvRecommendationsTitle;
 
         if (history.isNotEmpty) {
@@ -1399,8 +1400,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   onLongPress: () => _showItemContextMenu(
                     item: h,
                     isMovie: isMovie,
-                    season: h['season'],
-                    episode: h['episode'],
+                    season: h['season_num'] as int?,
+                    episode: h['episode_num'] as int?,
                     episodeId: h['id'],
                     episodeName: h['episode_name'],
                   ),
@@ -1433,7 +1434,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                       if (!mounted) return;
                       
                       // If somehow season/episode are missing, go to detail screen instead of loader
-                      if (h['season'] == null || h['episode'] == null) {
+                      if (h['season_num'] == null || h['episode_num'] == null) {
                         debugPrint('[HomeScreen] ⚠️ History for TV show ${h['title']} is missing season/episode. Going to detail screen.');
                         await Navigator.push(
                           context,
@@ -1445,8 +1446,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
                           MaterialPageRoute(
                             builder: (context) => VideoLoaderScreen(
                               tvShow: detail,
-                              season: h['season'],
-                              episode: h['episode'],
+                              season: h['season_num'],
+                              episode: h['episode_num'],
                               episodeId: h['id'],
                               episodeName: h['episode_name'],
                               startPosition: startAt,
@@ -1676,7 +1677,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                       // Check if we have history for this specific episode to resume
                       final history = await _historyService.getHistory(mediaType: 'tv');
                       final itemHistory = history.firstWhere(
-                        (h) => h['media_id'] == show['id'] && h['season'] == season && h['episode'] == episode,
+                        (h) => h['media_id'] == show['id'] && h['season_num'] == season && h['episode_num'] == episode,
                         orElse: () => {},
                       );
 
