@@ -25,6 +25,7 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _loading = false;
   Timer? _debounceTimer;
   List<String> _history = [];
+  bool _isProcessing = false;
 
   @override
   void initState() {
@@ -283,11 +284,18 @@ class _SearchScreenState extends State<SearchScreen> {
           ..._movies!.map((m) => _ResultTile(
             item: m,
             onTap: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
-              );
-              if (context.mounted) {
-                HomeScreenState.of(context)?.setIndex(1);
+              if (_isProcessing) return;
+              _isProcessing = true;
+              try {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
+                );
+                if (context.mounted) {
+                  HomeScreenState.of(context)?.setIndex(1);
+                }
+              } finally {
+                _isProcessing = false;
+                if (mounted) setState(() {});
               }
             },
           )),
@@ -299,11 +307,18 @@ class _SearchScreenState extends State<SearchScreen> {
           ..._tv!.map((t) => _ResultTile(
             item: t,
             onTap: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: t.id)),
-              );
-              if (context.mounted) {
-                HomeScreenState.of(context)?.setIndex(1);
+              if (_isProcessing) return;
+              _isProcessing = true;
+              try {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: t.id)),
+                );
+                if (context.mounted) {
+                  HomeScreenState.of(context)?.setIndex(1);
+                }
+              } finally {
+                _isProcessing = false;
+                if (mounted) setState(() {});
               }
             },
           )),

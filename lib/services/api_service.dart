@@ -11,6 +11,8 @@ class ApiService {
   String get tmdbBaseUrl => tmdbApiBaseUrl;
   String get caffeineBaseUrl => caffeineApiUrl.replaceFirst(RegExp(r'/$'), '');
   String get language => SettingsService().language;
+  String get audioLanguage => SettingsService().defaultAudioLanguage;
+  String get region => SettingsService().region;
 
   Future<Map<String, dynamic>> loadConfig() async {
     return core.fetchConfig(caffeineBaseUrl);
@@ -27,7 +29,7 @@ class ApiService {
   }
 
   Future<core.MovieListResponse> fetchTopRatedMovies() async {
-    final url = core.Endpoints.topRatedMoviesUrl(tmdbBaseUrl, _tmdbKey, language);
+    final url = core.Endpoints.topRatedMoviesUrl(tmdbBaseUrl, _tmdbKey, language, region: region);
     return _fetchMovieList(url);
   }
 
@@ -128,7 +130,7 @@ class ApiService {
   }
 
   Future<core.ProviderStreamResponse> fetchMovieStream(int movieId, {String provider = 'vixsrc'}) async {
-    final url = core.Endpoints.streamMovieUrl(caffeineBaseUrl, provider, movieId.toString());
+    final url = core.Endpoints.streamMovieUrl(caffeineBaseUrl, provider, movieId.toString(), language: audioLanguage, country: region);
     final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
     if (res.statusCode != 200) throw Exception('Stream failed');
     return core.ProviderStreamResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
@@ -136,7 +138,7 @@ class ApiService {
 
   Future<core.ProviderStreamResponse> fetchTvStream(
       int tmdbId, int season, int episode, {String provider = 'vixsrc'}) async {
-    final url = core.Endpoints.streamTvUrl(caffeineBaseUrl, provider, tmdbId.toString(), season, episode);
+    final url = core.Endpoints.streamTvUrl(caffeineBaseUrl, provider, tmdbId.toString(), season, episode, language: audioLanguage, country: region);
     final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
     if (res.statusCode != 200) throw Exception('Stream failed');
     return core.ProviderStreamResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
@@ -148,12 +150,12 @@ class ApiService {
   }
 
    Future<core.MovieListResponse> fetchMoviesByProvider(int providerId, {int page = 1, String sortBy = 'popularity.desc'}) async {
-    final url = core.Endpoints.discoverMoviesUrl(tmdbBaseUrl, _tmdbKey, page, language, withProviders: providerId, sortBy: sortBy);
+    final url = core.Endpoints.discoverMoviesUrl(tmdbBaseUrl, _tmdbKey, page, language, withProviders: providerId, sortBy: sortBy, region: region);
     return _fetchMovieList(url);
   }
 
   Future<core.TvListResponse> fetchTvByProvider(int providerId, {int page = 1, String sortBy = 'popularity.desc'}) async {
-    final url = core.Endpoints.discoverTvUrl(tmdbBaseUrl, _tmdbKey, page, language, withProviders: providerId, sortBy: sortBy);
+    final url = core.Endpoints.discoverTvUrl(tmdbBaseUrl, _tmdbKey, page, language, withProviders: providerId, sortBy: sortBy, region: region);
     return _fetchTvList(url);
   }
 

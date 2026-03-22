@@ -345,6 +345,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
   List<Map<String, dynamic>>? _history;
   List<Map<String, dynamic>>? _watchingShows;
   bool _loading = true;
+  bool _isProcessing = false;
   Timer? _autoSlideTimer;
   int _trendingIndex = 0;
   late ScrollController _scrollController;
@@ -980,8 +981,11 @@ class _MainHomeViewState extends State<_MainHomeView> {
                                 label: 'Watch Now',
                                 icon: Icons.play_arrow_outlined,
                                 style: HeroButtonStyle.primary,
-                                onTap: () {
-                                  if (_focusedMovie!.mediaType == 'live') {
+                                 onTap: () async {
+                                  if (_isProcessing) return;
+                                  _isProcessing = true;
+                                  try {
+                                    if (_focusedMovie!.mediaType == 'live') {
                                     final url = _liveStreamUrls[_focusedMovie!.id];
                                     if (url == null || url.isEmpty) {
                                       ScaffoldMessenger.of(context).showSnackBar(
@@ -1019,6 +1023,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
                                     await Future.delayed(const Duration(seconds: 2));
                                     _reloadHistory(forceRefresh: true);
                                   });
+                                  } finally {
+                                    _isProcessing = false;
+                                    if (mounted) setState(() {});
+                                  }
                                 },
                               ),
                               SizedBox(width: s(36)),
@@ -1406,7 +1414,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
                     episodeName: h['episode_name'],
                   ),
                   onTap: () async {
-                    final positionMs = h['position_ms'] as int? ?? 0;
+                    if (_isProcessing) return;
+                    _isProcessing = true;
+                    try {
+                      final positionMs = h['position_ms'] as int? ?? 0;
                     final durationMs = h['duration_ms'] as int? ?? 0;
                     final savedPosition = Duration(milliseconds: positionMs);
 
@@ -1459,6 +1470,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
                     // Refresh history so completed items disappear immediately
                     if (mounted) _loadContent(quiet: true);
+                    } finally {
+                      _isProcessing = false;
+                      if (mounted) setState(() {});
+                    }
                   },
                 ),
               );
@@ -1518,10 +1533,17 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   onFocus: () => _updateFocusedMovie(m.id),
                   onLongPress: () => _showItemContextMenu(item: m, isMovie: false),
                   onTap: () async {
-                    await Navigator.of(context).push(
+                    if (_isProcessing) return;
+                    _isProcessing = true;
+                    try {
+                      await Navigator.of(context).push(
                       MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: m.id)),
                     );
                     if (mounted) _loadContent(quiet: true);
+                    } finally {
+                      _isProcessing = false;
+                      if (mounted) setState(() {});
+                    }
                   },
                 ),
               );

@@ -144,7 +144,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         useAsmsTracks: true,
         useAsmsAudioTracks: true,
         useAsmsSubtitles: true,
-        preferredAudioLanguage: SettingsService().language,
+        preferredAudioLanguage: SettingsService().defaultAudioLanguage,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Referer': widget.referrer ?? _getReferer(widget.url),
@@ -159,8 +159,46 @@ class _PlayerScreenState extends State<PlayerScreen> {
         debugPrint('[PlayerScreen] 🎉 Video finished, saving final progress (100%) and closing');
         await _saveCurrentProgress(isFinished: true);
         if (mounted) Navigator.of(context).pop();
+      } else if (event.betterPlayerEventType == BetterPlayerEventType.initialized) {
+        // Try multiple times as tracks might load late in HLS manifest
+        _selectPreferredAudioTrack();
+        Future.delayed(const Duration(milliseconds: 500), () => _selectPreferredAudioTrack());
+        Future.delayed(const Duration(milliseconds: 1500), () => _selectPreferredAudioTrack());
+        Future.delayed(const Duration(milliseconds: 3000), () => _selectPreferredAudioTrack());
+        Future.delayed(const Duration(milliseconds: 5000), () => _selectPreferredAudioTrack());
       }
     });
+  }
+
+  void _selectPreferredAudioTrack() {
+    if (_controller == null) return;
+    
+    final tracks = _controller!.betterPlayerAsmsAudioTracks;
+    if (tracks == null || tracks.isEmpty) {
+      debugPrint('[PlayerScreen] 🎧 No audio tracks available yet.');
+      return;
+    }
+
+    final preferred = SettingsService().defaultAudioLanguage.toLowerCase();
+    debugPrint('[PlayerScreen] 🎧 Attempting to select audio track: $preferred');
+    
+    for (final track in tracks) {
+      final lang = track.language?.toLowerCase() ?? '';
+      final label = track.label?.toLowerCase() ?? '';
+      debugPrint('[PlayerScreen]   - Track: lang="$lang", label="$label"');
+      
+      final isMatch = lang == preferred || 
+                     lang.startsWith(preferred) || 
+                     label.startsWith(preferred) ||
+                     label.contains(preferred) ||
+                     (preferred == 'en' && label.contains('english'));
+
+      if (isMatch) {
+        debugPrint('[PlayerScreen] ✅ Match found! Selecting track: $label ($lang)');
+        _controller!.setAudioTrack(track);
+        return;
+      }
+    }
   }
 
   String _getReferer(String url) {

@@ -22,6 +22,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _movieWatchTimeMs = 0;
   int _tvWatchTimeMs = 0;
   late String _currentLanguage;
+  late String _currentRegion;
+  late String _currentAudioLanguage;
 
   final List<Map<String, String>> _languages = [
     {'name': 'English', 'code': 'en'},
@@ -35,10 +37,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     {'name': 'Chinese', 'code': 'zh'},
   ];
 
+  final List<Map<String, String>> _regions = [
+    {'name': 'United States', 'code': 'US'},
+    {'name': 'Spain', 'code': 'ES'},
+    {'name': 'France', 'code': 'FR'},
+    {'name': 'Germany', 'code': 'DE'},
+    {'name': 'Mexico', 'code': 'MX'},
+    {'name': 'Brazil', 'code': 'BR'},
+    {'name': 'Italy', 'code': 'IT'},
+    {'name': 'Japan', 'code': 'JP'},
+    {'name': 'South Korea', 'code': 'KR'},
+    {'name': 'United Kingdom', 'code': 'GB'},
+  ];
+
   @override
   void initState() {
     super.initState();
     _currentLanguage = _settings.language;
+    _currentRegion = _settings.region;
+    _currentAudioLanguage = _settings.defaultAudioLanguage;
     _loadUserData();
   }
 
@@ -250,6 +267,118 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     }).toList(),
                   ),
                 ),
+                const SizedBox(height: 24),
+                // Region Section
+                Text(
+                  'Watch Region',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.symmetric(horizontal: 48),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: _regions.map((reg) {
+                      final isSelected = _currentRegion == reg['code'];
+                      return Focus(
+                        onKeyEvent: (_, event) {
+                          if (event is KeyDownEvent &&
+                              (event.logicalKey == LogicalKeyboardKey.enter ||
+                                  event.logicalKey == LogicalKeyboardKey.select)) {
+                            _updateRegion(reg['code']!);
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: Builder(builder: (context) {
+                          final focused = Focus.of(context).hasFocus;
+                          return ChoiceChip(
+                            label: Text(reg['name']!),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              if (selected) _updateRegion(reg['code']!);
+                            },
+                            backgroundColor: focused ? Colors.white24 : Colors.transparent,
+                            selectedColor: const Color(0xFFDC2626),
+                            labelStyle: TextStyle(
+                              color: isSelected || focused ? Colors.white : Colors.white70,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          );
+                        }),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Audio Language Section
+                Text(
+                  'Default Audio Language',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.symmetric(horizontal: 48),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: _languages.map((lang) {
+                      final isSelected = _currentAudioLanguage == lang['code'];
+                      return Focus(
+                        onKeyEvent: (_, event) {
+                          if (event is KeyDownEvent &&
+                              (event.logicalKey == LogicalKeyboardKey.enter ||
+                                  event.logicalKey == LogicalKeyboardKey.select)) {
+                            _updateAudioLanguage(lang['code']!);
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: Builder(builder: (context) {
+                          final focused = Focus.of(context).hasFocus;
+                          return ChoiceChip(
+                            label: Text(lang['name']!),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              if (selected) _updateAudioLanguage(lang['code']!);
+                            },
+                            backgroundColor:
+                                focused ? Colors.white24 : Colors.transparent,
+                            selectedColor: const Color(0xFFDC2626),
+                            labelStyle: TextStyle(
+                              color: isSelected || focused
+                                  ? Colors.white
+                                  : Colors.white70,
+                              fontWeight:
+                                  isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          );
+                        }),
+                      );
+                    }).toList(),
+                  ),
+                ),
               ],
               const SizedBox(height: 32),
               // Update Section
@@ -397,6 +526,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _updateRegion(String code) async {
+    await _settings.setRegion(code);
+    setState(() {
+      _currentRegion = code;
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Region updated to ${_regions.firstWhere((r) => r['code'] == code)['name']}'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _updateAudioLanguage(String code) async {
+    await _settings.setDefaultAudioLanguage(code);
+    setState(() {
+      _currentAudioLanguage = code;
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Audio language updated to ${_languages.firstWhere((l) => l['code'] == code)['name']}'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
 }
 
 class _StatCard extends StatelessWidget {

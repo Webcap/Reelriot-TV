@@ -146,7 +146,7 @@ class WatchHistoryService {
             .eq('media_type', 'movie')
             .eq('media_id', mediaId);
         } else {
-          await _supabase.from('continue_watching_history')
+          await _supabase.from('continue_watch_history')
             .delete()
             .eq('user_id', user.id)
             .eq('media_type', 'tv')
@@ -287,7 +287,7 @@ class WatchHistoryService {
           .eq('media_type', 'movie')
           .eq('media_id', id);
       } else {
-        await _supabase.from('continue_watching_history')
+        await _supabase.from('continue_watch_history')
           .delete()
           .eq('user_id', user.id)
           .eq('media_type', 'tv')

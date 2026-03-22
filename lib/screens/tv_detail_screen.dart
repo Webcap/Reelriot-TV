@@ -79,6 +79,8 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
   String? _error;
   Map<String, dynamic>? _lastWatched;
   List<Map<String, dynamic>>? _seasonHistory;
+  bool _isProcessing = false;
+
 
   double _scale(BuildContext context, double value) {
     final width = MediaQuery.of(context).size.width;
@@ -243,36 +245,43 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
   }
 
   void _handlePlay(int season, int episode, int? episodeId, String? episodeTitle, {int elapsed = 0}) async {
-    if (elapsed > 0) {
-      final resume = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          title: const Text('Resume Playback?', style: TextStyle(color: Colors.white)),
-          content: Text('Do you want to resume from ${Duration(milliseconds: elapsed).toString().split('.').first}?', style: const TextStyle(color: Colors.white70)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('START OVER', style: TextStyle(color: Color(0xFFEC1D24))),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEC1D24)),
-              child: const Text('RESUME'),
-            ),
-          ],
-        ),
-      );
+    if (_isProcessing) return;
+    _isProcessing = true;
+    try {
+      if (elapsed > 0) {
+        final resume = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: const Color(0xFF1A1A1A),
+            title: const Text('Resume Playback?', style: TextStyle(color: Colors.white)),
+            content: Text('Do you want to resume from ${Duration(milliseconds: elapsed).toString().split('.').first}?', style: const TextStyle(color: Colors.white70)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('START OVER', style: TextStyle(color: Color(0xFFEC1D24))),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEC1D24)),
+                child: const Text('RESUME'),
+              ),
+            ],
+          ),
+        );
 
-      if (resume == null) return;
-      
-      if (resume) {
-        _playEpisode(season, episode, episodeId, episodeTitle, startPosition: Duration(milliseconds: elapsed));
+        if (resume == null) return;
+        
+        if (resume) {
+          _playEpisode(season, episode, episodeId, episodeTitle, startPosition: Duration(milliseconds: elapsed));
+        } else {
+          _playEpisode(season, episode, episodeId, episodeTitle, startPosition: Duration.zero);
+        }
       } else {
-        _playEpisode(season, episode, episodeId, episodeTitle, startPosition: Duration.zero);
+        _playEpisode(season, episode, episodeId, episodeTitle);
       }
-    } else {
-      _playEpisode(season, episode, episodeId, episodeTitle);
+    } finally {
+      _isProcessing = false;
+      if (mounted) setState(() {});
     }
   }
 

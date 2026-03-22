@@ -17,6 +17,8 @@ class SettingsService extends ChangeNotifier {
   }
 
   static const String _keyLanguage = 'preferred_language';
+  static const String _keyRegion = 'preferred_region';
+  static const String _keyDefaultAudioLanguage = 'default_audio_language';
 
   String get language {
     // 1. Check saved preference
@@ -30,6 +32,24 @@ class SettingsService extends ChangeNotifier {
 
   Future<void> setLanguage(String langCode) async {
     await _prefs.setString(_keyLanguage, langCode);
+    notifyListeners();
+  }
+
+  String get defaultAudioLanguage {
+    return _prefs.getString(_keyDefaultAudioLanguage) ?? language;
+  }
+
+  Future<void> setDefaultAudioLanguage(String langCode) async {
+    await _prefs.setString(_keyDefaultAudioLanguage, langCode);
+    notifyListeners();
+  }
+
+  String get region {
+    return _prefs.getString(_keyRegion) ?? 'US';
+  }
+
+  Future<void> setRegion(String regionCode) async {
+    await _prefs.setString(_keyRegion, regionCode);
     notifyListeners();
   }
 

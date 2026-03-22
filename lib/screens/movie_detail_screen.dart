@@ -33,6 +33,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   bool _isWatched = false;
   final WatchHistoryService _historyService = WatchHistoryService();
   MovieCollection? _collection;
+  bool _isProcessing = false;
 
   @override
   void initState() {
@@ -105,7 +106,10 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   }
 
   void _handlePlay() async {
-    if (_movieHistory != null && _movieHistory! > Duration.zero) {
+    if (_isProcessing) return;
+    _isProcessing = true;
+    try {
+      if (_movieHistory != null && _movieHistory! > Duration.zero) {
       final resume = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -135,6 +139,10 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
       }
     } else {
       _play();
+    }
+    } finally {
+      _isProcessing = false;
+      if (mounted) setState(() {});
     }
   }
 

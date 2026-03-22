@@ -30,6 +30,7 @@ class _ProviderScreenState extends State<ProviderScreen> {
   String? _error;
   int _page = 1;
   bool _hasMore = true;
+  bool _isProcessing = false;
 
   // Filters
   String _selectedSort = 'popularity.desc';
@@ -189,11 +190,18 @@ class _ProviderScreenState extends State<ProviderScreen> {
                           return PosterCard(
                             posterPath: item.posterPath,
                             title: item.title ?? 'Unknown',
-                            onTap: () {
-                              if (item.mediaType == 'tv') {
-                                Navigator.push(context, MaterialPageRoute(builder: (_) => TvDetailScreen(tvId: item.id)));
-                              } else {
-                                Navigator.push(context, MaterialPageRoute(builder: (_) => MovieDetailScreen(movieId: item.id)));
+                            onTap: () async {
+                              if (_isProcessing) return;
+                              _isProcessing = true;
+                              try {
+                                if (item.mediaType == 'tv') {
+                                  await Navigator.push(context, MaterialPageRoute(builder: (_) => TvDetailScreen(tvId: item.id)));
+                                } else {
+                                  await Navigator.push(context, MaterialPageRoute(builder: (_) => MovieDetailScreen(movieId: item.id)));
+                                }
+                              } finally {
+                                _isProcessing = false;
+                                if (mounted) setState(() {});
                               }
                             },
                           );
