@@ -8,6 +8,8 @@ import 'package:caffeine_tv/widgets/player_settings_overlay.dart';
 import 'package:caffeine_tv/widgets/tv_player_controls.dart';
 import 'package:caffeine_tv/screens/video_loader_screen.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:caffeine_tv/services/api_service.dart';
+import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'dart:async';
 
 class PlayerScreen extends StatefulWidget {
@@ -55,6 +57,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? _saveTimer;
   bool _controlsVisible = false;
   StreamSubscription? _visibilitySubscription;
+  int _retryCount = 0;
+  final ApiService _api = ApiService();
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -157,6 +162,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           'Referer': widget.referrer ?? _getReferer(widget.url),
           ...?widget.headers,
         },
+        bufferingConfiguration: const BetterPlayerBufferingConfiguration(
+          minBufferMs: 60000,
+          maxBufferMs: 120000,
+          bufferForPlaybackMs: 5000,
+          bufferForPlaybackAfterRebufferMs: 10000,
+        ),
       ),
     );
     debugPrint('[PlayerScreen] 📺 Playing: ${widget.url}');
@@ -174,8 +185,114 @@ class _PlayerScreenState extends State<PlayerScreen> {
         Future.delayed(const Duration(milliseconds: 1500), () => _selectPreferredAudioTrack());
         Future.delayed(const Duration(milliseconds: 3000), () => _selectPreferredAudioTrack());
         Future.delayed(const Duration(milliseconds: 5000), () => _selectPreferredAudioTrack());
+      } else if (event.betterPlayerEventType == BetterPlayerEventType.exception) {
+        _handlePlayerException(event);
       }
     });
+  }
+
+  void _handlePlayerException(BetterPlayerEvent event) async {
+    if (_isRefreshing) return;
+    
+    final exception = event.parameters?['exception'];
+    debugPrint('[PlayerScreen] ⚠️ Playback exception: $exception');
+    
+    // Only retry for network/source errors, especially if we've been playing for a while
+    // or if the error code suggests a source issue (2001, 2002)
+    final errorStr = exception?.toString().toLowerCase() ?? '';
+    final isSourceError = errorStr.contains('source error') || 
+                         errorStr.contains('httpdatasource') ||
+                         errorStr.contains('sockettimeout') ||
+                         errorStr.contains('unexpected end of stream');
+
+    if (isSourceError && _retryCount < 3) {
+      _retryCount++;
+      debugPrint('[PlayerScreen] 🔄 Attempting to re-fetch stream URL (Retry $_retryCount/3)...');
+      
+      setState(() {
+        _isRefreshing = true;
+        _hasError = false; // Temporarily clear error to show loading if needed
+      });
+
+      try {
+        final currentPosition = _controller?.videoPlayerController?.value.position ?? widget.startPosition ?? Duration.zero;
+        
+        core.ProviderStreamResponse response;
+        if (widget.isMovie) {
+          response = await _api.fetchMovieStream(widget.item.id, provider: widget.providerCode ?? 'vidlink');
+        } else {
+          response = await _api.fetchTvStream(
+            widget.item.id, 
+            widget.season!, 
+            widget.episode!, 
+            provider: widget.providerCode ?? 'vidlink'
+          );
+        }
+
+        if (response.success && response.links != null && response.links!.isNotEmpty) {
+          final newUrl = response.links!.first.url;
+          final newHeaders = response.links!.first.headers;
+          
+          debugPrint('[PlayerScreen] ✅ Re-fetched new URL: $newUrl');
+          
+          if (!mounted) return;
+
+          // Re-initialize the player with the new URL and the current position
+          _controller?.setupDataSource(
+            BetterPlayerDataSource(
+              BetterPlayerDataSourceType.network,
+              newUrl,
+              videoFormat: newUrl.contains('m3u8') || newUrl.contains('playlist') 
+                  ? BetterPlayerVideoFormat.hls 
+                  : null,
+              useAsmsTracks: true,
+              useAsmsAudioTracks: true,
+              useAsmsSubtitles: true,
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': widget.referrer ?? _getReferer(newUrl),
+                ...?newHeaders,
+              },
+              bufferingConfiguration: const BetterPlayerBufferingConfiguration(
+                minBufferMs: 60000,
+                maxBufferMs: 120000,
+                bufferForPlaybackMs: 5000,
+                bufferForPlaybackAfterRebufferMs: 10000,
+              ),
+            ),
+          );
+
+          // Seek to the last known position after initialization
+          late Function(BetterPlayerEvent) refreshListener;
+          refreshListener = (refreshEvent) {
+            if (refreshEvent.betterPlayerEventType == BetterPlayerEventType.initialized) {
+              _controller?.seekTo(currentPosition);
+              _controller?.play();
+              _controller?.removeEventsListener(refreshListener);
+            }
+          };
+          _controller?.addEventsListener(refreshListener);
+          
+          setState(() {
+            _isRefreshing = false;
+          });
+          return;
+        }
+      } catch (e) {
+        debugPrint('[PlayerScreen] ❌ Failed to refresh stream URL: $e');
+      }
+
+      setState(() {
+        _isRefreshing = false;
+        _hasError = true;
+        _errorMessage = 'Playback failed. Please try again or change provider.';
+      });
+    } else {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Playback error: $exception';
+      });
+    }
   }
 
   void _selectPreferredAudioTrack() {
