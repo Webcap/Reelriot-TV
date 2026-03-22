@@ -1041,13 +1041,6 @@ class _MainHomeViewState extends State<_MainHomeView> {
                                 style: HeroButtonStyle.secondaryRed,
                                 onTap: () {},
                               ),
-                              SizedBox(width: s(36)),
-                              _HeroButton(
-                                label: 'Share',
-                                icon: Icons.share_outlined,
-                                style: HeroButtonStyle.secondaryWhite,
-                                onTap: () {},
-                              ),
                             ],
                           ),
                           SizedBox(height: s(48)),

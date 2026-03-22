@@ -512,18 +512,10 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                       _buildUpNextButton(s),
                       SizedBox(width: s(24)),
                       _ActionBtn(
-                        label: _isFavorite ? 'FAVOURITED' : 'FAVOURITE',
+                        label: '',
                         icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
                         isPrimary: false,
                         onTap: _toggleFavorite,
-                        s: s,
-                      ),
-                      SizedBox(width: s(24)),
-                      _ActionBtn(
-                        label: 'SHARE',
-                        icon: Icons.share_outlined,
-                        isPrimary: false,
-                        onTap: () {},
                         s: s,
                       ),
                     ],
@@ -863,6 +855,7 @@ class _ActionBtnState extends State<_ActionBtn> {
 
   @override
   Widget build(BuildContext context) {
+    final hasLabel = widget.label.trim().isNotEmpty;
     return AnimatedScale(
       scale: _scaleFactor,
       duration: const Duration(milliseconds: 150),
@@ -907,7 +900,10 @@ class _ActionBtnState extends State<_ActionBtn> {
                   child: Stack(
                     children: [
                       Padding(
-                        padding: EdgeInsets.symmetric(horizontal: widget.s(32), vertical: widget.s(16)),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: widget.s(hasLabel ? 32 : 20),
+                          vertical: widget.s(16),
+                        ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -916,16 +912,18 @@ class _ActionBtnState extends State<_ActionBtn> {
                               color: widget.isPrimary ? (focused ? Colors.black : Colors.white) : Colors.white,
                               size: widget.s(28),
                             ),
-                            SizedBox(width: widget.s(12)),
-                            Text(
-                              widget.label,
-                              style: TextStyle(
-                                color: widget.isPrimary ? (focused ? Colors.black : Colors.white) : Colors.white,
-                                fontSize: widget.s(18),
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: widget.s(1.1),
+                            if (hasLabel) ...[
+                              SizedBox(width: widget.s(12)),
+                              Text(
+                                widget.label,
+                                style: TextStyle(
+                                  color: widget.isPrimary ? (focused ? Colors.black : Colors.white) : Colors.white,
+                                  fontSize: widget.s(18),
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: widget.s(1.1),
+                                ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       ),
