@@ -6,6 +6,7 @@ import 'package:caffeine_tv/services/watch_history_service.dart';
 import 'package:caffeine_tv/utils/tv_keys.dart';
 import 'package:caffeine_tv/widgets/player_settings_overlay.dart';
 import 'package:caffeine_tv/widgets/tv_player_controls.dart';
+import 'package:caffeine_tv/screens/video_loader_screen.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:async';
 
@@ -22,6 +23,8 @@ class PlayerScreen extends StatefulWidget {
     this.episodeName,
     this.startPosition,
     this.referrer,
+    this.providerCode,
+    this.allProviders,
   });
 
   final String url;
@@ -34,6 +37,8 @@ class PlayerScreen extends StatefulWidget {
   final String? episodeName;
   final Duration? startPosition;
   final String? referrer;
+  final String? providerCode;
+  final List<Map<String, String>>? allProviders;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -214,7 +219,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_controller == null) return;
     showDialog(
       context: context,
-      builder: (context) => PlayerSettingsOverlay(controller: _controller!),
+      builder: (context) => PlayerSettingsOverlay(
+        controller: _controller!,
+        currentProvider: widget.providerCode,
+        allProviders: widget.allProviders,
+        onChangeProvider: (newProviderCode) {
+          // Close settings dialog
+          Navigator.of(context).pop();
+          
+          final currentPos = _controller?.videoPlayerController?.value.position;
+          
+          // Pause current player
+          _controller?.pause();
+          
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => _buildVideoLoader(newProviderCode, currentPos),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildVideoLoader(String providerCode, Duration? position) {
+    return VideoLoaderScreen(
+      movie: widget.isMovie ? widget.item : null,
+      tvShow: !widget.isMovie ? widget.item : null,
+      season: widget.season,
+      episode: widget.episode,
+      episodeId: widget.episodeId,
+      episodeName: widget.episodeName,
+      startPosition: position,
+      preferredProvider: providerCode,
     );
   }
 

@@ -4,8 +4,17 @@ import 'package:flutter/services.dart';
 
 class PlayerSettingsOverlay extends StatefulWidget {
   final BetterPlayerController controller;
+  final String? currentProvider;
+  final List<Map<String, String>>? allProviders;
+  final Function(String)? onChangeProvider;
 
-  const PlayerSettingsOverlay({super.key, required this.controller});
+  const PlayerSettingsOverlay({
+    super.key, 
+    required this.controller,
+    this.currentProvider,
+    this.allProviders,
+    this.onChangeProvider,
+  });
 
   @override
   State<PlayerSettingsOverlay> createState() => _PlayerSettingsOverlayState();
@@ -81,6 +90,27 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
                       onPressed: () {
                         widget.controller.setupSubtitleSource(source);
                         setState(() {});
+                      },
+                    );
+                  }).toList(),
+                ),
+              ],
+              if (widget.onChangeProvider != null && widget.allProviders != null && widget.allProviders!.isNotEmpty) ...[
+                const SizedBox(height: 32),
+                const _CategoryHeader(title: 'Server (Provider)'),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: widget.allProviders!.map((provider) {
+                    final isSelected = widget.currentProvider == provider['code'];
+                    return _TrackChip(
+                      label: provider['name'] ?? 'Unknown',
+                      isSelected: isSelected,
+                      onPressed: () {
+                        if (!isSelected) {
+                          widget.onChangeProvider!(provider['code']!);
+                        }
                       },
                     );
                   }).toList(),

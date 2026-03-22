@@ -17,6 +17,7 @@ class VideoLoaderScreen extends StatefulWidget {
   final int? episodeId;
   final String? episodeName;
   final Duration? startPosition;
+  final String? preferredProvider;
 
   const VideoLoaderScreen({
     this.movie,
@@ -26,6 +27,7 @@ class VideoLoaderScreen extends StatefulWidget {
     this.episodeId,
     this.episodeName,
     this.startPosition,
+    this.preferredProvider,
     super.key,
   });
 
@@ -41,7 +43,6 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     {'code': 'vixsrc', 'name': 'Vixsrc'},
     {'code': 'vidsrc', 'name': 'Vidsrc'},
     {'code': 'vidzee', 'name': 'Vidzee'},
-    {'code': 'smashy', 'name': 'SmashyStream'},
   ];
 
   late List<ProviderLoadState> _providerStates;
@@ -51,6 +52,16 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   @override
   void initState() {
     super.initState();
+    
+    // Prioritize preferred provider if specified
+    if (widget.preferredProvider != null) {
+      final prefIndex = _providers.indexWhere((p) => p['code'] == widget.preferredProvider);
+      if (prefIndex != -1) {
+        final pref = _providers.removeAt(prefIndex);
+        _providers.insert(0, pref);
+      }
+    }
+
     _providerStates = _providers.map((p) => ProviderLoadState(
       codeName: p['code']!,
       fullName: p['name']!,
@@ -144,6 +155,8 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
                 episodeId: widget.episodeId,
                 episodeName: widget.episodeName,
                 startPosition: startPos,
+                providerCode: providerCode,
+                allProviders: _providers,
               ),
             ),
           );
