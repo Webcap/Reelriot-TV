@@ -171,6 +171,32 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     }
   }
 
+  Future<void> _toggleWatched() async {
+    if (Supabase.instance.client.auth.currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to mark as watched')),
+      );
+      return;
+    }
+
+    if (_movie == null) return;
+
+    try {
+      if (_isWatched) {
+        await _historyService.removeFromHistory(id: _movie!.id, isMovie: true);
+      } else {
+        await _historyService.markAsComplete(item: _movie!, isMovie: true);
+      }
+      _load(); // Refresh state
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update watched status: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
@@ -420,6 +446,14 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                           icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
                                           isPrimary: false,
                                           onTap: _toggleFavorite,
+                                          s: s,
+                                        ),
+                                        SizedBox(width: s(24)),
+                                        _ActionBtn(
+                                          label: _isWatched ? 'UNWATCH' : 'WATCHED',
+                                          icon: _isWatched ? Icons.check_circle : Icons.check_circle_outline,
+                                          isPrimary: false,
+                                          onTap: _toggleWatched,
                                           s: s,
                                         ),
                                       ],

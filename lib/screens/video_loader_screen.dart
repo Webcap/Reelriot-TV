@@ -40,6 +40,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   final WatchHistoryService _historyService = WatchHistoryService();
   
   final List<Map<String, String>> _providers = [
+    {'code': 'vidlink', 'name': 'VidLink'},
     {'code': 'vixsrc', 'name': 'Vixsrc'},
     {'code': 'vidsrc', 'name': 'Vidsrc'},
     {'code': 'vidzee', 'name': 'Vidzee'},
@@ -157,6 +158,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
                 startPosition: startPos,
                 providerCode: providerCode,
                 allProviders: _providers,
+                headers: response.links!.first.headers,
               ),
             ),
           );

@@ -952,37 +952,7 @@ class _GameCard extends StatefulWidget {
 class _GameCardState extends State<_GameCard> {
   bool _focused = false;
 
-  void _onTap() async {
-    final g = widget.game;
-    final isMma = g.sport?.toLowerCase() == 'mma' || g.league?.toLowerCase() == 'ufc';
-
-    if (isMma) {
-      if (g.videoUrl != null && g.videoUrl!.isNotEmpty) {
-        // Show interstitial ad before navigation
-        await AdService.instance.showInterstitialAd();
-        
-        if (!mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PlayerScreen(
-              url: g.videoUrl!,
-              title: g.name,
-              item: const {},
-              isMovie: false,
-              referrer: g.referrer,
-            ),
-          ),
-        );
-      } else {
-        // MMA with no stream: do nothing or show toast
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Stream currently unavailable for this event')),
-        );
-      }
-      return;
-    }
-
+  void _onTap() {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -1000,7 +970,6 @@ class _GameCardState extends State<_GameCard> {
   Widget build(BuildContext context) {
     final s = widget.scale;
     final g = widget.game;
-    final isMma = g.sport?.toLowerCase() == 'mma' || g.league?.toLowerCase() == 'ufc';
 
     return FocusableActionDetector(
       onShowFocusHighlight: (v) => setState(() => _focused = v),
@@ -1053,77 +1022,43 @@ class _GameCardState extends State<_GameCard> {
                         SizedBox(width: s(6)),
                         Text(g.startTimeLocal ?? '—', style: TextStyle(color: Colors.white54, fontSize: s(15), fontWeight: FontWeight.w600)),
                       ],
-                    ],
+                  ],
+                ),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: s(10), vertical: s(4)),
+                  decoration: BoxDecoration(
+                    color: widget.accentColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(s(6)),
+                    border: Border.all(color: widget.accentColor.withOpacity(0.3)),
                   ),
-                  if (isMma)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (g.videoUrl == null)
-                          Container(
-                            margin: EdgeInsets.only(right: s(8)),
-                            padding: EdgeInsets.symmetric(horizontal: s(8), vertical: s(2)),
-                            decoration: BoxDecoration(
-                              color: Colors.white10,
-                              borderRadius: BorderRadius.circular(s(4)),
-                              border: Border.all(color: Colors.white24),
-                            ),
-                            child: Text('UNAVAILABLE', style: TextStyle(color: Colors.white38, fontSize: s(10), fontWeight: FontWeight.w900)),
-                          ),
-                        Container(
-                          padding: EdgeInsets.symmetric(horizontal: s(8), vertical: s(2)),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFDC2626).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(s(4)),
-                            border: Border.all(color: const Color(0xFFDC2626).withOpacity(0.3)),
-                          ),
-                          child: Text('UFC / MMA', style: TextStyle(color: const Color(0xFFDC2626), fontSize: s(10), fontWeight: FontWeight.w900)),
-                        ),
-                      ],
+                  child: Text(
+                    widget.league.name,
+                    style: TextStyle(
+                      color: widget.accentColor,
+                      fontSize: s(12),
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
                     ),
-                ],
-              ),
-              SizedBox(height: s(16)),
-              if (isMma) ...[
-                Text(
-                  _cleanMmaTitle(g.name).toUpperCase(),
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: s(18),
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.5,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const Spacer(),
-                Text(
-                  _cleanMmaTitle(g.eventTitle ?? g.name),
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: s(16),
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ] else ...[
-                // Away team
-                _TeamRow(
-                  name: g.awayTeam ?? 'Away',
-                  logoUrl: g.awayLogo,
-                  score: g.isLive || g.isCompleted ? g.awayScore : null,
-                  scale: s,
-                ),
-                SizedBox(height: s(10)),
-                // Home team
-                _TeamRow(
-                  name: g.homeTeam ?? 'Home',
-                  logoUrl: g.homeLogo,
-                  score: g.isLive || g.isCompleted ? g.homeScore : null,
-                  scale: s,
                 ),
               ],
+            ),
+              SizedBox(height: s(16)),
+              // Away team
+              _TeamRow(
+                name: g.awayTeam ?? 'Away',
+                logoUrl: g.awayLogo,
+                score: g.isLive || g.isCompleted ? g.awayScore : null,
+                scale: s,
+              ),
+              SizedBox(height: s(10)),
+              // Home team
+              _TeamRow(
+                name: g.homeTeam ?? 'Home',
+                logoUrl: g.homeLogo,
+                score: g.isLive || g.isCompleted ? g.homeScore : null,
+                scale: s,
+              ),
             ],
           ),
         ),
@@ -1131,12 +1066,6 @@ class _GameCardState extends State<_GameCard> {
     );
   }
 
-  String _cleanMmaTitle(String name) {
-    if (name.contains(':')) {
-      return name.split(':').last.trim();
-    }
-    return name;
-  }
 }
 
 class _TeamRow extends StatelessWidget {

@@ -25,6 +25,7 @@ class PlayerScreen extends StatefulWidget {
     this.referrer,
     this.providerCode,
     this.allProviders,
+    this.headers,
   });
 
   final String url;
@@ -39,6 +40,7 @@ class PlayerScreen extends StatefulWidget {
   final String? referrer;
   final String? providerCode;
   final List<Map<String, String>>? allProviders;
+  final Map<String, String>? headers;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -153,6 +155,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Referer': widget.referrer ?? _getReferer(widget.url),
+          ...?widget.headers,
         },
       ),
     );
