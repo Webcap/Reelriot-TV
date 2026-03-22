@@ -342,12 +342,6 @@ class _SportsScreenState extends State<SportsScreen> {
       
       final activeStreamIds = streamInfo.keys.toSet();
 
-      // Fetch additional event metadata (UFC titles etc.) from live_events
-      final liveEventsResponse = await Supabase.instance.client
-          .from('live_events')
-          .select('title, sport');
-      
-      final List<Map<String, dynamic>> liveEvents = (liveEventsResponse as List).cast<Map<String, dynamic>>();
 
       final leagueData = <_LeagueData>[];
       final sportsSet = <String>{};
@@ -365,28 +359,13 @@ class _SportsScreenState extends State<SportsScreen> {
                 final g = _EspnGame.fromJson(e, sport: l.sport, league: l.league);
                 final info = streamInfo[id];
                 
-                // Try to find matching live_event for title enhancement
-                String? enhancedTitle;
-                if (l.sport.toLowerCase() == 'mma') {
-                  final keywords = g.name.toLowerCase().split(' ').where((w) => w.length > 3).toList();
-                  final match = liveEvents.firstWhere(
-                    (le) => le['sport']?.toString().toLowerCase() == 'ufc' && 
-                            keywords.every((k) => le['title']?.toString().toLowerCase().contains(k) ?? false),
-                    orElse: () => {},
-                  );
-                  enhancedTitle = match['title']?.toString();
-                }
 
                 return g.copyWith(
                   videoUrl: info?['url'],
                   referrer: info?['referrer'],
-                  eventTitle: enhancedTitle,
                 );
               })
-              .where((g) {
-                final isMma = g.sport?.toLowerCase() == 'mma' || g.league?.toLowerCase() == 'ufc';
-                return isMma || activeStreamIds.contains(g.id);
-              }) // Filter by stream availability (except for MMA)
+              .where((g) => activeStreamIds.contains(g.id)) // Filter by stream availability
               .toList();
         }
 

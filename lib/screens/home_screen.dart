@@ -458,10 +458,12 @@ class _MainHomeViewState extends State<_MainHomeView> {
         debugPrint('[HomeScreen] 📺 Found ${watchingShows.length} watching shows');
 
         // --- Process "Up Next" Logic (Next Episode) ---
-        for (int i = 0; i < watchingShows.length && i < 10; i++) {
-          final show = watchingShows[i];
-          if (show['is_completed'] == true) {
+        final List<Map<String, dynamic>> upNextItems = [];
+        for (var originalShow in watchingShows) {
+          // Rule: Only show episodes in Up Next if the previous episode was completed
+          if (originalShow['is_completed'] == true) {
             try {
+              final show = Map<String, dynamic>.from(originalShow);
               final showId = show['id'];
               final seasonNum = show['season_num'] as int? ?? 1;
               final episodeNum = show['episode_num'] as int? ?? 1;
@@ -477,10 +479,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
               }
 
               if (nextEp != null) {
-                watchingShows[i]['episode_num'] = nextEp.episodeNumber;
-                watchingShows[i]['episode_name'] = nextEp.name;
-                // Since this is the next episode, it's not completed yet
-                watchingShows[i]['is_completed'] = false;
+                show['episode_num'] = nextEp.episodeNumber;
+                show['episode_name'] = nextEp.name;
+                show['is_completed'] = false;
+                upNextItems.add(show);
               } else {
                 // Check if there's a next season
                 final tvDetail = await _api.fetchTvDetail(showId);
@@ -488,17 +490,20 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   final nextSeasonDetail = await _api.fetchSeasonDetail(showId, seasonNum + 1);
                   if (nextSeasonDetail.episodes.isNotEmpty) {
                     final firstEp = nextSeasonDetail.episodes.first;
-                    watchingShows[i]['season_num'] = seasonNum + 1;
-                    watchingShows[i]['episode_num'] = firstEp.episodeNumber;
-                    watchingShows[i]['episode_name'] = firstEp.name;
-                    watchingShows[i]['is_completed'] = false;
+                    show['season_num'] = seasonNum + 1;
+                    show['episode_num'] = firstEp.episodeNumber;
+                    show['episode_name'] = firstEp.name;
+                    show['is_completed'] = false;
+                    upNextItems.add(show);
                   }
                 }
               }
+              // If we didn't find a next episode/season, we don't add it to upNextItems (user is caught up)
             } catch (e) {
               debugPrint('[HomeScreen] ❌ Error calculating next episode: $e');
             }
           }
+          if (upNextItems.length >= 10) break;
         }
 
          List<MovieListItem>? tvRecommendations;
@@ -540,7 +545,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
             _aiAnchorTitle = aiResult.anchorTitle;
             _tvRecommendations = tvRecommendations;
             _tvRecommendationsTitle = tvRecommendationsTitle;
-            _watchingShows = watchingShows;
+            _watchingShows = upNextItems;
             
             if (trendingList.isNotEmpty) {
               final first = trendingList.first;
