@@ -209,20 +209,33 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _retryCount++;
       debugPrint('[PlayerScreen] 🔄 Attempting to re-fetch stream URL (Retry $_retryCount/3)...');
       
-      setState(() {
-        _isRefreshing = true;
-        _hasError = false; // Temporarily clear error to show loading if needed
-      });
+      if (mounted) {
+        setState(() {
+          _isRefreshing = true;
+          _hasError = false; 
+        });
+      }
 
       try {
         final currentPosition = _controller?.videoPlayerController?.value.position ?? widget.startPosition ?? Duration.zero;
         
+        // Robust ID access for both MovieDetail/TvShowDetail objects and Map objects
+        final int? mediaId = widget.item is Map 
+            ? (widget.item['media_id'] ?? widget.item['id']) as int?
+            : (widget.item?.id as int?);
+
+        if (mediaId == null) {
+          debugPrint('[PlayerScreen] ❌ Cannot retry: mediaId is null');
+          if (mounted) setState(() => _isRefreshing = false);
+          return;
+        }
+
         core.ProviderStreamResponse response;
         if (widget.isMovie) {
-          response = await _api.fetchMovieStream(widget.item.id, provider: widget.providerCode ?? 'vidlink');
+          response = await _api.fetchMovieStream(mediaId, provider: widget.providerCode ?? 'vidlink');
         } else {
           response = await _api.fetchTvStream(
-            widget.item.id, 
+            mediaId, 
             widget.season!, 
             widget.episode!, 
             provider: widget.providerCode ?? 'vidlink'

@@ -304,10 +304,10 @@ class SportsScreen extends StatefulWidget {
   const SportsScreen({super.key});
 
   @override
-  State<SportsScreen> createState() => _SportsScreenState();
+  State<SportsScreen> createState() => SportsScreenState();
 }
 
-class _SportsScreenState extends State<SportsScreen> {
+class SportsScreenState extends State<SportsScreen> {
   List<_LeagueData>? _data;
   Map<String, dynamic>? _featuredEvent;
   bool _loading = true;
@@ -318,10 +318,10 @@ class _SportsScreenState extends State<SportsScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    load();
   }
 
-  Future<void> _load() async {
+  Future<void> load() async {
     setState(() { _loading = true; _error = null; });
     try {
       final allSportsData = await _fetchWithRetry(maxRetries: 2);
@@ -473,7 +473,7 @@ class _SportsScreenState extends State<SportsScreen> {
           Text('Could not load sports data', style: TextStyle(color: Colors.white54, fontSize: s(28))),
           const SizedBox(height: 16),
           ElevatedButton.icon(
-            onPressed: _load,
+            onPressed: load,
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
@@ -522,7 +522,7 @@ class _SportsScreenState extends State<SportsScreen> {
                   Text(dateStr, style: TextStyle(color: Colors.white38, fontSize: s(24), fontWeight: FontWeight.w500)),
                 ],
               ),
-              _RefreshButton(onTap: _load),
+              _RefreshButton(onTap: load),
             ],
           ),
           SizedBox(height: s(40)),

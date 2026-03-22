@@ -36,6 +36,7 @@ class HomeScreenState extends State<HomeScreen> {
 
   int _selectedIndex = 1;
   final GlobalKey<FavoritesScreenState> _favoritesKey = GlobalKey<FavoritesScreenState>();
+  final GlobalKey<SportsScreenState> _sportsKey = GlobalKey<SportsScreenState>();
   final GlobalKey<_MainHomeViewState> _homeKey = GlobalKey<_MainHomeViewState>();
   late List<FocusNode> _navNodes;
 
@@ -139,7 +140,7 @@ class HomeScreenState extends State<HomeScreen> {
                 children: [
                   const SearchScreen(),
                   _MainHomeView(key: _homeKey),
-                  if (SettingsService().sportsEnabled) const SportsScreen(),
+                  if (SettingsService().sportsEnabled) SportsScreen(key: _sportsKey),
                   const SettingsScreen(),
                   FavoritesScreen(key: _favoritesKey),
                 ],
@@ -201,15 +202,23 @@ class HomeScreenState extends State<HomeScreen> {
                       if (event.logicalKey == LogicalKeyboardKey.enter ||
                           event.logicalKey == LogicalKeyboardKey.select) {
                         if (_selectedIndex == i) {
-                          // Already on this tab, trigger reset if it's Home
+                          // Already on this tab, trigger reset/refresh
                           if (tab.label == 'Home') {
                             _homeKey.currentState?.resetToTop();
+                          } else if (tab.label == 'Sports') {
+                            _sportsKey.currentState?.load();
                           }
                         } else {
                           setState(() => _selectedIndex = i);
+                          // Also trigger load if switching TO sports
+                          if (tab.label == 'Sports') {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              _sportsKey.currentState?.load();
+                            });
+                          }
                         }
 
-                        // Check if selected tab is favorites (label comparison since index might shift)
+                        // Check if selected tab is favorites
                         if (tab.label == 'Favorites') {
                           _favoritesKey.currentState?.refresh();
                         }
