@@ -468,7 +468,6 @@ class WatchHistoryService {
 
     try {
       await _supabase.from('continue_watching_history').delete().eq('user_id', user.id).eq('media_type', mediaType);
-      await _supabase.from('completed_watch_history').delete().eq('user_id', user.id).eq('media_type', mediaType);
       
       _cachedHistory.clear();
       _lastFetchTime.clear();
