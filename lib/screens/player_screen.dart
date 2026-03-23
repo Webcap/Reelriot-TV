@@ -11,6 +11,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:caffeine_tv/services/api_service.dart';
 import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'dart:async';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -191,6 +192,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     });
   }
 
+  bool get _isSports => !widget.isMovie && (widget.season == null || widget.episode == null);
+
   void _handlePlayerException(BetterPlayerEvent event) async {
     if (_isRefreshing) return;
     
@@ -219,33 +222,50 @@ class _PlayerScreenState extends State<PlayerScreen> {
       try {
         final currentPosition = _controller?.videoPlayerController?.value.position ?? widget.startPosition ?? Duration.zero;
         
-        // Robust ID access for both MovieDetail/TvShowDetail objects and Map objects
-        final int? mediaId = widget.item is Map 
-            ? (widget.item['media_id'] ?? widget.item['id']) as int?
-            : (widget.item?.id as int?);
+        String? newUrl;
+        String? newReferrer;
+        Map<String, String>? newHeaders;
 
-        if (mediaId == null) {
-          debugPrint('[PlayerScreen] ❌ Cannot retry: mediaId is null');
-          if (mounted) setState(() => _isRefreshing = false);
-          return;
-        }
-
-        core.ProviderStreamResponse response;
-        if (widget.isMovie) {
-          response = await _api.fetchMovieStream(mediaId, provider: widget.providerCode ?? 'vidlink');
+        if (_isSports) {
+            // Special refresh logic for sports: re-query Supabase
+            final refreshResult = await _refreshSportsStream();
+            if (refreshResult != null) {
+                newUrl = refreshResult['url'];
+                newReferrer = refreshResult['referrer'];
+            }
         } else {
-          response = await _api.fetchTvStream(
-            mediaId, 
-            widget.season!, 
-            widget.episode!, 
-            provider: widget.providerCode ?? 'vidlink'
-          );
+            // Robust ID access for both MovieDetail/TvShowDetail objects and Map objects
+            final dynamic rawId = widget.item is Map 
+                ? (widget.item['media_id'] ?? widget.item['id'])
+                : widget.item?.id;
+            
+            final int? mediaId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+
+            if (mediaId == null) {
+                debugPrint('[PlayerScreen] ❌ Cannot retry: mediaId is null or invalid ($rawId)');
+                if (mounted) setState(() => _isRefreshing = false);
+                return;
+            }
+
+            final core.ProviderStreamResponse response;
+            if (widget.isMovie) {
+                response = await _api.fetchMovieStream(mediaId, provider: widget.providerCode ?? 'vidlink');
+            } else {
+                response = await _api.fetchTvStream(
+                    mediaId, 
+                    widget.season!, 
+                    widget.episode!, 
+                    provider: widget.providerCode ?? 'vidlink'
+                );
+            }
+
+            if (response.success && response.links != null && response.links!.isNotEmpty) {
+                newUrl = response.links!.first.url;
+                newHeaders = response.links!.first.headers;
+            }
         }
 
-        if (response.success && response.links != null && response.links!.isNotEmpty) {
-          final newUrl = response.links!.first.url;
-          final newHeaders = response.links!.first.headers;
-          
+        if (newUrl != null && newUrl.isNotEmpty) {
           debugPrint('[PlayerScreen] ✅ Re-fetched new URL: $newUrl');
           
           if (!mounted) return;
@@ -261,9 +281,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
               useAsmsTracks: true,
               useAsmsAudioTracks: true,
               useAsmsSubtitles: true,
+              preferredAudioLanguage: SettingsService().defaultAudioLanguage,
               headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Referer': widget.referrer ?? _getReferer(newUrl),
+                'Referer': newReferrer ?? widget.referrer ?? _getReferer(newUrl),
                 ...?newHeaders,
               },
               bufferingConfiguration: const BetterPlayerBufferingConfiguration(
@@ -273,7 +294,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 bufferForPlaybackAfterRebufferMs: 10000,
               ),
             ),
-          );
+          ).then((_) {
+            _controller?.play();
+            _controller?.seekTo(currentPosition);
+          });
 
           // Seek to the last known position after initialization
           late Function(BetterPlayerEvent) refreshListener;
@@ -285,27 +309,60 @@ class _PlayerScreenState extends State<PlayerScreen> {
             }
           };
           _controller?.addEventsListener(refreshListener);
-          
-          setState(() {
-            _isRefreshing = false;
-          });
-          return;
+        } else {
+          debugPrint('[PlayerScreen] ❌ Re-fetch failed or returned no links');
+          if (mounted) {
+            setState(() {
+              _isRefreshing = false;
+              if (widget.isMovie || widget.episode != null) {
+                // For movies/tv, show settings (which includes source selector) if reach max retries or immediate fail
+                _showSettings();
+              } else {
+                _hasError = true;
+                _errorMessage = 'Failed to refresh stream. Please try again later.';
+              }
+            });
+          }
         }
       } catch (e) {
-        debugPrint('[PlayerScreen] ❌ Failed to refresh stream URL: $e');
+        debugPrint('[PlayerScreen] ❌ Error during refresh: $e');
+        if (mounted) setState(() => _isRefreshing = false);
       }
-
-      setState(() {
-        _isRefreshing = false;
-        _hasError = true;
-        _errorMessage = 'Playback failed. Please try again or change provider.';
-      });
     } else {
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'Playback error: $exception';
-      });
+      debugPrint('[PlayerScreen] ❌ Max retries reached or non-source error');
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+          _hasError = true;
+          _errorMessage = exception?.toString() ?? 'Playback error';
+        });
+      }
     }
+  }
+
+  Future<Map<String, String?>?> _refreshSportsStream() async {
+    try {
+        final String? eventId = widget.item is Map ? widget.item['id']?.toString() : null;
+        if (eventId == null) return null;
+
+        debugPrint('[PlayerScreen] 🔄 Querying Supabase for fresh sports stream (ID: $eventId)...');
+        final response = await Supabase.instance.client
+            .from('live_streams')
+            .select('video_url, referrer, sources')
+            .eq('id', eventId)
+            .maybeSingle();
+        
+        if (response != null && response['video_url'] != null && response['video_url'].isNotEmpty) {
+            return {
+                'url': response['video_url'] as String,
+                'referrer': response['referrer'] as String?,
+                'sources': response['sources'],
+            };
+        }
+    } catch (e) {
+        debugPrint('[PlayerScreen] ❌ Supabase sports refresh error: $e');
+    }
+    return null;
   }
 
   void _selectPreferredAudioTrack() {
@@ -359,12 +416,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
         onChangeProvider: (newProviderCode) {
           // Close settings dialog
           Navigator.of(context).pop();
-          
           final currentPos = _controller?.videoPlayerController?.value.position;
+          debugPrint('[PlayerScreen] 🔄 Changing provider to: $newProviderCode');
           
-          // Pause current player
-          _controller?.pause();
-          
+          if (_isSports && widget.allProviders != null) {
+            // Check if newProviderCode is one of our mirror URLs
+            final source = widget.allProviders!.firstWhere(
+              (p) => p['code'] == newProviderCode,
+              orElse: () => {},
+            );
+            
+            if (source.isNotEmpty) {
+              debugPrint('[PlayerScreen] ⚾ Sports mirror switch to: $newProviderCode');
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (context) => PlayerScreen(
+                    url: newProviderCode,
+                    title: widget.title,
+                    item: widget.item,
+                    isMovie: false,
+                    referrer: source['referrer'],
+                    allProviders: widget.allProviders,
+                    startPosition: currentPos,
+                  ),
+                ),
+              );
+              return;
+            }
+          }
+
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (context) => _buildVideoLoader(newProviderCode, currentPos),

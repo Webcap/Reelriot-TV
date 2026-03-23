@@ -94,6 +94,7 @@ class _EspnGame {
   final String? videoUrl;
   final String? referrer;
   final String? eventTitle;
+  final List<dynamic>? sources;
 
   const _EspnGame({
     required this.id,
@@ -118,12 +119,14 @@ class _EspnGame {
     this.videoUrl,
     this.referrer,
     this.eventTitle,
+    this.sources,
   });
 
   _EspnGame copyWith({
     String? videoUrl,
     String? referrer,
     String? eventTitle,
+    List<dynamic>? sources,
   }) {
     return _EspnGame(
       id: id,
@@ -148,6 +151,7 @@ class _EspnGame {
       videoUrl: videoUrl ?? this.videoUrl,
       referrer: referrer ?? this.referrer,
       eventTitle: eventTitle ?? this.eventTitle,
+      sources: sources ?? this.sources,
     );
   }
 
@@ -329,14 +333,15 @@ class SportsScreenState extends State<SportsScreen> {
       // Fetch all active stream data from Supabase
       final activeStreamResponse = await Supabase.instance.client
           .from('live_streams')
-          .select('id, video_url, referrer')
+          .select('id, video_url, referrer, sources')
           .not('video_url', 'is', null);
       
-      final Map<String, Map<String, String?>> streamInfo = {
+      final Map<String, Map<String, dynamic>> streamInfo = {
         for (var item in (activeStreamResponse as List))
           item['id'].toString(): {
             'url': item['video_url']?.toString(),
             'referrer': item['referrer']?.toString(),
+            'sources': item['sources'],
           }
       };
       
@@ -363,6 +368,7 @@ class SportsScreenState extends State<SportsScreen> {
                 return g.copyWith(
                   videoUrl: info?['url'],
                   referrer: info?['referrer'],
+                  sources: info?['sources'],
                 );
               })
               .where((g) => activeStreamIds.contains(g.id)) // Filter by stream availability
@@ -382,13 +388,13 @@ class SportsScreenState extends State<SportsScreen> {
         ld.games.sort((a, b) {
           final now = DateTime.now();
 
-          // Group 1: Upcoming soon (within 60 mins of starting)
+          // Group 1: Upcoming soon (within 30 mins of starting)
           final isAStartingSoon = !a.isActuallyLive && !a.isEffectivelyCompleted &&
                                 a.startTimeUtc != null && a.startTimeUtc!.isAfter(now) &&
-                                a.startTimeUtc!.difference(now).inMinutes <= 60;
+                                a.startTimeUtc!.difference(now).inMinutes <= 30;
           final isBStartingSoon = !b.isActuallyLive && !b.isEffectivelyCompleted &&
                                 b.startTimeUtc != null && b.startTimeUtc!.isAfter(now) &&
-                                b.startTimeUtc!.difference(now).inMinutes <= 60;
+                                b.startTimeUtc!.difference(now).inMinutes <= 30;
 
           if (isAStartingSoon != isBStartingSoon) {
             return isAStartingSoon ? -1 : 1;
@@ -661,6 +667,11 @@ class SportsScreenState extends State<SportsScreen> {
                       item: _featuredEvent,
                       isMovie: false,
                       referrer: _featuredEvent!['referrer'],
+                      allProviders: (_featuredEvent!['sources'] as List?)?.map((s) => {
+                        'name': s['name']?.toString() ?? 'Source',
+                        'code': s['url']?.toString() ?? '',
+                        'referrer': s['referrer']?.toString() ?? '',
+                      }).toList().cast<Map<String, String>>(),
                     ),
                   ),
                 );
@@ -961,6 +972,7 @@ class _GameCardState extends State<_GameCard> {
           league: widget.league.league,
           eventId: widget.game.id,
           gameName: widget.game.name,
+          sources: widget.game.sources,
         ),
       ),
     );

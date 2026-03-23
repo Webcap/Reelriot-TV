@@ -11,6 +11,7 @@ class SportsGameDetailScreen extends StatefulWidget {
   final String league;
   final String eventId;
   final String? gameName;
+  final List<dynamic>? sources;
   final String? baseUrl;
   final http.Client? client;
 
@@ -20,6 +21,7 @@ class SportsGameDetailScreen extends StatefulWidget {
     required this.league,
     required this.eventId,
     this.gameName,
+    this.sources,
     this.baseUrl,
     this.client,
   });
@@ -34,10 +36,12 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
   String? _error;
   String? _streamUrl;
   String? _streamReferrer;
+  List<dynamic>? _sources;
 
   @override
   void initState() {
     super.initState();
+    _sources = widget.sources;
     _loadSummary();
     _checkLiveStream();
   }
@@ -56,6 +60,7 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
           setState(() {
             _streamUrl = response['video_url'];
             _streamReferrer = response['referrer'];
+            _sources = response['sources'];
           });
         }
       }
@@ -80,6 +85,11 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
           item: _summary,
           isMovie: false,
           referrer: _streamReferrer,
+          allProviders: _sources?.map((s) => {
+            'name': s['name']?.toString() ?? 'Source',
+            'code': s['url']?.toString() ?? '',
+            'referrer': s['referrer']?.toString() ?? '',
+          }).toList().cast<Map<String, String>>(),
         ),
       ),
     );
