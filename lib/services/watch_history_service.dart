@@ -244,6 +244,9 @@ class WatchHistoryService {
         );
         debugPrint('[WatchHistory] ✅ Saved Continue Watching Progress');
       }
+
+      _cachedHistory.clear();
+      _lastFetchTime.clear();
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Error in _executeSave: $e');
     }
@@ -268,6 +271,99 @@ class WatchHistoryService {
       position: duration,
       duration: duration,
     );
+  }
+
+  Future<void> markSeasonAsComplete({
+    required TvShowDetail item,
+    required int season,
+    required List<TvEpisode> episodes,
+  }) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    final now = DateTime.now().toIso8601String();
+    
+    _cachedHistory.clear();
+    _lastFetchTime.clear();
+
+    try {
+      final List<Map<String, dynamic>> completedUpserts = [];
+      
+      for (final ep in episodes) {
+        completedUpserts.add({
+          'user_id': user.id,
+          'media_type': 'tv',
+          'media_id': item.id,
+          'season_num': season,
+          'episode_num': ep.episodeNumber,
+          'title': item.name,
+          'poster_path': item.posterPath,
+          'backdrop_path': item.backdropPath,
+          'time_watched_ms': 3600000, // 1 hour
+          'times_watched': 1,
+          'watch_dates': [now],
+          'updated_at': now,
+        });
+      }
+
+      await Future.wait([
+        _supabase.from('completed_watch_history').upsert(
+          completedUpserts,
+          onConflict: 'user_id,media_id,season_num,episode_num'
+        ),
+        _supabase.from('continue_watching_history')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('media_type', 'tv')
+          .eq('media_id', item.id)
+          .eq('season_num', season),
+      ]);
+      
+      debugPrint('[WatchHistory] ✅ Marked Season $season as Completed');
+    } catch (e) {
+      debugPrint('[WatchHistory] ❌ Error in markSeasonAsComplete: $e');
+    }
+  }
+
+  Future<void> markUntilEpisodeAsComplete({
+    required TvShowDetail item,
+    required int season,
+    required int untilEpisode,
+    required List<TvEpisode> allEpisodes,
+  }) async {
+    final episodesToMark = allEpisodes.where((e) => e.episodeNumber <= untilEpisode).toList();
+    await markSeasonAsComplete(item: item, season: season, episodes: episodesToMark);
+  }
+
+  Future<void> removeSeasonFromHistory({
+    required int id,
+    required int season,
+  }) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      await Future.wait([
+        _supabase.from('continue_watching_history')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('media_type', 'tv')
+          .eq('media_id', id)
+          .eq('season_num', season),
+        _supabase.from('completed_watch_history')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('media_type', 'tv')
+          .eq('media_id', id)
+          .eq('season_num', season),
+      ]);
+      
+      _cachedHistory.clear();
+      _lastFetchTime.clear();
+      debugPrint('[WatchHistory] 🗑️ Removed Season $season from History');
+    } catch (e) {
+      debugPrint('[WatchHistory] ❌ Error removing season history: $e');
+    }
   }
 
   Future<void> removeFromHistory({
@@ -493,12 +589,12 @@ class WatchHistoryService {
     return null;
   }
 
-  Future<List<Map<String, dynamic>>> getRecentlyWatchedShows() async {
+  Future<List<Map<String, dynamic>>> getRecentlyWatchedShows({bool forceRefresh = false}) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return [];
 
     try {
-      final history = await getHistory(mediaType: 'tv', includeCompleted: true);
+      final history = await getHistory(mediaType: 'tv', includeCompleted: true, forceRefresh: forceRefresh);
       
       final shows = <Map<String, dynamic>>[];
       for (var m in history) {

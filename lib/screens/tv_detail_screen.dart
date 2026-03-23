@@ -51,6 +51,20 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
           },
         ),
         ContextMenuItem(
+          label: 'Mark Watched until here',
+          icon: Icons.playlist_add_check,
+          onTap: () async {
+            if (_show == null) return;
+            await _historyService.markUntilEpisodeAsComplete(
+              item: _show!,
+              season: ep.seasonNumber,
+              untilEpisode: ep.episodeNumber,
+              allEpisodes: _seasons?[ep.seasonNumber]?.episodes ?? [],
+            );
+            _load(); // Refresh history
+          },
+        ),
+        ContextMenuItem(
           label: 'Remove from History',
           icon: Icons.delete_outline,
           color: Colors.redAccent,
@@ -1123,23 +1137,56 @@ class _SeasonItem extends StatefulWidget {
 class _SeasonItemState extends State<_SeasonItem> {
   bool _isFocused = false;
 
+  void _showSeasonContextMenu() {
+    final s = widget.s;
+    final parent = context.findAncestorStateOfType<_TvDetailScreenState>();
+    if (parent == null) return;
+
+    ContextMenuDialog.show(
+      context: context,
+      title: 'Season ${widget.num} Actions',
+      s: s,
+      items: [
+        ContextMenuItem(
+          label: 'Mark Season as Completed',
+          icon: Icons.done_all,
+          onTap: () async {
+            if (parent._show == null) return;
+            final episodes = parent._seasons?[widget.num]?.episodes;
+            if (episodes == null) return;
+            await parent._historyService.markSeasonAsComplete(
+              item: parent._show!,
+              season: widget.num,
+              episodes: episodes,
+            );
+            parent._load();
+          },
+        ),
+        ContextMenuItem(
+          label: 'Remove Season from History',
+          icon: Icons.delete_sweep_outlined,
+          color: Colors.redAccent,
+          onTap: () async {
+            if (parent._show == null) return;
+            await parent._historyService.removeSeasonFromHistory(
+              id: parent._show!.id,
+              season: widget.num,
+            );
+            parent._load();
+          },
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.s;
-    return Focus(
+    return LongPressFocus(
+      onLongPress: _showSeasonContextMenu,
+      onTap: widget.onTap,
       onFocusChange: (focused) => setState(() => _isFocused = focused),
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.select)) {
-          widget.onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
+      child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           margin: EdgeInsets.only(bottom: s(8)),
           padding: EdgeInsets.symmetric(horizontal: s(24), vertical: s(16)),
@@ -1170,7 +1217,6 @@ class _SeasonItemState extends State<_SeasonItem> {
                 ),
             ],
           ),
-        ),
       ),
     );
   }

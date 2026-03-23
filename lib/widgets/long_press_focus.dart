@@ -32,25 +32,40 @@ class _LongPressFocusState extends State<LongPressFocus> {
   Timer? _longPressTimer;
   bool _isLongPress = false;
 
+  void _reset() {
+    _longPressTimer?.cancel();
+    _longPressTimer = null;
+    _isLongPress = false;
+  }
+
   void _handleKeyDown(LogicalKeyboardKey key) {
-    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.select) {
+    if (key == LogicalKeyboardKey.enter || 
+        key == LogicalKeyboardKey.select || 
+        key == LogicalKeyboardKey.space ||
+        key == LogicalKeyboardKey.gameButtonA) {
       if (_longPressTimer != null) return;
       _isLongPress = false;
-      _longPressTimer = Timer(const Duration(milliseconds: 700), () {
+      _longPressTimer = Timer(const Duration(milliseconds: 500), () {
         _isLongPress = true;
-        HapticFeedback.heavyImpact();
+        HapticFeedback.mediumImpact();
         widget.onLongPress?.call();
       });
     }
   }
 
   void _handleKeyUp(LogicalKeyboardKey key) {
-    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.select) {
+    if (key == LogicalKeyboardKey.enter || 
+        key == LogicalKeyboardKey.select || 
+        key == LogicalKeyboardKey.space ||
+        key == LogicalKeyboardKey.gameButtonA) {
+      final wasLongPress = _isLongPress;
       _longPressTimer?.cancel();
       _longPressTimer = null;
-      if (!_isLongPress) {
+      // We don't reset _isLongPress here immediately because we need it for the check
+      if (!wasLongPress) {
         widget.onTap?.call();
       }
+      _isLongPress = false;
     }
   }
 
@@ -66,7 +81,10 @@ class _LongPressFocusState extends State<LongPressFocus> {
       focusNode: widget.focusNode,
       autofocus: widget.autofocus,
       descendantsAreFocusable: widget.descendantsAreFocusable,
-      onFocusChange: widget.onFocusChange,
+      onFocusChange: (focused) {
+        if (!focused) _reset();
+        widget.onFocusChange?.call(focused);
+      },
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
           _handleKeyDown(event.logicalKey);

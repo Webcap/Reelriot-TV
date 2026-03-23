@@ -12,6 +12,7 @@ import 'package:caffeine_tv/services/api_service.dart';
 import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/scheduler.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -61,6 +62,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
   int _retryCount = 0;
   final ApiService _api = ApiService();
   bool _isRefreshing = false;
+  bool _isDisposed = false;
+  bool _isHandlingException = false;
+
+  void _safeSetState(VoidCallback fn) {
+    if (!mounted || _isDisposed) return;
+    
+    // Check if we are in a phase where setState is allowed
+    // During build/layout/paint, we must delay to the next frame
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks || 
+        phase == SchedulerPhase.midFrameMicrotasks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_isDisposed) {
+          setState(fn);
+        }
+      });
+    } else {
+      setState(fn);
+    }
+  }
 
   @override
   void initState() {
@@ -70,7 +91,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _startProgressTimer();
     
     _visibilitySubscription = _controller?.controlsVisibilityStream.listen((visible) {
-      if (mounted) setState(() => _controlsVisible = visible);
+      _safeSetState(() => _controlsVisible = visible);
     });
 
     // Ensure we have focus on start
@@ -109,7 +130,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _setupController() {
     if (widget.url.isEmpty) {
-      setState(() {
+      _safeSetState(() {
         _hasError = true;
         _errorMessage = 'Invalid video URL';
       });
@@ -141,7 +162,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             controller: controller,
             onVisibilityChanged: (visible) {
               onVisibilityChanged(visible);
-              if (mounted) setState(() => _controlsVisible = visible);
+              _safeSetState(() => _controlsVisible = visible);
             },
             onShowSettings: _showSettings,
           ),
@@ -179,10 +200,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     debugPrint('[PlayerScreen] 🔗 Referrer: ${widget.referrer ?? _getReferer(widget.url)}');
  
     _controller!.addEventsListener((event) async {
+      if (_isDisposed) return;
       if (event.betterPlayerEventType == BetterPlayerEventType.finished) {
         debugPrint('[PlayerScreen] 🎉 Video finished, saving final progress (100%) and closing');
         await _saveCurrentProgress(isFinished: true);
-        if (mounted) Navigator.of(context).pop();
+        if (mounted && !_isDisposed) Navigator.of(context).pop();
       } else if (event.betterPlayerEventType == BetterPlayerEventType.initialized) {
         // Try multiple times as tracks might load late in HLS manifest
         _selectPreferredAudioTrack();
@@ -191,7 +213,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         Future.delayed(const Duration(milliseconds: 3000), () => _selectPreferredAudioTrack());
         Future.delayed(const Duration(milliseconds: 5000), () => _selectPreferredAudioTrack());
       } else if (event.betterPlayerEventType == BetterPlayerEventType.exception) {
-        _handlePlayerException(event);
+        if (!_isDisposed) _handlePlayerException(event);
       }
     });
   }
@@ -199,7 +221,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool get _isSports => !widget.isMovie && (widget.season == null || widget.episode == null);
 
   void _handlePlayerException(BetterPlayerEvent event) async {
-    if (_isRefreshing) return;
+    if (_isHandlingException || _isRefreshing || _isDisposed) return;
+    _isHandlingException = true;
     
     final exception = event.parameters?['exception'];
     debugPrint('[PlayerScreen] ⚠️ Playback exception: $exception');
@@ -216,8 +239,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _retryCount++;
       debugPrint('[PlayerScreen] 🔄 Attempting to re-fetch stream URL (Retry $_retryCount/3)...');
       
-      if (mounted) {
-        setState(() {
+      if (mounted && !_isDisposed) {
+        _safeSetState(() {
           _isRefreshing = true;
           _hasError = false; 
         });
@@ -247,7 +270,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
             if (mediaId == null) {
                 debugPrint('[PlayerScreen] ❌ Cannot retry: mediaId is null or invalid ($rawId)');
-                if (mounted) setState(() => _isRefreshing = false);
+                _isHandlingException = false;
+                _safeSetState(() => _isRefreshing = false);
                 return;
             }
 
@@ -299,6 +323,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
             ),
           ).then((_) {
+            if (_isDisposed) return;
             _controller?.play();
             _controller?.seekTo(currentPosition);
           });
@@ -315,32 +340,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _controller?.addEventsListener(refreshListener);
         } else {
           debugPrint('[PlayerScreen] ❌ Re-fetch failed or returned no links');
-          if (mounted) {
-            setState(() {
-              _isRefreshing = false;
-              if (widget.isMovie || widget.episode != null) {
-                // For movies/tv, show settings (which includes source selector) if reach max retries or immediate fail
-                _showSettings();
-              } else {
-                _hasError = true;
-                _errorMessage = 'Failed to refresh stream. Please try again later.';
-              }
-            });
-          }
+          _isHandlingException = false;
+          _safeSetState(() {
+            _isRefreshing = false;
+            if (widget.isMovie || widget.episode != null) {
+              // For movies/tv, show settings (which includes source selector) if reach max retries or immediate fail
+              _showSettings();
+            } else {
+              _hasError = true;
+              _errorMessage = 'Failed to refresh stream. Please try again later.';
+            }
+          });
         }
       } catch (e) {
         debugPrint('[PlayerScreen] ❌ Error during refresh: $e');
-        if (mounted) setState(() => _isRefreshing = false);
+        _isHandlingException = false;
+        _safeSetState(() => _isRefreshing = false);
       }
     } else {
       debugPrint('[PlayerScreen] ❌ Max retries reached or non-source error');
-      if (mounted) {
-        setState(() {
-          _isRefreshing = false;
-          _hasError = true;
-          _errorMessage = exception?.toString() ?? 'Playback error';
-        });
-      }
+      _isHandlingException = false;
+      _safeSetState(() {
+        _isRefreshing = false;
+        _hasError = true;
+        _errorMessage = exception?.toString() ?? 'Playback error';
+      });
     }
   }
 
@@ -370,7 +394,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _selectPreferredAudioTrack() {
-    if (_controller == null) return;
+    if (_controller == null || _isDisposed) return;
     
     final tracks = _controller!.betterPlayerAsmsAudioTracks;
     if (tracks == null || tracks.isEmpty) {
@@ -484,10 +508,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _saveTimer?.cancel();
-    _saveCurrentProgress();
+    _saveCurrentProgress(); // Best effort save
     _visibilitySubscription?.cancel();
-    _controller?.dispose();
+    
+    // Safety check before controller methods
+    try {
+      _controller?.pause();
+      _controller?.dispose();
+    } catch (e) {
+      debugPrint('[PlayerScreen] Error during controller disposal: $e');
+    }
+    
     _mainFocusNode.dispose();
     WakelockPlus.disable(); 
     super.dispose();
@@ -518,7 +551,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           } else {
             _controller?.play();
           }
-          if (!_controlsVisible) _controller?.setControlsVisibility(true);
+          if (!_controlsVisible && !_isDisposed) _controller?.setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 
@@ -528,7 +561,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (pos != null) {
             _controller?.seekTo(pos + const Duration(seconds: 10));
           }
-          if (!_controlsVisible) _controller?.setControlsVisibility(true);
+          if (!_controlsVisible && !_isDisposed) _controller?.setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 
@@ -539,7 +572,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             final target = pos - const Duration(seconds: 10);
             _controller?.seekTo(target < Duration.zero ? Duration.zero : target);
           }
-          if (!_controlsVisible) _controller?.setControlsVisibility(true);
+          if (!_controlsVisible && !_isDisposed) _controller?.setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 
@@ -553,11 +586,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (TvKeys.isNavigation(key)) {
           if (!_controlsVisible) {
             debugPrint('[PlayerScreen] 🚀 Showing controls');
-            _controller?.setControlsVisibility(true);
+            if (!_isDisposed) _controller?.setControlsVisibility(true);
             return KeyEventResult.handled;
           } else {
             // Safety: keep-alive the visibility timer.
-            _controller?.setControlsVisibility(true);
+            if (!_isDisposed) _controller?.setControlsVisibility(true);
           }
           return KeyEventResult.ignored;
         }

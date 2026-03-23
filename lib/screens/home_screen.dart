@@ -454,7 +454,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
           _api.fetchTopRatedTv(),
           _api.fetchAiringToday(),
           _recService.getRecommendations(mediaType: 'tv'),
-          _historyService.getRecentlyWatchedShows(),
+          _historyService.getRecentlyWatchedShows(forceRefresh: forceRefresh),
         ]);
 
         final history = results[0] as List<Map<String, dynamic>>;
@@ -723,7 +723,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     final h = await _historyService.getHistory(mediaType: mediaType, forceRefresh: forceRefresh);
     List<Map<String, dynamic>>? ws;
     if (mediaType == 'tv') {
-      ws = await _historyService.getRecentlyWatchedShows();
+      ws = await _historyService.getRecentlyWatchedShows(forceRefresh: forceRefresh);
     }
     if (mounted) {
       setState(() {
