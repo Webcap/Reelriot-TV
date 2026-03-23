@@ -745,7 +745,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         // Back / Exit
         if (TvKeys.isBack(key)) {
-          Navigator.of(context).pop();
+          _saveCurrentProgress().then((_) {
+            if (mounted) Navigator.of(context).pop();
+          });
           return KeyEventResult.handled;
         }
 
@@ -789,7 +791,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         if (TvKeys.isMediaStop(key)) {
           debugPrint('[PlayerScreen] ⏹️ Media Stop key');
-          Navigator.of(context).pop();
+          _saveCurrentProgress().then((_) {
+            if (mounted) Navigator.of(context).pop();
+          });
           return KeyEventResult.handled;
         }
 
@@ -808,37 +812,45 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         return KeyEventResult.ignored;
       },
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        body: _hasError
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      color: Colors.red,
-                      size: 64,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      _errorMessage ?? 'An error occurred',
-                      style: const TextStyle(color: Colors.white, fontSize: 18),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white12,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) async {
+          if (didPop) return;
+          await _saveCurrentProgress();
+          if (mounted) Navigator.of(context).pop();
+        },
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: _hasError
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        color: Colors.red,
+                        size: 64,
                       ),
-                      child: const Text('Go Back'),
-                    ),
-                  ],
-                ),
-              )
-            : _controller == null
-            ? const Center(child: CircularProgressIndicator())
-            : BetterPlayer(controller: _controller!),
+                      const SizedBox(height: 16),
+                      Text(
+                        _errorMessage ?? 'An error occurred',
+                        style: const TextStyle(color: Colors.white, fontSize: 18),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white12,
+                        ),
+                        child: const Text('Go Back'),
+                      ),
+                    ],
+                  ),
+                )
+              : _controller == null
+              ? const Center(child: CircularProgressIndicator())
+              : BetterPlayer(controller: _controller!),
+        ),
       ),
     );
   }

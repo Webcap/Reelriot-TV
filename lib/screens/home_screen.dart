@@ -1516,7 +1516,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                     }
 
                     // Refresh history so completed items disappear immediately
-                    if (mounted) _loadContent(quiet: true);
+                    if (mounted) _loadContent(quiet: true, forceRefresh: true);
                     } finally {
                       _isProcessing = false;
                       if (mounted) setState(() {});
@@ -1586,7 +1586,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                       await Navigator.of(context).push(
                       MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: m.id)),
                     );
-                    if (mounted) _loadContent(quiet: true);
+                    if (mounted) _loadContent(quiet: true, forceRefresh: true);
                     } finally {
                       _isProcessing = false;
                       if (mounted) setState(() {});
@@ -1992,7 +1992,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                         MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
                       );
                     }
-                    if (mounted) _loadContent(quiet: true);
+                    if (mounted) _loadContent(quiet: true, forceRefresh: true);
                   },
                 ),
               );
