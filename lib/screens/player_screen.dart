@@ -65,6 +65,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _isRefreshing = false;
   bool _isDisposed = false;
   bool _isHandlingException = false;
+  Duration? _lastKnownPosition;
 
   void _safeSetState(VoidCallback fn) {
     if (!mounted || _isDisposed) return;
@@ -233,6 +234,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       } else if (event.betterPlayerEventType ==
           BetterPlayerEventType.exception) {
         if (!_isDisposed) _handlePlayerException(event);
+      } else if (event.betterPlayerEventType == BetterPlayerEventType.progress) {
+        if (!_isDisposed) {
+          _lastKnownPosition = event.parameters?['progress'] as Duration?;
+        }
       }
     });
   }
@@ -284,7 +289,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
 
       try {
-        final currentPosition =
+        final currentPosition = _lastKnownPosition ??
             _controller?.videoPlayerController?.value.position ??
             widget.startPosition ??
             Duration.zero;

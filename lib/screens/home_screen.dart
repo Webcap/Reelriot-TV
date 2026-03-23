@@ -1406,11 +1406,22 @@ class _MainHomeViewState extends State<_MainHomeView> {
               final isMovie = h['type'] == 'movie';
               final mediaId = h['media_id'] as int;
               
+              String? subtitle;
+              if (!isMovie) {
+                final season = h['season_num'] as int?;
+                final episode = h['episode_num'] as int?;
+                final epName = h['episode_name'] as String?;
+                if (season != null && episode != null) {
+                  subtitle = 'S${season.toString().padLeft(2, '0')} E${episode.toString().padLeft(2, '0')}${epName != null ? ' • $epName' : ''}';
+                }
+              }
+
               return Padding(
                 padding: EdgeInsets.only(right: s(36)),
                 child: PosterCard(
                   posterPath: h['poster_path'],
                   title: h['title'] ?? '',
+                  subtitle: subtitle,
                   onFocus: () => _updateFocusedMovie(mediaId, isMovie: isMovie),
                   onLongPress: () => _showItemContextMenu(
                     item: h,

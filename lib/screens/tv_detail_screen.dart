@@ -641,6 +641,32 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                                   ),
                                               ],
                                             ),
+                                            if (ep.airDate != null || ep.voteAverage != null) ...[
+                                              SizedBox(height: s(6)),
+                                              Row(
+                                                children: [
+                                                  if (ep.airDate != null && ep.airDate!.isNotEmpty) ...[
+                                                    Icon(Icons.calendar_month, color: Colors.white54, size: s(16)),
+                                                    SizedBox(width: s(6)),
+                                                    Text(
+                                                      ep.airDate!,
+                                                      style: TextStyle(color: Colors.white54, fontSize: s(16)),
+                                                    ),
+                                                  ],
+                                                  if ((ep.airDate != null && ep.airDate!.isNotEmpty) &&
+                                                      (ep.voteAverage != null && ep.voteAverage! > 0))
+                                                    SizedBox(width: s(24)),
+                                                  if (ep.voteAverage != null && ep.voteAverage! > 0) ...[
+                                                    Icon(Icons.star, color: Colors.orangeAccent, size: s(16)),
+                                                    SizedBox(width: s(6)),
+                                                    Text(
+                                                      ep.voteAverage!.toStringAsFixed(1),
+                                                      style: TextStyle(color: Colors.white54, fontSize: s(16)),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ],
                                             if (ep.overview != null && ep.overview!.isNotEmpty) ...[
                                               SizedBox(height: s(8)),
                                               Text(
