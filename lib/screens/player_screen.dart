@@ -161,6 +161,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Referer': widget.referrer ?? _getReferer(widget.url),
+          'Referrer': widget.referrer ?? _getReferer(widget.url),
+          'Origin': _getOrigin(widget.referrer ?? _getReferer(widget.url)),
+          'Accept': '*/*',
+          'Connection': 'keep-alive',
           ...?widget.headers,
         },
         bufferingConfiguration: const BetterPlayerBufferingConfiguration(
@@ -402,6 +406,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return '${uri.scheme}://${uri.host}/';
     } catch (_) {
       return '';
+    }
+  }
+  
+  String _getOrigin(String url) {
+    try {
+      final uri = Uri.parse(url);
+      if (uri.scheme.isEmpty || uri.host.isEmpty) return url.replaceAll(RegExp(r'/$'), '');
+      return '${uri.scheme}://${uri.host}';
+    } catch (_) {
+      return url.replaceAll(RegExp(r'/$'), '');
     }
   }
 
