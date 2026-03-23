@@ -293,17 +293,45 @@ class _MainHomeViewState extends State<_MainHomeView> {
     int? episode,
     int? episodeId,
     String? episodeName,
+    int? showId,
   }) {
-    final s = (double v) => _scale(context, v);
+    double s(double v) => _scale(context, v);
     final title = isMovie 
-        ? (item is MovieDetail ? item.title : (item is MovieListItem ? item.title : (item as Map)['title'] ?? 'Movie'))
-        : (item is TvShowDetail ? item.name : (item is MovieListItem ? item.title : (item as Map)['title'] ?? 'TV Show'));
+        ? (item is MovieDetail ? item.title : (item is MovieListItem ? item.title : item['title'] ?? 'Movie'))
+        : (item is TvShowDetail ? item.name : (item is MovieListItem ? item.title : item['name'] ?? item['title'] ?? 'TV Show'));
+
+    // Resolve the show/movie ID for navigation
+    final resolvedId = showId ??
+        (item is MovieDetail ? item.id
+          : item is MovieListItem ? item.id
+          : item is TvShowDetail ? item.id
+          : ((item as Map)['media_id'] ?? item['id']));
+
+    // Capture the navigator before the dialog opens — the dialog's own
+    // Navigator.pop() would otherwise undo a push made from onTap().
+    final nav = Navigator.of(context);
 
     ContextMenuDialog.show(
       context: context,
       title: title,
       s: s,
       items: [
+        if (!isMovie && resolvedId != null)
+          ContextMenuItem(
+            label: 'Go to Show',
+            icon: Icons.tv,
+            onTap: () {
+              // Use microtask so the dialog's own pop() fires first,
+              // then we push — otherwise pop() would remove our pushed route.
+              Future.microtask(() {
+                nav.push(
+                  MaterialPageRoute(
+                    builder: (context) => TvDetailScreen(tvId: resolvedId),
+                  ),
+                );
+              });
+            },
+          ),
         ContextMenuItem(
           label: 'Mark as Completed',
           icon: Icons.check_circle_outline,
@@ -329,7 +357,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
               id: id,
               isMovie: isMovie,
               season: season,
-                episode: episode,
+              episode: episode,
             );
             await _reloadHistory(forceRefresh: true);
           },
@@ -1430,6 +1458,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                     episode: h['episode_num'] as int?,
                     episodeId: h['id'],
                     episodeName: h['episode_name'],
+                    showId: mediaId,
                   ),
                   onTap: () async {
                     if (_isProcessing) return;
@@ -1707,7 +1736,13 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   title: show['name'] ?? '',
                   subtitle: subtitle,
                   onFocus: () => _updateFocusedMovie(show['id'], isMovie: false),
-                  onLongPress: () => _showItemContextMenu(item: show, isMovie: false),
+                  onLongPress: () => _showItemContextMenu(
+                    item: show,
+                    isMovie: false,
+                    season: season,
+                    episode: episode,
+                    showId: show['id'] as int?,
+                  ),
                   onTap: () async {
                     if (season != null && episode != null) {
                       // Get show detail for VideoLoaderScreen

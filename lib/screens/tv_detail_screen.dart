@@ -27,7 +27,7 @@ class TvDetailScreen extends StatefulWidget {
 class _TvDetailScreenState extends State<TvDetailScreen> {
   final ApiService _api = ApiService();
 
-  void _showEpisodeContextMenu(TvEpisode ep) {
+  void _showEpisodeContextMenu(TvEpisode ep, bool isWatched) {
     s(double v) => _scale(context, v);
     ContextMenuDialog.show(
       context: context,
@@ -47,6 +47,13 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
               episodeId: ep.id,
               episodeName: ep.name,
             );
+            if (mounted) {
+              setState(() => _recentlyCompletedIds.add(ep.id));
+              // Clear after animation
+              Future.delayed(const Duration(seconds: 3), () {
+                if (mounted) setState(() => _recentlyCompletedIds.remove(ep.id));
+              });
+            }
             _load(); // Refresh season history
           },
         ),
@@ -64,21 +71,22 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
             _load(); // Refresh history
           },
         ),
-        ContextMenuItem(
-          label: 'Remove from History',
-          icon: Icons.delete_outline,
-          color: Colors.redAccent,
-          onTap: () async {
-            if (_show == null) return;
-            await _historyService.removeFromHistory(
-              id: _show!.id,
-              isMovie: false,
-              season: ep.seasonNumber,
-              episode: ep.episodeNumber,
-            );
-            _load(); // Refresh season history
-          },
-        ),
+        if (isWatched)
+          ContextMenuItem(
+            label: 'Remove from History',
+            icon: Icons.delete_outline,
+            color: Colors.redAccent,
+            onTap: () async {
+              if (_show == null) return;
+              await _historyService.removeFromHistory(
+                id: _show!.id,
+                isMovie: false,
+                season: ep.seasonNumber,
+                episode: ep.episodeNumber,
+              );
+              _load(); // Refresh season history
+            },
+          ),
       ],
     );
   }
@@ -94,6 +102,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
   Map<String, dynamic>? _lastWatched;
   List<Map<String, dynamic>>? _seasonHistory;
   bool _isProcessing = false;
+  final Set<int> _recentlyCompletedIds = {};
 
 
   double _scale(BuildContext context, double value) {
@@ -143,20 +152,70 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
 
   Future<void> _loadSeason(int num) async {
     try {
+      final user = Supabase.instance.client.auth.currentUser;
       final results = await Future.wait([
         _api.fetchSeasonDetail(widget.tvId, num),
-        _historyService.getHistory(mediaType: 'tv', includeCompleted: true),
+        if (user != null)
+          Supabase.instance.client
+              .from('continue_watching_history')
+              .select()
+              .eq('user_id', user.id)
+              .eq('media_type', 'tv')
+              .eq('media_id', widget.tvId)
+              .eq('season_num', num)
+        else
+          Future.value(<dynamic>[]),
+        if (user != null)
+          Supabase.instance.client
+              .from('completed_watch_history')
+              .select()
+              .eq('user_id', user.id)
+              .eq('media_type', 'tv')
+              .eq('media_id', widget.tvId)
+              .eq('season_num', num)
+        else
+          Future.value(<dynamic>[]),
       ]);
 
       final detail = results[0] as TvSeasonDetailResponse;
-      final history = results[1] as List<Map<String, dynamic>>;
-      
-      final currentSeasonHistory = history.where((h) => h['media_id'] == widget.tvId && h['season_num'] == num).toList();
+      final cwRows = List<Map<String, dynamic>>.from(results[1] as List);
+      final compRows = List<Map<String, dynamic>>.from(results[2] as List);
+
+      // Build a per-episode map: episode_num -> normalized history entry
+      final Map<int, Map<String, dynamic>> episodeMap = {};
+
+      for (final row in cwRows) {
+        final epNum = row['episode_num'] as int? ?? 0;
+        episodeMap[epNum] = {
+          'media_id': row['media_id'],
+          'season_num': row['season_num'],
+          'episode_num': epNum,
+          'episode_id': row['episode_id'],
+          'elapsed_ms': row['elapsed_ms'] ?? 0,
+          'duration_ms': row['duration_ms'] ?? 0,
+          'is_completed': false,
+        };
+      }
+
+      // Completed entries override continue-watching (is_completed wins)
+      for (final row in compRows) {
+        final epNum = row['episode_num'] as int? ?? 0;
+        final watched = row['time_watched_ms'] as int? ?? 0;
+        episodeMap[epNum] = {
+          'media_id': row['media_id'],
+          'season_num': row['season_num'],
+          'episode_num': epNum,
+          'episode_id': row['episode_id'],
+          'elapsed_ms': watched,
+          'duration_ms': watched,
+          'is_completed': true,
+        };
+      }
 
       if (mounted) {
         setState(() {
           _seasons![num] = detail;
-          _seasonHistory = currentSeasonHistory;
+          _seasonHistory = episodeMap.values.toList();
         });
       }
     } catch (_) {}
@@ -318,8 +377,23 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
         ),
       ),
     ).then((_) async {
-      await Future.delayed(const Duration(seconds: 2));
-      _load();
+      await Future.delayed(const Duration(seconds: 1));
+      // Store current status to compare after load
+      final oldHistory = _seasonHistory?.toList();
+      await _load();
+      
+      if (episodeId != null && mounted) {
+        // If it's now completed but wasn't before (or just refresh anyway for the polish)
+        final isNowWatched = _seasonHistory?.any((h) => h['episode_id'] == episodeId) ?? false;
+        final wasWatched = oldHistory?.any((h) => h['episode_id'] == episodeId) ?? false;
+        
+        if (isNowWatched && !wasWatched) {
+          setState(() => _recentlyCompletedIds.add(episodeId));
+          Future.delayed(const Duration(seconds: 3), () {
+            if (mounted) setState(() => _recentlyCompletedIds.remove(episodeId));
+          });
+        }
+      }
     });
 
 
@@ -575,12 +649,12 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                         final elapsed = (history != null && history.isNotEmpty) ? history['elapsed_ms'] as int? ?? 0 : 0;
                         final duration = (history != null && history.isNotEmpty) ? history['duration_ms'] as int? ?? 0 : 0;
                         final progress = duration > 0 ? (elapsed / duration).clamp(0.0, 1.0) : 0.0;
-                        final isWatched = progress > 0.95;
+                        final isWatched = (history != null && history['is_completed'] == true) || progress > 0.95;
 
                         return Padding(
                           padding: EdgeInsets.only(bottom: s(16)),
                           child: LongPressFocus(
-                            onLongPress: () => _showEpisodeContextMenu(ep),
+                            onLongPress: () => _showEpisodeContextMenu(ep, isWatched),
                             onTap: () => _handlePlay(ep.seasonNumber, ep.episodeNumber, ep.id, ep.name, elapsed: elapsed),
                             onFocusChange: (focused) {
                               if (focused) setState(() {});
@@ -590,7 +664,6 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                 final focused = Focus.of(context).hasFocus;
                                 return AnimatedContainer(
                                   duration: const Duration(milliseconds: 200),
-                                  padding: EdgeInsets.all(s(16)),
                                   decoration: BoxDecoration(
                                     color: focused ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.04),
                                     borderRadius: BorderRadius.circular(s(16)),
@@ -599,117 +672,140 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                       width: s(1.5),
                                     ),
                                   ),
-                                  child: Row(
+                                  child: Stack(
                                     children: [
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(s(8)),
-                                        child: Container(
-                                          width: s(180),
-                                          height: s(100),
-                                          color: Colors.white.withValues(alpha: 0.05),
-                                          child: ep.stillPath != null
-                                              ? CachedNetworkImage(
-                                                  imageUrl: '$tmdbImageBaseUrl/w300${ep.stillPath}',
-                                                  fit: BoxFit.cover,
-                                                )
-                                              : Icon(Icons.tv, color: Colors.white24, size: s(32)),
-                                        ),
-                                      ),
-                                      SizedBox(width: s(24)),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                      Padding(
+                                        padding: EdgeInsets.all(s(16)),
+                                        child: Row(
                                           children: [
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    '${ep.episodeNumber}. ${ep.name ?? "Episode ${ep.episodeNumber}"}',
-                                                    style: TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: s(22),
-                                                      fontWeight: FontWeight.bold,
-                                                    ),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                                if (isWatched)
-                                                  Padding(
-                                                    padding: EdgeInsets.only(left: s(8)),
-                                                    child: Icon(Icons.check_circle, color: const Color(0xFFEC1D24), size: s(20)),
-                                                  ),
-                                              ],
+                                            ClipRRect(
+                                              borderRadius: BorderRadius.circular(s(8)),
+                                              child: Container(
+                                                width: s(180),
+                                                height: s(100),
+                                                color: Colors.white.withValues(alpha: 0.05),
+                                                child: ep.stillPath != null
+                                                    ? CachedNetworkImage(
+                                                        imageUrl: '$tmdbImageBaseUrl/w300${ep.stillPath}',
+                                                        fit: BoxFit.cover,
+                                                      )
+                                                    : Icon(Icons.tv, color: Colors.white24, size: s(32)),
+                                              ),
                                             ),
-                                            if (ep.airDate != null || ep.voteAverage != null) ...[
-                                              SizedBox(height: s(6)),
-                                              Row(
+                                            SizedBox(width: s(24)),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
                                                 children: [
-                                                  if (ep.airDate != null && ep.airDate!.isNotEmpty) ...[
-                                                    Icon(Icons.calendar_month, color: Colors.white54, size: s(16)),
-                                                    SizedBox(width: s(6)),
-                                                    Text(
-                                                      ep.airDate!,
-                                                      style: TextStyle(color: Colors.white54, fontSize: s(16)),
+                                                  Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          '${ep.episodeNumber}. ${ep.name ?? "Episode ${ep.episodeNumber}"}',
+                                                          style: TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: s(22),
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                        ),
+                                                      ),
+                                                      AnimatedSwitcher(
+                                                        duration: const Duration(milliseconds: 400),
+                                                        transitionBuilder: (child, animation) => ScaleTransition(
+                                                          scale: CurvedAnimation(parent: animation, curve: Curves.elasticOut),
+                                                          child: child,
+                                                        ),
+                                                        child: isWatched
+                                                            ? Padding(
+                                                                key: const ValueKey('watched'),
+                                                                padding: EdgeInsets.only(left: s(8)),
+                                                                child: Icon(Icons.check_circle, color: const Color(0xFFEC1D24), size: s(24)),
+                                                              )
+                                                            : const SizedBox.shrink(key: ValueKey('not_watched')),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  if (ep.airDate != null || ep.voteAverage != null) ...[
+                                                    SizedBox(height: s(6)),
+                                                    Row(
+                                                      children: [
+                                                        if (ep.airDate != null && ep.airDate!.isNotEmpty) ...[
+                                                          Icon(Icons.calendar_month, color: Colors.white54, size: s(16)),
+                                                          SizedBox(width: s(6)),
+                                                          Text(
+                                                            ep.airDate!,
+                                                            style: TextStyle(color: Colors.white54, fontSize: s(16)),
+                                                          ),
+                                                        ],
+                                                        if ((ep.airDate != null && ep.airDate!.isNotEmpty) &&
+                                                            (ep.voteAverage != null && ep.voteAverage! > 0))
+                                                          SizedBox(width: s(24)),
+                                                        if (ep.voteAverage != null && ep.voteAverage! > 0) ...[
+                                                          Icon(Icons.star, color: Colors.orangeAccent, size: s(16)),
+                                                          SizedBox(width: s(6)),
+                                                          Text(
+                                                            ep.voteAverage!.toStringAsFixed(1),
+                                                            style: TextStyle(color: Colors.white54, fontSize: s(16)),
+                                                          ),
+                                                        ],
+                                                      ],
                                                     ),
                                                   ],
-                                                  if ((ep.airDate != null && ep.airDate!.isNotEmpty) &&
-                                                      (ep.voteAverage != null && ep.voteAverage! > 0))
-                                                    SizedBox(width: s(24)),
-                                                  if (ep.voteAverage != null && ep.voteAverage! > 0) ...[
-                                                    Icon(Icons.star, color: Colors.orangeAccent, size: s(16)),
-                                                    SizedBox(width: s(6)),
+                                                  if (ep.overview != null && ep.overview!.isNotEmpty) ...[
+                                                    SizedBox(height: s(8)),
                                                     Text(
-                                                      ep.voteAverage!.toStringAsFixed(1),
-                                                      style: TextStyle(color: Colors.white54, fontSize: s(16)),
+                                                      ep.overview!,
+                                                      style: TextStyle(
+                                                        color: Colors.white.withValues(alpha: 0.6),
+                                                        fontSize: s(16),
+                                                        height: 1.4,
+                                                      ),
+                                                      maxLines: 2,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ],
+                                                  if (progress > 0 && !isWatched) ...[
+                                                    SizedBox(height: s(12)),
+                                                    Stack(
+                                                      children: [
+                                                        Container(
+                                                          height: s(4),
+                                                          width: s(200),
+                                                          decoration: BoxDecoration(
+                                                            color: Colors.white.withValues(alpha: 0.1),
+                                                            borderRadius: BorderRadius.circular(s(2)),
+                                                          ),
+                                                        ),
+                                                        Container(
+                                                          height: s(4),
+                                                          width: s(200 * progress),
+                                                          decoration: BoxDecoration(
+                                                            color: const Color(0xFFEC1D24),
+                                                            borderRadius: BorderRadius.circular(s(2)),
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ),
                                                   ],
                                                 ],
                                               ),
-                                            ],
-                                            if (ep.overview != null && ep.overview!.isNotEmpty) ...[
-                                              SizedBox(height: s(8)),
-                                              Text(
-                                                ep.overview!,
-                                                style: TextStyle(
-                                                  color: Colors.white.withValues(alpha: 0.6),
-                                                  fontSize: s(16),
-                                                  height: 1.4,
-                                                ),
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
+                                            ),
+                                            if (focused)
+                                              Padding(
+                                                padding: EdgeInsets.only(left: s(16)),
+                                                child: Icon(Icons.play_circle_fill, color: Colors.white, size: s(48)),
                                               ),
-                                            ],
-                                            if (progress > 0 && !isWatched) ...[
-                                              SizedBox(height: s(12)),
-                                              Stack(
-                                                children: [
-                                                  Container(
-                                                    height: s(4),
-                                                    width: s(200),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.white.withValues(alpha: 0.1),
-                                                      borderRadius: BorderRadius.circular(s(2)),
-                                                    ),
-                                                  ),
-                                                  Container(
-                                                    height: s(4),
-                                                    width: s(200 * progress),
-                                                    decoration: BoxDecoration(
-                                                      color: const Color(0xFFEC1D24),
-                                                      borderRadius: BorderRadius.circular(s(2)),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
                                           ],
                                         ),
                                       ),
-                                      if (focused)
-                                        Padding(
-                                          padding: EdgeInsets.only(left: s(16)),
-                                          child: Icon(Icons.play_circle_fill, color: Colors.white, size: s(48)),
+                                      if (_recentlyCompletedIds.contains(ep.id))
+                                        Positioned.fill(
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(s(16)),
+                                            child: _EpisodeShine(s: s),
+                                          ),
                                         ),
                                     ],
                                   ),
@@ -1246,4 +1342,81 @@ class _SeasonItemState extends State<_SeasonItem> {
       ),
     );
   }
+}
+
+class _EpisodeShine extends StatefulWidget {
+  final double Function(double) s;
+  const _EpisodeShine({required this.s});
+
+  @override
+  State<_EpisodeShine> createState() => _EpisodeShineState();
+}
+
+class _EpisodeShineState extends State<_EpisodeShine> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return CustomPaint(
+          painter: _ShinePainter(
+            progress: _controller.value,
+          ),
+          child: const SizedBox.expand(),
+        );
+      },
+    );
+  }
+}
+
+class _ShinePainter extends CustomPainter {
+  final double progress;
+
+  _ShinePainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // A diagonal sweep animation
+    final paint = Paint()
+      ..shader = LinearGradient(
+        begin: const Alignment(-1.5, -1.5),
+        end: const Alignment(1.5, 1.5),
+        colors: [
+          Colors.transparent,
+          Colors.white.withValues(alpha: 0.1),
+          Colors.white.withValues(alpha: 0.4),
+          Colors.white.withValues(alpha: 0.1),
+          Colors.transparent,
+        ],
+        stops: [
+          (progress - 0.4).clamp(0.0, 1.0),
+          (progress - 0.1).clamp(0.0, 1.0),
+          progress.clamp(0.0, 1.0),
+          (progress + 0.1).clamp(0.0, 1.0),
+          (progress + 0.4).clamp(0.0, 1.0),
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
+  }
+
+  @override
+  bool shouldRepaint(_ShinePainter oldDelegate) => oldDelegate.progress != progress;
 }
