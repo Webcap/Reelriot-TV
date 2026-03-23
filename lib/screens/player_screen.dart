@@ -13,11 +13,12 @@ import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/scheduler.dart';
+import 'dart:convert';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
-    super.key, 
-    required this.url, 
+    super.key,
+    required this.url,
     required this.title,
     required this.item,
     required this.isMovie,
@@ -67,11 +68,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _safeSetState(VoidCallback fn) {
     if (!mounted || _isDisposed) return;
-    
+
     // Check if we are in a phase where setState is allowed
     // During build/layout/paint, we must delay to the next frame
     final phase = SchedulerBinding.instance.schedulerPhase;
-    if (phase == SchedulerPhase.persistentCallbacks || 
+    if (phase == SchedulerPhase.persistentCallbacks ||
         phase == SchedulerPhase.midFrameMicrotasks) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && !_isDisposed) {
@@ -86,11 +87,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
-    WakelockPlus.enable(); 
+    WakelockPlus.enable();
     _setupController();
     _startProgressTimer();
-    
-    _visibilitySubscription = _controller?.controlsVisibilityStream.listen((visible) {
+
+    _visibilitySubscription = _controller?.controlsVisibilityStream.listen((
+      visible,
+    ) {
       _safeSetState(() => _controlsVisible = visible);
     });
 
@@ -107,15 +110,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _saveCurrentProgress({bool isFinished = false}) async {
-    if (_controller == null || _controller!.videoPlayerController == null) return;
-    
-    final duration = _controller!.videoPlayerController!.value.duration ?? Duration.zero;
+    if (_controller == null || _controller!.videoPlayerController == null)
+      return;
+
+    final duration =
+        _controller!.videoPlayerController!.value.duration ?? Duration.zero;
     if (duration == Duration.zero) return;
 
-    final position = isFinished 
-        ? duration 
+    final position = isFinished
+        ? duration
         : _controller!.videoPlayerController!.value.position;
-    
+
     await _historyService.saveProgress(
       item: widget.item,
       isMovie: widget.isMovie,
@@ -143,7 +148,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         fit: BoxFit.contain,
         expandToFill: true,
         subtitlesConfiguration: const BetterPlayerSubtitlesConfiguration(
-          fontSize: 24, 
+          fontSize: 24,
           fontColor: Colors.white,
           outlineColor: Colors.black,
         ),
@@ -154,201 +159,261 @@ class _PlayerScreenState extends State<PlayerScreen> {
           enableProgressBar: true,
           enableSkips: false,
           name: widget.title,
-          watchingText: widget.isMovie 
-              ? '' 
+          watchingText: widget.isMovie
+              ? ''
               : '${widget.episodeName} | S${widget.season} E${widget.episode}',
           playerTheme: BetterPlayerTheme.custom,
-          customControlsBuilder: (controller, onVisibilityChanged) => TvPlayerControls(
-            controller: controller,
-            onVisibilityChanged: (visible) {
-              onVisibilityChanged(visible);
-              _safeSetState(() => _controlsVisible = visible);
-            },
-            onShowSettings: _showSettings,
-          ),
+          customControlsBuilder: (controller, onVisibilityChanged) =>
+              TvPlayerControls(
+                controller: controller,
+                onVisibilityChanged: (visible) {
+                  onVisibilityChanged(visible);
+                  _safeSetState(() => _controlsVisible = visible);
+                },
+                onShowSettings: _showSettings,
+              ),
         ),
         startAt: widget.startPosition ?? Duration.zero,
       ),
       betterPlayerDataSource: BetterPlayerDataSource(
         BetterPlayerDataSourceType.network,
         widget.url,
-        videoFormat: widget.url.contains('m3u8') || widget.url.contains('playlist') 
-            ? BetterPlayerVideoFormat.hls 
+        videoFormat:
+            widget.url.contains('m3u8') || 
+            widget.url.contains('playlist') || 
+            widget.url.contains('proxy/stream')
+            ? BetterPlayerVideoFormat.hls
             : null,
         useAsmsTracks: true,
         useAsmsAudioTracks: true,
         useAsmsSubtitles: true,
         preferredAudioLanguage: SettingsService().defaultAudioLanguage,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Referer': widget.referrer ?? _getReferer(widget.url),
-          'Referrer': widget.referrer ?? _getReferer(widget.url),
-          'Origin': _getOrigin(widget.referrer ?? _getReferer(widget.url)),
-          'Accept': '*/*',
-          'Connection': 'keep-alive',
-          ...?widget.headers,
-        },
+        headers: _getMergedHeaders(widget.url, widget.referrer, widget.headers),
         bufferingConfiguration: const BetterPlayerBufferingConfiguration(
-          minBufferMs: 60000,
-          maxBufferMs: 120000,
-          bufferForPlaybackMs: 5000,
-          bufferForPlaybackAfterRebufferMs: 10000,
+          minBufferMs: 30000,
+          maxBufferMs: 60000,
+          bufferForPlaybackMs: 2500,
+          bufferForPlaybackAfterRebufferMs: 5000,
         ),
       ),
     );
     debugPrint('[PlayerScreen] 📺 Playing: ${widget.url}');
-    debugPrint('[PlayerScreen] 🔗 Referrer: ${widget.referrer ?? _getReferer(widget.url)}');
- 
+    debugPrint(
+      '[PlayerScreen] 🔗 Referrer: ${widget.referrer ?? _getReferer(widget.url)}',
+    );
+
     _controller!.addEventsListener((event) async {
       if (_isDisposed) return;
       if (event.betterPlayerEventType == BetterPlayerEventType.finished) {
-        debugPrint('[PlayerScreen] 🎉 Video finished, saving final progress (100%) and closing');
+        debugPrint(
+          '[PlayerScreen] 🎉 Video finished, saving final progress (100%) and closing',
+        );
         await _saveCurrentProgress(isFinished: true);
         if (mounted && !_isDisposed) Navigator.of(context).pop();
-      } else if (event.betterPlayerEventType == BetterPlayerEventType.initialized) {
+      } else if (event.betterPlayerEventType ==
+          BetterPlayerEventType.initialized) {
         // Try multiple times as tracks might load late in HLS manifest
         _selectPreferredAudioTrack();
-        Future.delayed(const Duration(milliseconds: 500), () => _selectPreferredAudioTrack());
-        Future.delayed(const Duration(milliseconds: 1500), () => _selectPreferredAudioTrack());
-        Future.delayed(const Duration(milliseconds: 3000), () => _selectPreferredAudioTrack());
-        Future.delayed(const Duration(milliseconds: 5000), () => _selectPreferredAudioTrack());
-      } else if (event.betterPlayerEventType == BetterPlayerEventType.exception) {
+        Future.delayed(
+          const Duration(milliseconds: 500),
+          () => _selectPreferredAudioTrack(),
+        );
+        Future.delayed(
+          const Duration(milliseconds: 1500),
+          () => _selectPreferredAudioTrack(),
+        );
+        Future.delayed(
+          const Duration(milliseconds: 3000),
+          () => _selectPreferredAudioTrack(),
+        );
+        Future.delayed(
+          const Duration(milliseconds: 5000),
+          () => _selectPreferredAudioTrack(),
+        );
+      } else if (event.betterPlayerEventType ==
+          BetterPlayerEventType.exception) {
         if (!_isDisposed) _handlePlayerException(event);
       }
     });
   }
 
-  bool get _isSports => !widget.isMovie && (widget.season == null || widget.episode == null);
+  bool get _isSports =>
+      !widget.isMovie && (widget.season == null || widget.episode == null);
 
   void _handlePlayerException(BetterPlayerEvent event) async {
     if (_isHandlingException || _isRefreshing || _isDisposed) return;
     _isHandlingException = true;
-    
+
     final exception = event.parameters?['exception'];
     debugPrint('[PlayerScreen] ⚠️ Playback exception: $exception');
-    
+
     // Only retry for network/source errors, especially if we've been playing for a while
     // or if the error code suggests a source issue (2001, 2002)
     final errorStr = exception?.toString().toLowerCase() ?? '';
-    final isSourceError = errorStr.contains('source error') || 
-                         errorStr.contains('httpdatasource') ||
-                         errorStr.contains('sockettimeout') ||
-                         errorStr.contains('unexpected end of stream');
+    final isSourceError =
+        errorStr.contains('source error') ||
+        errorStr.contains('httpdatasource') ||
+        errorStr.contains('sockettimeout') ||
+        errorStr.contains('unexpected end of stream');
+    // 403 = IP-locked / auth error — retrying the same URL is pointless, skip straight to fallback
+    final is403 = errorStr.contains('response code: 403') ||
+        errorStr.contains('invalidresponsecodeexception') &&
+            errorStr.contains('403');
+
+    if (is403) {
+      debugPrint(
+        '[PlayerScreen] 🚫 403 Forbidden — IP-locked URL, skipping retries, falling back...',
+      );
+      _isHandlingException = false;
+      _safeSetState(() => _isRefreshing = false);
+      _fallbackToNextProvider();
+      return;
+    }
 
     if (isSourceError && _retryCount < 3) {
       _retryCount++;
-      debugPrint('[PlayerScreen] 🔄 Attempting to re-fetch stream URL (Retry $_retryCount/3)...');
-      
+      debugPrint(
+        '[PlayerScreen] 🔄 Attempting to re-fetch stream URL (Retry $_retryCount/3)...',
+      );
+
       if (mounted && !_isDisposed) {
         _safeSetState(() {
           _isRefreshing = true;
-          _hasError = false; 
+          _hasError = false;
         });
       }
 
       try {
-        final currentPosition = _controller?.videoPlayerController?.value.position ?? widget.startPosition ?? Duration.zero;
-        
+        final currentPosition =
+            _controller?.videoPlayerController?.value.position ??
+            widget.startPosition ??
+            Duration.zero;
+
         String? newUrl;
         String? newReferrer;
         Map<String, String>? newHeaders;
 
         if (_isSports) {
-            // Special refresh logic for sports: re-query Supabase
-            final refreshResult = await _refreshSportsStream();
-            if (refreshResult != null) {
-                newUrl = refreshResult['url'];
-                newReferrer = refreshResult['referrer'];
-            }
+          // Special refresh logic for sports: re-query Supabase
+          final refreshResult = await _refreshSportsStream();
+          if (refreshResult != null) {
+            newUrl = refreshResult['url'];
+            newReferrer = refreshResult['referrer'];
+          }
         } else {
-            // Robust ID access for both MovieDetail/TvShowDetail objects and Map objects
-            final dynamic rawId = widget.item is Map 
-                ? (widget.item['media_id'] ?? widget.item['id'])
-                : widget.item?.id;
-            
-            final int? mediaId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+          // Robust ID access for both MovieDetail/TvShowDetail objects and Map objects
+          final dynamic rawId = widget.item is Map
+              ? (widget.item['media_id'] ?? widget.item['id'])
+              : widget.item?.id;
 
-            if (mediaId == null) {
-                debugPrint('[PlayerScreen] ❌ Cannot retry: mediaId is null or invalid ($rawId)');
-                _isHandlingException = false;
-                _safeSetState(() => _isRefreshing = false);
-                return;
-            }
+          final int? mediaId = rawId is int
+              ? rawId
+              : int.tryParse(rawId?.toString() ?? '');
 
-            final core.ProviderStreamResponse response;
-            if (widget.isMovie) {
-                response = await _api.fetchMovieStream(mediaId, provider: widget.providerCode ?? 'vidlink');
-            } else {
-                response = await _api.fetchTvStream(
-                    mediaId, 
-                    widget.season!, 
-                    widget.episode!, 
-                    provider: widget.providerCode ?? 'vidlink'
-                );
-            }
+          if (mediaId == null) {
+            debugPrint(
+              '[PlayerScreen] ❌ Cannot retry: mediaId is null or invalid ($rawId)',
+            );
+            _isHandlingException = false;
+            _safeSetState(() => _isRefreshing = false);
+            return;
+          }
 
-            if (response.success && response.links != null && response.links!.isNotEmpty) {
-                newUrl = response.links!.first.url;
-                newHeaders = response.links!.first.headers;
-            }
+          final core.ProviderStreamResponse response;
+          if (widget.isMovie) {
+            response = await _api.fetchMovieStream(
+              mediaId,
+              provider: widget.providerCode ?? 'vidlink',
+            );
+          } else {
+            response = await _api.fetchTvStream(
+              mediaId,
+              widget.season!,
+              widget.episode!,
+              provider: widget.providerCode ?? 'vidlink',
+            );
+          }
+
+          if (response.success &&
+              response.links != null &&
+              response.links!.isNotEmpty) {
+            newUrl = response.links!.first.url;
+            newHeaders = response.links!.first.headers;
+          }
         }
 
         if (newUrl != null && newUrl.isNotEmpty) {
           debugPrint('[PlayerScreen] ✅ Re-fetched new URL: $newUrl');
-          
+
           if (!mounted) return;
 
-          // Re-initialize the player with the new URL and the current position
-          _controller?.setupDataSource(
-            BetterPlayerDataSource(
-              BetterPlayerDataSourceType.network,
-              newUrl,
-              videoFormat: newUrl.contains('m3u8') || newUrl.contains('playlist') 
-                  ? BetterPlayerVideoFormat.hls 
-                  : null,
-              useAsmsTracks: true,
-              useAsmsAudioTracks: true,
-              useAsmsSubtitles: true,
-              preferredAudioLanguage: SettingsService().defaultAudioLanguage,
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Referer': newReferrer ?? widget.referrer ?? _getReferer(newUrl),
-                ...?newHeaders,
-              },
-              bufferingConfiguration: const BetterPlayerBufferingConfiguration(
-                minBufferMs: 60000,
-                maxBufferMs: 120000,
-                bufferForPlaybackMs: 5000,
-                bufferForPlaybackAfterRebufferMs: 10000,
-              ),
-            ),
-          ).then((_) {
-            if (_isDisposed) return;
-            _controller?.play();
-            _controller?.seekTo(currentPosition);
-          });
+          // Small delay to allow network to settle before retrying
+          await Future.delayed(const Duration(seconds: 2));
+          if (_isDisposed || !mounted) return;
 
           // Seek to the last known position after initialization
           late Function(BetterPlayerEvent) refreshListener;
           refreshListener = (refreshEvent) {
-            if (refreshEvent.betterPlayerEventType == BetterPlayerEventType.initialized) {
+            if (refreshEvent.betterPlayerEventType ==
+                BetterPlayerEventType.initialized) {
               _controller?.seekTo(currentPosition);
               _controller?.play();
               _controller?.removeEventsListener(refreshListener);
+              // Reset flag so future exceptions can be handled
+              _isHandlingException = false;
             }
           };
           _controller?.addEventsListener(refreshListener);
+
+          // Re-initialize the player with the new URL and the current position
+          await _controller
+              ?.setupDataSource(
+                BetterPlayerDataSource(
+                  BetterPlayerDataSourceType.network,
+                  newUrl,
+                  videoFormat:
+                      newUrl.contains('m3u8') || 
+                      newUrl.contains('playlist') || 
+                      newUrl.contains('proxy/stream')
+                      ? BetterPlayerVideoFormat.hls
+                      : null,
+                  useAsmsTracks: true,
+                  useAsmsAudioTracks: true,
+                  useAsmsSubtitles: true,
+                  preferredAudioLanguage:
+                      SettingsService().defaultAudioLanguage,
+                  headers: _getMergedHeaders(
+                    newUrl,
+                    newReferrer ?? widget.referrer,
+                    newHeaders,
+                  ),
+                  bufferingConfiguration:
+                      const BetterPlayerBufferingConfiguration(
+                        minBufferMs: 30000,
+                        maxBufferMs: 60000,
+                        bufferForPlaybackMs: 2500,
+                        bufferForPlaybackAfterRebufferMs: 5000,
+                      ),
+                ),
+              );
+
+          if (!_isDisposed && mounted) {
+            _controller?.play();
+            _controller?.seekTo(currentPosition);
+            _safeSetState(() => _isRefreshing = false);
+          }
         } else {
           debugPrint('[PlayerScreen] ❌ Re-fetch failed or returned no links');
           _isHandlingException = false;
           _safeSetState(() {
             _isRefreshing = false;
             if (widget.isMovie || widget.episode != null) {
-              // For movies/tv, show settings (which includes source selector) if reach max retries or immediate fail
-              _showSettings();
+              // Automatically try another provider if re-fetch failed
+              _fallbackToNextProvider();
             } else {
               _hasError = true;
-              _errorMessage = 'Failed to refresh stream. Please try again later.';
+              _errorMessage =
+                  'Failed to refresh stream. Please try again later.';
             }
           });
         }
@@ -362,40 +427,51 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _isHandlingException = false;
       _safeSetState(() {
         _isRefreshing = false;
-        _hasError = true;
-        _errorMessage = exception?.toString() ?? 'Playback error';
+        if (isSourceError && (widget.isMovie || widget.episode != null)) {
+          // Source kept failing after retries — try next provider automatically
+          _fallbackToNextProvider();
+        } else {
+          _hasError = true;
+          _errorMessage = exception?.toString() ?? 'Playback error';
+        }
       });
     }
   }
 
   Future<Map<String, String?>?> _refreshSportsStream() async {
     try {
-        final String? eventId = widget.item is Map ? widget.item['id']?.toString() : null;
-        if (eventId == null) return null;
+      final String? eventId = widget.item is Map
+          ? widget.item['id']?.toString()
+          : null;
+      if (eventId == null) return null;
 
-        debugPrint('[PlayerScreen] 🔄 Querying Supabase for fresh sports stream (ID: $eventId)...');
-        final response = await Supabase.instance.client
-            .from('live_streams')
-            .select('video_url, referrer, sources')
-            .eq('id', eventId)
-            .maybeSingle();
-        
-        if (response != null && response['video_url'] != null && response['video_url'].isNotEmpty) {
-            return {
-                'url': response['video_url'] as String,
-                'referrer': response['referrer'] as String?,
-                'sources': response['sources'],
-            };
-        }
+      debugPrint(
+        '[PlayerScreen] 🔄 Querying Supabase for fresh sports stream (ID: $eventId)...',
+      );
+      final response = await Supabase.instance.client
+          .from('live_streams')
+          .select('video_url, referrer, sources')
+          .eq('id', eventId)
+          .maybeSingle();
+
+      if (response != null &&
+          response['video_url'] != null &&
+          response['video_url'].isNotEmpty) {
+        return {
+          'url': response['video_url'] as String,
+          'referrer': response['referrer'] as String?,
+          'sources': response['sources'],
+        };
+      }
     } catch (e) {
-        debugPrint('[PlayerScreen] ❌ Supabase sports refresh error: $e');
+      debugPrint('[PlayerScreen] ❌ Supabase sports refresh error: $e');
     }
     return null;
   }
 
   void _selectPreferredAudioTrack() {
     if (_controller == null || _isDisposed) return;
-    
+
     final tracks = _controller!.betterPlayerAsmsAudioTracks;
     if (tracks == null || tracks.isEmpty) {
       debugPrint('[PlayerScreen] 🎧 No audio tracks available yet.');
@@ -403,21 +479,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     final preferred = SettingsService().defaultAudioLanguage.toLowerCase();
-    debugPrint('[PlayerScreen] 🎧 Attempting to select audio track: $preferred');
-    
+    debugPrint(
+      '[PlayerScreen] 🎧 Attempting to select audio track: $preferred',
+    );
+
     for (final track in tracks) {
       final lang = track.language?.toLowerCase() ?? '';
       final label = track.label?.toLowerCase() ?? '';
       debugPrint('[PlayerScreen]   - Track: lang="$lang", label="$label"');
-      
-      final isMatch = lang == preferred || 
-                     lang.startsWith(preferred) || 
-                     label.startsWith(preferred) ||
-                     label.contains(preferred) ||
-                     (preferred == 'en' && label.contains('english'));
+
+      final isMatch =
+          lang == preferred ||
+          lang.startsWith(preferred) ||
+          label.startsWith(preferred) ||
+          label.contains(preferred) ||
+          (preferred == 'en' && label.contains('english'));
 
       if (isMatch) {
-        debugPrint('[PlayerScreen] ✅ Match found! Selecting track: $label ($lang)');
+        debugPrint(
+          '[PlayerScreen] ✅ Match found! Selecting track: $label ($lang)',
+        );
         _controller!.setAudioTrack(track);
         return;
       }
@@ -432,14 +513,127 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return '';
     }
   }
-  
+
   String _getOrigin(String url) {
     try {
       final uri = Uri.parse(url);
-      if (uri.scheme.isEmpty || uri.host.isEmpty) return url.replaceAll(RegExp(r'/$'), '');
+      if (uri.scheme.isEmpty || uri.host.isEmpty)
+        return url.replaceAll(RegExp(r'/$'), '');
       return '${uri.scheme}://${uri.host}';
     } catch (_) {
       return url.replaceAll(RegExp(r'/$'), '');
+    }
+  }
+
+  Map<String, String> _getMergedHeaders(
+    String url,
+    String? referrer,
+    Map<String, String>? extra,
+  ) {
+    // Use TitleCase for standard headers to avoid duplicates and meet proxy requirements
+    final Map<String, String> headers = {
+      'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': '*/*',
+      'Connection': 'keep-alive',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'cross-site',
+      'Sec-Fetch-Dest': 'empty',
+    };
+
+    // Helper to check if a key exists in extra (case-insensitive)
+    bool hasInExtra(String key) {
+      if (extra == null) return false;
+      return extra.keys.any((k) => k.toLowerCase() == key.toLowerCase());
+    }
+
+    // Add default Referer and Origin ONLY if not provided in extra
+    final effectiveReferrer = referrer ?? _getReferer(url);
+    if (effectiveReferrer.isNotEmpty) {
+      if (!hasInExtra('referer')) {
+        headers['Referer'] = effectiveReferrer;
+      }
+      if (!hasInExtra('origin')) {
+        headers['Origin'] = _getOrigin(effectiveReferrer);
+      }
+    }
+
+    // Merge extra headers, overriding defaults
+    if (extra != null) {
+      for (final entry in extra.entries) {
+        headers[entry.key.toLowerCase()] = entry.value;
+      }
+    }
+
+    // Extract headers from URL query if present (as a final override)
+    // This is crucial for proxy URLs that encode their required headers in the query string.
+    try {
+      final uri = Uri.parse(url);
+      final encodedHeaders = uri.queryParameters['headers'];
+      if (encodedHeaders != null) {
+        final decoded = jsonDecode(encodedHeaders);
+        if (decoded is Map) {
+          decoded.forEach((k, v) {
+            final key = k.toString().toLowerCase();
+            // Map common keys to TitleCase to avoid duplicates
+            final String normalizedKey =
+                key == 'referer'
+                    ? 'Referer'
+                    : key == 'origin'
+                    ? 'Origin'
+                    : key == 'user-agent'
+                    ? 'User-Agent'
+                    : k.toString();
+
+            headers[normalizedKey] = v.toString();
+
+            // Clear any potential duplicates in the opposite casing
+            headers.removeWhere(
+              (hKey, _) =>
+                  hKey.toLowerCase() == key && hKey != normalizedKey,
+            );
+          });
+          debugPrint(
+            '[PlayerScreen] 🛠️ Extracted proxy headers from URL: $decoded',
+          );
+        }
+      }
+    } catch (_) {}
+
+    return headers;
+  }
+
+  void _fallbackToNextProvider() {
+    if (_isDisposed || !mounted) return;
+
+    final currentPos = _controller?.videoPlayerController?.value.position;
+
+    if (widget.allProviders == null || widget.allProviders!.isEmpty) {
+      debugPrint('[PlayerScreen] ❌ No provider list for auto-fallback');
+      _showSettings(); // Manual selection
+      return;
+    }
+
+    final currentIndex =
+        widget.allProviders!.indexWhere((p) => p['code'] == widget.providerCode);
+    final nextIndex = currentIndex + 1;
+
+    if (nextIndex < widget.allProviders!.length) {
+      final nextProvider = widget.allProviders![nextIndex];
+      final nextProviderCode = nextProvider['code']!;
+
+      debugPrint(
+        '[PlayerScreen] 🔄 Auto-falling back to next provider: $nextProviderCode',
+      );
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => _buildVideoLoader(nextProviderCode, currentPos),
+        ),
+      );
+    } else {
+      debugPrint('[PlayerScreen] ❌ All providers exhausted for auto-fallback');
+      _showSettings(); // Show picker as last resort
     }
   }
 
@@ -455,17 +649,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
           // Close settings dialog
           Navigator.of(context).pop();
           final currentPos = _controller?.videoPlayerController?.value.position;
-          debugPrint('[PlayerScreen] 🔄 Changing provider to: $newProviderCode');
-          
+          debugPrint(
+            '[PlayerScreen] 🔄 Changing provider to: $newProviderCode',
+          );
+
           if (_isSports && widget.allProviders != null) {
             // Check if newProviderCode is one of our mirror URLs
             final source = widget.allProviders!.firstWhere(
               (p) => p['code'] == newProviderCode,
               orElse: () => {},
             );
-            
+
             if (source.isNotEmpty) {
-              debugPrint('[PlayerScreen] ⚾ Sports mirror switch to: $newProviderCode');
+              debugPrint(
+                '[PlayerScreen] ⚾ Sports mirror switch to: $newProviderCode',
+              );
               Navigator.of(context).pushReplacement(
                 MaterialPageRoute(
                   builder: (context) => PlayerScreen(
@@ -485,7 +683,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
-              builder: (context) => _buildVideoLoader(newProviderCode, currentPos),
+              builder: (context) =>
+                  _buildVideoLoader(newProviderCode, currentPos),
             ),
           );
         },
@@ -512,7 +711,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _saveTimer?.cancel();
     _saveCurrentProgress(); // Best effort save
     _visibilitySubscription?.cancel();
-    
+
     // Safety check before controller methods
     try {
       _controller?.pause();
@@ -520,9 +719,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (e) {
       debugPrint('[PlayerScreen] Error during controller disposal: $e');
     }
-    
+
     _mainFocusNode.dispose();
-    WakelockPlus.disable(); 
+    WakelockPlus.disable();
     super.dispose();
   }
 
@@ -535,7 +734,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
         final key = event.logicalKey;
-        debugPrint('[PlayerScreen] 🔑 key: ${key.debugName}, controlsVisible: $_controlsVisible');
+        debugPrint(
+          '[PlayerScreen] 🔑 key: ${key.debugName}, controlsVisible: $_controlsVisible',
+        );
 
         // Back / Exit
         if (TvKeys.isBack(key)) {
@@ -551,7 +752,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           } else {
             _controller?.play();
           }
-          if (!_controlsVisible && !_isDisposed) _controller?.setControlsVisibility(true);
+          if (!_controlsVisible && !_isDisposed)
+            _controller?.setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 
@@ -561,7 +763,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (pos != null) {
             _controller?.seekTo(pos + const Duration(seconds: 10));
           }
-          if (!_controlsVisible && !_isDisposed) _controller?.setControlsVisibility(true);
+          if (!_controlsVisible && !_isDisposed)
+            _controller?.setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 
@@ -570,9 +773,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           final pos = _controller?.videoPlayerController?.value.position;
           if (pos != null) {
             final target = pos - const Duration(seconds: 10);
-            _controller?.seekTo(target < Duration.zero ? Duration.zero : target);
+            _controller?.seekTo(
+              target < Duration.zero ? Duration.zero : target,
+            );
           }
-          if (!_controlsVisible && !_isDisposed) _controller?.setControlsVisibility(true);
+          if (!_controlsVisible && !_isDisposed)
+            _controller?.setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 
@@ -599,27 +805,33 @@ class _PlayerScreenState extends State<PlayerScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: _hasError 
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 64),
-                  const SizedBox(height: 16),
-                  Text(
-                    _errorMessage ?? 'An error occurred',
-                    style: const TextStyle(color: Colors.white, fontSize: 18),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.white12),
-                    child: const Text('Go Back'),
-                  ),
-                ],
-              ),
-            )
-          : _controller == null 
+        body: _hasError
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.red,
+                      size: 64,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _errorMessage ?? 'An error occurred',
+                      style: const TextStyle(color: Colors.white, fontSize: 18),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white12,
+                      ),
+                      child: const Text('Go Back'),
+                    ),
+                  ],
+                ),
+              )
+            : _controller == null
             ? const Center(child: CircularProgressIndicator())
             : BetterPlayer(controller: _controller!),
       ),

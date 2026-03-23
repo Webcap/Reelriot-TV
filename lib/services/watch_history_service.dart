@@ -20,6 +20,7 @@ class WatchHistoryService {
   // ── Concurrency & Caching ──────────────────────────────────────────
   bool _isSaving = false;
   Map<String, dynamic>? _pendingSave;
+  Future<void>? _activeSaveProcess;
   final Map<String, List<Map<String, dynamic>>> _cachedHistory = {};
   final Map<String, DateTime> _lastFetchTime = {};
 
@@ -52,30 +53,27 @@ class WatchHistoryService {
       'duration': duration,
     };
 
+    _pendingSave = saveData;
+
     if (_isSaving) {
-      _pendingSave = saveData;
-      return;
+      return _activeSaveProcess;
     }
 
     _isSaving = true;
+    _activeSaveProcess = _runSaveLoop();
+    return _activeSaveProcess;
+  }
+
+  Future<void> _runSaveLoop() async {
     try {
-      await _executeSave(saveData);
+      while (_pendingSave != null) {
+        final data = _pendingSave!;
+        _pendingSave = null;
+        await _executeSave(data);
+      }
     } finally {
       _isSaving = false;
-      if (_pendingSave != null) {
-        final nextSave = _pendingSave!;
-        _pendingSave = null;
-        saveProgress(
-          item: nextSave['item'],
-          isMovie: nextSave['isMovie'],
-          season: nextSave['season'],
-          episode: nextSave['episode'],
-          episodeId: nextSave['episodeId'],
-          episodeName: nextSave['episodeName'],
-          position: nextSave['position'],
-          duration: nextSave['duration'],
-        );
-      }
+      _activeSaveProcess = null;
     }
   }
 
@@ -238,10 +236,12 @@ class WatchHistoryService {
           'updated_at': now,
         };
 
-        await _supabase.from('continue_watching_history').upsert(
-          upsertData,
-          onConflict: 'user_id,media_id,season_num,episode_num'
-        );
+        await _supabase.from('continue_watching_history')
+            .upsert(
+              upsertData,
+              onConflict: 'user_id,media_id,season_num,episode_num'
+            )
+            .timeout(const Duration(seconds: 10));
         debugPrint('[WatchHistory] ✅ Saved Continue Watching Progress');
       }
 

@@ -316,7 +316,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
               episodeId: episodeId,
               episodeName: episodeName,
             );
-            _loadContent(quiet: true);
+            await _reloadHistory(forceRefresh: true);
           },
         ),
         ContextMenuItem(
@@ -329,9 +329,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
               id: id,
               isMovie: isMovie,
               season: season,
-              episode: episode,
+                episode: episode,
             );
-            _loadContent(quiet: true);
+            await _reloadHistory(forceRefresh: true);
           },
         ),
       ],

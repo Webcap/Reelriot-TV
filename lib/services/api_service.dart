@@ -13,6 +13,8 @@ class ApiService {
   String get language => SettingsService().language;
   String get audioLanguage => SettingsService().defaultAudioLanguage;
   String get region => SettingsService().region;
+  
+  static const String _browserUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
   Future<Map<String, dynamic>> loadConfig() async {
     return core.fetchConfig(caffeineBaseUrl);
@@ -131,7 +133,7 @@ class ApiService {
 
   Future<core.ProviderStreamResponse> fetchMovieStream(int movieId, {String provider = 'vixsrc'}) async {
     final url = core.Endpoints.streamMovieUrl(caffeineBaseUrl, provider, movieId.toString(), language: audioLanguage, country: region);
-    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+    final res = await http.get(Uri.parse(url), headers: {'User-Agent': _browserUserAgent}).timeout(const Duration(seconds: 30));
     if (res.statusCode != 200) throw Exception('Stream failed');
     return core.ProviderStreamResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
@@ -139,7 +141,7 @@ class ApiService {
   Future<core.ProviderStreamResponse> fetchTvStream(
       int tmdbId, int season, int episode, {String provider = 'vixsrc'}) async {
     final url = core.Endpoints.streamTvUrl(caffeineBaseUrl, provider, tmdbId.toString(), season, episode, language: audioLanguage, country: region);
-    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+    final res = await http.get(Uri.parse(url), headers: {'User-Agent': _browserUserAgent}).timeout(const Duration(seconds: 30));
     if (res.statusCode != 200) throw Exception('Stream failed');
     return core.ProviderStreamResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }

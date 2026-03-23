@@ -35,7 +35,6 @@ class _LongPressFocusState extends State<LongPressFocus> {
   void _reset() {
     _longPressTimer?.cancel();
     _longPressTimer = null;
-    _isLongPress = false;
   }
 
   void _handleKeyDown(LogicalKeyboardKey key) {
