@@ -333,7 +333,7 @@ class SportsScreenState extends State<SportsScreen> {
       // Fetch all active stream data from Supabase
       final activeStreamResponse = await Supabase.instance.client
           .from('live_streams')
-          .select('id, video_url, referrer, sources')
+          .select('id, video_url, referrer, sources, is_hidden')
           .not('video_url', 'is', null);
       
       final Map<String, Map<String, dynamic>> streamInfo = {
@@ -342,6 +342,7 @@ class SportsScreenState extends State<SportsScreen> {
             'url': item['video_url']?.toString(),
             'referrer': item['referrer']?.toString(),
             'sources': item['sources'],
+            'is_hidden': item['is_hidden'] == true,
           }
       };
       
@@ -371,7 +372,7 @@ class SportsScreenState extends State<SportsScreen> {
                   sources: info?['sources'],
                 );
               })
-              .where((g) => activeStreamIds.contains(g.id)) // Filter by stream availability
+              .where((g) => activeStreamIds.contains(g.id) && streamInfo[g.id]?['is_hidden'] != true) // Filter by stream availability and hidden status
               .toList();
         }
 
@@ -436,6 +437,7 @@ class SportsScreenState extends State<SportsScreen> {
             .from('live_streams')
             .select('*')
             .eq('is_featured', true)
+            .eq('is_hidden', false)
             .not('video_url', 'is', null)
             .neq('video_url', '')
             .maybeSingle();
