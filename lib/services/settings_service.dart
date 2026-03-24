@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../env.dart';
 import 'dart:ui' as ui;
 
 class SettingsService extends ChangeNotifier {
@@ -53,6 +54,12 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  String _opensubtitlesKey = opensubtitlesApiKey;
+  String get opensubtitlesKey => _opensubtitlesKey;
+
+  bool _useExternalSubtitles = false;
+  bool get useExternalSubtitles => _useExternalSubtitles;
+
   bool _sportsEnabled = true;
   bool get sportsEnabled => _sportsEnabled;
 
@@ -71,6 +78,14 @@ class SettingsService extends ChangeNotifier {
             config['enable_ads'].toString().toLowerCase() == 'true') ||
         (config['ads_enabled'] == true ||
             config['ads_enabled'].toString().toLowerCase() == 'true');
+
+    if (config['opensubtitles_key'] != null) {
+      _opensubtitlesKey = config['opensubtitles_key'];
+    }
+
+    if (config['use_external_subtitles'] != null) {
+      _useExternalSubtitles = config['use_external_subtitles'] == true || config['use_external_subtitles'].toString().toLowerCase() == 'true';
+    }
 
     notifyListeners();
   }

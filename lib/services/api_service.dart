@@ -131,6 +131,22 @@ class ApiService {
     return core.CombinedCreditsResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
+  Future<String?> fetchMovieExternalIds(int movieId) async {
+    final url = '$tmdbBaseUrl/movie/$movieId/external_ids?api_key=$_tmdbKey';
+    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) return null;
+    final data = jsonDecode(res.body);
+    return data['imdb_id'];
+  }
+
+  Future<String?> fetchTvExternalIds(int tvId) async {
+    final url = '$tmdbBaseUrl/tv/$tvId/external_ids?api_key=$_tmdbKey';
+    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) return null;
+    final data = jsonDecode(res.body);
+    return data['imdb_id'];
+  }
+
   Future<core.ProviderStreamResponse> fetchMovieStream(int movieId, {String provider = 'vixsrc'}) async {
     final url = core.Endpoints.streamMovieUrl(caffeineBaseUrl, provider, movieId.toString(), language: audioLanguage, country: region);
     final res = await http.get(Uri.parse(url), headers: {'User-Agent': _browserUserAgent}).timeout(const Duration(seconds: 30));

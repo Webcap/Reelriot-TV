@@ -31,6 +31,7 @@ class PlayerScreen extends StatefulWidget {
     this.providerCode,
     this.allProviders,
     this.headers,
+    this.externalSubtitles,
   });
 
   final String url;
@@ -46,6 +47,7 @@ class PlayerScreen extends StatefulWidget {
   final String? providerCode;
   final List<Map<String, String>>? allProviders;
   final Map<String, String>? headers;
+  final List<BetterPlayerSubtitlesSource>? externalSubtitles;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -188,6 +190,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         useAsmsTracks: true,
         useAsmsAudioTracks: true,
         useAsmsSubtitles: true,
+        subtitles: widget.externalSubtitles,
         preferredAudioLanguage: SettingsService().defaultAudioLanguage,
         headers: _getMergedHeaders(widget.url, widget.referrer, widget.headers),
         bufferingConfiguration: const BetterPlayerBufferingConfiguration(

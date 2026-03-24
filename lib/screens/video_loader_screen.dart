@@ -4,10 +4,14 @@ import 'package:caffeine_tv/constants.dart';
 import 'package:caffeine_tv/models/provider_load_state.dart';
 import 'package:caffeine_tv/screens/player_screen.dart';
 import 'package:caffeine_tv/services/api_service.dart';
+import 'package:caffeine_tv/services/settings_service.dart';
+import 'package:caffeine_tv/services/subtitle_service.dart';
+import 'package:caffeine_tv/models/sub_languages.dart';
 import 'package:caffeine_tv/services/watch_history_service.dart';
 import 'package:caffeine_tv/widgets/provider_loading_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:better_player/better_player.dart';
 
 class VideoLoaderScreen extends StatefulWidget {
   final core.MovieDetail? movie;
@@ -38,6 +42,8 @@ class VideoLoaderScreen extends StatefulWidget {
 class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   final ApiService _api = ApiService();
   final WatchHistoryService _historyService = WatchHistoryService();
+  final SubtitleService _subtitleService = SubtitleService();
+  final SettingsService _settings = SettingsService();
   
   final List<Map<String, String>> _providers = [
     {'code': 'vidlink', 'name': 'VidLink'},
@@ -137,6 +143,63 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
         if (response.success && response.links != null && response.links!.isNotEmpty) {
           debugPrint('[VideoLoader] ✅ Found ${response.links!.length} stream(s) from $providerName');
           if (!mounted) return;
+
+          List<BetterPlayerSubtitlesSource> subs = [];
+          
+          // 1. Process internal subtitles from provider
+          if (response.links!.first.subtitles.isNotEmpty) {
+            subs.addAll(response.links!.first.subtitles.map((s) => BetterPlayerSubtitlesSource(
+              type: BetterPlayerSubtitlesSourceType.network,
+              name: s.label,
+              urls: [s.file],
+              selectedByDefault: s.isDefault ?? false,
+            )));
+          }
+
+          // 2. Open Subtitles Fallback
+          if (subs.isEmpty && _settings.useExternalSubtitles && _settings.opensubtitlesKey.isNotEmpty) {
+            debugPrint('[VideoLoader] 🔍 No internal subtitles. Searching Open Subtitles...');
+            try {
+              String? imdbId;
+              if (widget.movie != null) {
+                imdbId = await _api.fetchMovieExternalIds(widget.movie!.id);
+              } else {
+                imdbId = await _api.fetchTvExternalIds(widget.tvShow!.id);
+              }
+
+              if (imdbId != null && imdbId.isNotEmpty) {
+                final langCode = _settings.language;
+                final extSubs = await _subtitleService.searchSubtitles(
+                  imdbId: imdbId, 
+                  languageCode: langCode, 
+                  apiKey: _settings.opensubtitlesKey,
+                  seasonNumber: widget.season,
+                  episodeNumber: widget.episode,
+                );
+
+                if (extSubs.isNotEmpty) {
+                  debugPrint('[VideoLoader] ✅ Found ${extSubs.length} Open Subtitles');
+                  // We'll take the first one or a few for now. 
+                  // In a real app we might want to give the user a list.
+                  // For the TV app, let's take the first English/matching one and download it.
+                  final fileId = extSubs.first.attr?.files?.first.fileId;
+                  if (fileId != null) {
+                    final downloadUrl = await _subtitleService.downloadSubtitle(fileId, _settings.opensubtitlesKey);
+                    if (downloadUrl != null) {
+                       subs.add(BetterPlayerSubtitlesSource(
+                        type: BetterPlayerSubtitlesSourceType.network,
+                        name: 'OpenSubtitles ($langCode)',
+                        urls: [downloadUrl],
+                      ));
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              debugPrint('[VideoLoader] ⚠️ External subtitle search failed: $e');
+            }
+          }
+
           setState(() {
             _providerStates[i].status = ProviderStatus.success;
             _isDone = true;
@@ -159,6 +222,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
                 providerCode: providerCode,
                 allProviders: _providers,
                 headers: response.links!.first.headers,
+                externalSubtitles: subs,
               ),
             ),
           );

@@ -14,3 +14,5 @@ bool get requireLogin {
   final v = dotenv.env['REQUIRE_LOGIN']?.trim().toLowerCase();
   return v == 'true' || v == '1' || v == 'yes';
 }
+
+String get opensubtitlesApiKey => dotenv.env['OPENSUBTITLES_API_KEY'] ?? '';
