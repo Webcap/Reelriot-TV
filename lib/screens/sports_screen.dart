@@ -95,6 +95,7 @@ class _EspnGame {
   final String? referrer;
   final String? eventTitle;
   final List<dynamic>? sources;
+  final bool isManualEnded;
 
   const _EspnGame({
     required this.id,
@@ -120,6 +121,7 @@ class _EspnGame {
     this.referrer,
     this.eventTitle,
     this.sources,
+    this.isManualEnded = false,
   });
 
   _EspnGame copyWith({
@@ -127,6 +129,7 @@ class _EspnGame {
     String? referrer,
     String? eventTitle,
     List<dynamic>? sources,
+    bool? isManualEnded,
   }) {
     return _EspnGame(
       id: id,
@@ -152,6 +155,7 @@ class _EspnGame {
       referrer: referrer ?? this.referrer,
       eventTitle: eventTitle ?? this.eventTitle,
       sources: sources ?? this.sources,
+      isManualEnded: isManualEnded ?? this.isManualEnded,
     );
   }
 
@@ -223,6 +227,7 @@ class _EspnGame {
   }
 
   String get formattedStatus {
+    if (isManualEnded) return 'FINAL';
     if (isLive) {
       // Trust the ESPN API's natively sport-aware status text (shortDetail/detail)
       // This correctly handles "Top 3rd" (MLB), "1st - 10:20" (NBA/NFL), "Halftime", etc.
@@ -234,6 +239,7 @@ class _EspnGame {
 
   /// Special check for "over but still shows live"
   bool get isActuallyLive {
+    if (isManualEnded) return false;
     if (!isLive) return false;
     // If API already says completed, it's not live.
     if (isCompleted) return false;
@@ -242,10 +248,6 @@ class _EspnGame {
     if (statusText?.toUpperCase().contains('FINAL') ?? false) {
       return false;
     }
-
-    // REMOVED: displayClock == '0.0' && period >= 4 check 
-    // This was too aggressive and marked games as FINAL during ties/halftime/etc.
-    // If state is "in" (isLive), we generally trust it.
     
     return true;
   }
@@ -333,7 +335,7 @@ class SportsScreenState extends State<SportsScreen> {
       // Fetch all active stream data from Supabase
       final activeStreamResponse = await Supabase.instance.client
           .from('live_streams')
-          .select('id, video_url, referrer, sources, is_hidden')
+          .select('id, video_url, referrer, sources, is_hidden, is_ended')
           .not('video_url', 'is', null);
       
       final Map<String, Map<String, dynamic>> streamInfo = {
@@ -343,6 +345,7 @@ class SportsScreenState extends State<SportsScreen> {
             'referrer': item['referrer']?.toString(),
             'sources': item['sources'],
             'is_hidden': item['is_hidden'] == true,
+            'is_ended': item['is_ended'] == true,
           }
       };
       
@@ -378,6 +381,7 @@ class SportsScreenState extends State<SportsScreen> {
                   videoUrl: info?['url'],
                   referrer: effectiveReferrer,
                   sources: info?['sources'],
+                  isManualEnded: info?['is_ended'] == true,
                 );
               })
               .where((g) => activeStreamIds.contains(g.id) && streamInfo[g.id]?['is_hidden'] != true) // Filter by stream availability and hidden status
