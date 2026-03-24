@@ -148,17 +148,20 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
           
           // 1. Process internal subtitles from provider
           if (response.links!.first.subtitles.isNotEmpty) {
+            debugPrint('[VideoLoader] 📝 Found ${response.links!.first.subtitles.length} internal subtitles');
             subs.addAll(response.links!.first.subtitles.map((s) => BetterPlayerSubtitlesSource(
               type: BetterPlayerSubtitlesSourceType.network,
               name: s.label,
               urls: [s.file],
               selectedByDefault: s.isDefault ?? false,
             )));
+          } else {
+            debugPrint('[VideoLoader] ℹ️ No internal subtitles from provider');
           }
 
-          // 2. Open Subtitles Fallback
-          if (subs.isEmpty && _settings.useExternalSubtitles && _settings.opensubtitlesKey.isNotEmpty) {
-            debugPrint('[VideoLoader] 🔍 No internal subtitles. Searching Open Subtitles...');
+          // 2. Open Subtitles 
+          if (_settings.useExternalSubtitles && _settings.opensubtitlesKey.isNotEmpty) {
+            debugPrint('[VideoLoader] 🔍 External subtitles enabled. Checking Open Subtitles...');
             try {
               String? imdbId;
               if (widget.movie != null) {
@@ -167,8 +170,11 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
                 imdbId = await _api.fetchTvExternalIds(widget.tvShow!.id);
               }
 
+              debugPrint('[VideoLoader] 🆔 IMDB ID: $imdbId');
+
               if (imdbId != null && imdbId.isNotEmpty) {
                 final langCode = _settings.language;
+                debugPrint('[VideoLoader] 🌐 Searching for language: $langCode');
                 final extSubs = await _subtitleService.searchSubtitles(
                   imdbId: imdbId, 
                   languageCode: langCode, 
@@ -179,13 +185,12 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
 
                 if (extSubs.isNotEmpty) {
                   debugPrint('[VideoLoader] ✅ Found ${extSubs.length} Open Subtitles');
-                  // We'll take the first one or a few for now. 
-                  // In a real app we might want to give the user a list.
-                  // For the TV app, let's take the first English/matching one and download it.
                   final fileId = extSubs.first.attr?.files?.first.fileId;
                   if (fileId != null) {
+                    debugPrint('[VideoLoader] 📥 Downloading subtitle file: $fileId');
                     final downloadUrl = await _subtitleService.downloadSubtitle(fileId, _settings.opensubtitlesKey);
                     if (downloadUrl != null) {
+                       debugPrint('[VideoLoader] ✨ External subtitle added: $downloadUrl');
                        subs.add(BetterPlayerSubtitlesSource(
                         type: BetterPlayerSubtitlesSourceType.network,
                         name: 'OpenSubtitles ($langCode)',
@@ -193,12 +198,18 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
                       ));
                     }
                   }
+                } else {
+                  debugPrint('[VideoLoader] ℹ️ No Open Subtitles found for $imdbId in $langCode');
                 }
               }
             } catch (e) {
               debugPrint('[VideoLoader] ⚠️ External subtitle search failed: $e');
             }
+          } else {
+            debugPrint('[VideoLoader] ℹ️ External subtitles disabled or API key missing');
           }
+
+          debugPrint('[VideoLoader] 🏁 Total subtitles collected: ${subs.length}');
 
           setState(() {
             _providerStates[i].status = ProviderStatus.success;

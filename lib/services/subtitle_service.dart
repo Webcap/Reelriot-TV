@@ -25,6 +25,7 @@ class SubtitleService {
         headers: {
           'Api-Key': apiKey,
           'Accept': 'application/json',
+          'User-Agent': 'caffeine_tv v1.0.0',
         },
       ).timeout(const Duration(seconds: 10));
 
