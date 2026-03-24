@@ -49,6 +49,10 @@ class _PairingScreenState extends State<PairingScreen> {
   }
 
   Future<void> _createCode() async {
+    final base = (widget.baseUrl ?? caffeineApiUrl).replaceFirst(RegExp(r'/$'), '');
+    final url = '$base/tv/pair';
+    
+    _log('Requesting pairing code from', url);
     setState(() {
       _loading = true;
       _error = null;
@@ -56,11 +60,9 @@ class _PairingScreenState extends State<PairingScreen> {
     });
     
     final client = widget.client ?? http.Client();
-    final base = (widget.baseUrl ?? caffeineApiUrl).replaceFirst(RegExp(r'/$'), '');
-    final url = '$base/tv/pair';
     
-    _log('Requesting pairing code', url);
     try {
+      _log('Sending POST request to /tv/pair');
       final res = await client.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
@@ -98,13 +100,14 @@ class _PairingScreenState extends State<PairingScreen> {
         return;
       }
       
-      _log('Code received', code);
+      _log('Code received and updated in state', code);
       setState(() {
         _code = code;
         _loading = false;
         _error = null;
       });
       if (widget.client == null) client.close();
+      _log('Starting poll with new code');
       _startPolling(code);
     } catch (e, stack) {
       _log('Network/request error', e);
@@ -191,8 +194,7 @@ class _PairingScreenState extends State<PairingScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0B0F14),
       body: Center(
-        child: Focus(
-          autofocus: true,
+        child: SingleChildScrollView(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -297,7 +299,6 @@ class _PairingScreenState extends State<PairingScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
                 _buildButton('Get new code', _createCode),
               ],
             ],
@@ -308,24 +309,34 @@ class _PairingScreenState extends State<PairingScreen> {
   }
 
   Widget _buildButton(String label, VoidCallback onPressed) {
-    return Focus(
-      onKeyEvent: (_, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey.keyLabel == 'Enter' ||
-                event.logicalKey.keyId == LogicalKeyboardKey.select.keyId)) {
-          onPressed();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
       child: ElevatedButton(
-        onPressed: onPressed,
+        autofocus: true,
+        onPressed: () {
+          _log('Button pressed', label);
+          onPressed();
+        },
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFFDC2626),
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 20),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 8,
+        ).copyWith(
+          overlayColor: WidgetStateProperty.resolveWith<Color?>(
+            (Set<WidgetState> states) {
+              if (states.contains(WidgetState.focused)) return Colors.white.withOpacity(0.1);
+              return null;
+            },
+          ),
         ),
-        child: Text(label),
+        child: Text(
+          label,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }
