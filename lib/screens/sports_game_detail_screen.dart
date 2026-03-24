@@ -57,9 +57,16 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
 
       if (response != null && response['video_url'] != null && response['video_url'].toString().isNotEmpty) {
         if (mounted) {
+          String? ref = response['referrer']?.toString();
+          if (ref == null || ref.isEmpty) {
+            final src = response['sources'];
+            if (src is List && src.isNotEmpty) {
+              ref = src.first['referrer']?.toString();
+            }
+          }
           setState(() {
             _streamUrl = response['video_url'];
-            _streamReferrer = response['referrer'];
+            _streamReferrer = ref;
             _sources = response['sources'];
           });
         }

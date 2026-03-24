@@ -180,9 +180,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         BetterPlayerDataSourceType.network,
         widget.url,
         videoFormat:
-            widget.url.contains('m3u8') || 
-            widget.url.contains('playlist') || 
-            widget.url.contains('proxy/stream')
+            widget.url.contains('m3u8') ||
+                widget.url.contains('playlist') ||
+                widget.url.contains('proxy/stream')
             ? BetterPlayerVideoFormat.hls
             : null,
         useAsmsTracks: true,
@@ -234,7 +234,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       } else if (event.betterPlayerEventType ==
           BetterPlayerEventType.exception) {
         if (!_isDisposed) _handlePlayerException(event);
-      } else if (event.betterPlayerEventType == BetterPlayerEventType.progress) {
+      } else if (event.betterPlayerEventType ==
+          BetterPlayerEventType.progress) {
         if (!_isDisposed) {
           _lastKnownPosition = event.parameters?['progress'] as Duration?;
         }
@@ -261,7 +262,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         errorStr.contains('sockettimeout') ||
         errorStr.contains('unexpected end of stream');
     // 403 = IP-locked / auth error — retrying the same URL is pointless, skip straight to fallback
-    final is403 = errorStr.contains('response code: 403') ||
+    final is403 =
+        errorStr.contains('response code: 403') ||
         errorStr.contains('invalidresponsecodeexception') &&
             errorStr.contains('403');
 
@@ -289,7 +291,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
 
       try {
-        final currentPosition = _lastKnownPosition ??
+        final currentPosition =
+            _lastKnownPosition ??
             _controller?.videoPlayerController?.value.position ??
             widget.startPosition ??
             Duration.zero;
@@ -371,36 +374,33 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _controller?.addEventsListener(refreshListener);
 
           // Re-initialize the player with the new URL and the current position
-          await _controller
-              ?.setupDataSource(
-                BetterPlayerDataSource(
-                  BetterPlayerDataSourceType.network,
-                  newUrl,
-                  videoFormat:
-                      newUrl.contains('m3u8') || 
-                      newUrl.contains('playlist') || 
+          await _controller?.setupDataSource(
+            BetterPlayerDataSource(
+              BetterPlayerDataSourceType.network,
+              newUrl,
+              videoFormat:
+                  newUrl.contains('m3u8') ||
+                      newUrl.contains('playlist') ||
                       newUrl.contains('proxy/stream')
-                      ? BetterPlayerVideoFormat.hls
-                      : null,
-                  useAsmsTracks: true,
-                  useAsmsAudioTracks: true,
-                  useAsmsSubtitles: true,
-                  preferredAudioLanguage:
-                      SettingsService().defaultAudioLanguage,
-                  headers: _getMergedHeaders(
-                    newUrl,
-                    newReferrer ?? widget.referrer,
-                    newHeaders,
-                  ),
-                  bufferingConfiguration:
-                      const BetterPlayerBufferingConfiguration(
-                        minBufferMs: 30000,
-                        maxBufferMs: 60000,
-                        bufferForPlaybackMs: 2500,
-                        bufferForPlaybackAfterRebufferMs: 5000,
-                      ),
-                ),
-              );
+                  ? BetterPlayerVideoFormat.hls
+                  : null,
+              useAsmsTracks: true,
+              useAsmsAudioTracks: true,
+              useAsmsSubtitles: true,
+              preferredAudioLanguage: SettingsService().defaultAudioLanguage,
+              headers: _getMergedHeaders(
+                newUrl,
+                newReferrer ?? widget.referrer,
+                newHeaders,
+              ),
+              bufferingConfiguration: const BetterPlayerBufferingConfiguration(
+                minBufferMs: 30000,
+                maxBufferMs: 60000,
+                bufferForPlaybackMs: 2500,
+                bufferForPlaybackAfterRebufferMs: 5000,
+              ),
+            ),
+          );
 
           if (!_isDisposed && mounted) {
             _controller?.play();
@@ -535,7 +535,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     String? referrer,
     Map<String, String>? extra,
   ) {
-    // Use TitleCase for standard headers to avoid duplicates and meet proxy requirements
+    // Standard headers for all requests
     final Map<String, String> headers = {
       'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -546,28 +546,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
       'Sec-Fetch-Dest': 'empty',
     };
 
-    // Helper to check if a key exists in extra (case-insensitive)
-    bool hasInExtra(String key) {
-      if (extra == null) return false;
-      return extra.keys.any((k) => k.toLowerCase() == key.toLowerCase());
+    // Helper to normalize keys to TitleCase for common headers to prevent duplicates
+    String normalizeKey(String key) {
+      final k = key.toLowerCase();
+      if (k == 'referer' || k == 'referrer') return 'Referer';
+      if (k == 'origin') return 'Origin';
+      if (k == 'user-agent') return 'User-Agent';
+      if (k == 'accept') return 'Accept';
+      if (k == 'connection') return 'Connection';
+      return key;
     }
 
-    // Add default Referer and Origin ONLY if not provided in extra
+    // Merge extra headers first
+    if (extra != null) {
+      for (final entry in extra.entries) {
+        headers[normalizeKey(entry.key)] = entry.value;
+      }
+    }
+
+    // Add default Referer and Origin if not already set by extra
     final effectiveReferrer = referrer ?? _getReferer(url);
     if (effectiveReferrer.isNotEmpty) {
-      if (!hasInExtra('referer')) {
+      if (!headers.containsKey('Referer')) {
         headers['Referer'] = effectiveReferrer;
       }
-      if (!hasInExtra('origin')) {
+      if (!headers.containsKey('Origin')) {
         headers['Origin'] = _getOrigin(effectiveReferrer);
       }
     }
 
-    // Merge extra headers, overriding defaults
-    if (extra != null) {
-      for (final entry in extra.entries) {
-        headers[entry.key.toLowerCase()] = entry.value;
-      }
+    // Add Referrer (double R) as a duplicate of Referer for extra compatibility
+    // Some streams specifically check for this variation.
+    if (headers.containsKey('Referer')) {
+      headers['Referrer'] = headers['Referer']!;
     }
 
     // Extract headers from URL query if present (as a final override)
@@ -579,31 +590,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
         final decoded = jsonDecode(encodedHeaders);
         if (decoded is Map) {
           decoded.forEach((k, v) {
-            final key = k.toString().toLowerCase();
-            // Map common keys to TitleCase to avoid duplicates
-            final String normalizedKey =
-                key == 'referer'
-                    ? 'Referer'
-                    : key == 'origin'
-                    ? 'Origin'
-                    : key == 'user-agent'
-                    ? 'User-Agent'
-                    : k.toString();
-
-            headers[normalizedKey] = v.toString();
-
-            // Clear any potential duplicates in the opposite casing
-            headers.removeWhere(
-              (hKey, _) =>
-                  hKey.toLowerCase() == key && hKey != normalizedKey,
-            );
+            headers[normalizeKey(k.toString())] = v.toString();
           });
-          debugPrint(
-            '[PlayerScreen] 🛠️ Extracted proxy headers from URL: $decoded',
-          );
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      // Ignore parsing errors
+    }
 
     return headers;
   }
@@ -619,8 +612,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return;
     }
 
-    final currentIndex =
-        widget.allProviders!.indexWhere((p) => p['code'] == widget.providerCode);
+    final currentIndex = widget.allProviders!.indexWhere(
+      (p) => p['code'] == widget.providerCode,
+    );
     final nextIndex = currentIndex + 1;
 
     if (nextIndex < widget.allProviders!.length) {
@@ -650,6 +644,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         controller: _controller!,
         currentProvider: widget.providerCode,
         allProviders: widget.allProviders,
+        providerLabel: _isSports ? 'Select Mirror' : 'Server (Provider)',
         onChangeProvider: (newProviderCode) {
           // Close settings dialog
           Navigator.of(context).pop();
@@ -834,7 +829,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       const SizedBox(height: 16),
                       Text(
                         _errorMessage ?? 'An error occurred',
-                        style: const TextStyle(color: Colors.white, fontSize: 18),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                        ),
                       ),
                       const SizedBox(height: 24),
                       ElevatedButton(

@@ -362,13 +362,21 @@ class SportsScreenState extends State<SportsScreen> {
               .whereType<Map<String, dynamic>>()
               .map((e) {
                 final id = e['id']?.toString() ?? '';
-                final g = _EspnGame.fromJson(e, sport: l.sport, league: l.league);
+                final g =
+                    _EspnGame.fromJson(e, sport: l.sport, league: l.league);
                 final info = streamInfo[id];
-                
+
+                String? effectiveReferrer = info?['referrer']?.toString();
+                if (effectiveReferrer == null || effectiveReferrer.isEmpty) {
+                  final sources = info?['sources'];
+                  if (sources is List && sources.isNotEmpty) {
+                    effectiveReferrer = sources.first['referrer']?.toString();
+                  }
+                }
 
                 return g.copyWith(
                   videoUrl: info?['url'],
-                  referrer: info?['referrer'],
+                  referrer: effectiveReferrer,
                   sources: info?['sources'],
                 );
               })

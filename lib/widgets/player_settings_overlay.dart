@@ -7,6 +7,7 @@ class PlayerSettingsOverlay extends StatefulWidget {
   final String? currentProvider;
   final List<Map<String, String>>? allProviders;
   final Function(String)? onChangeProvider;
+  final String providerLabel;
 
   const PlayerSettingsOverlay({
     super.key, 
@@ -14,6 +15,7 @@ class PlayerSettingsOverlay extends StatefulWidget {
     this.currentProvider,
     this.allProviders,
     this.onChangeProvider,
+    this.providerLabel = 'Server (Provider)',
   });
 
   @override
@@ -97,7 +99,7 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
               ],
               if (widget.onChangeProvider != null && widget.allProviders != null && widget.allProviders!.isNotEmpty) ...[
                 const SizedBox(height: 32),
-                const _CategoryHeader(title: 'Server (Provider)'),
+                _CategoryHeader(title: widget.providerLabel),
                 const SizedBox(height: 16),
                 Wrap(
                   spacing: 12,
