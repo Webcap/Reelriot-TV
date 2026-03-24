@@ -14,12 +14,14 @@ class SettingsService extends ChangeNotifier {
   Future<void> init() async {
     if (_initialized) return;
     _prefs = await SharedPreferences.getInstance();
+    _useExternalSubtitles = _prefs.getBool(_keyUseExternalSubtitles) ?? true;
     _initialized = true;
   }
 
   static const String _keyLanguage = 'preferred_language';
   static const String _keyRegion = 'preferred_region';
   static const String _keyDefaultAudioLanguage = 'default_audio_language';
+  static const String _keyUseExternalSubtitles = 'use_external_subtitles';
 
   String get language {
     // 1. Check saved preference
@@ -56,9 +58,15 @@ class SettingsService extends ChangeNotifier {
 
   String _opensubtitlesKey = opensubtitlesApiKey;
   String get opensubtitlesKey => _opensubtitlesKey;
-
-  bool _useExternalSubtitles = false;
+  
+  bool _useExternalSubtitles = true;
   bool get useExternalSubtitles => _useExternalSubtitles;
+
+  Future<void> setUseExternalSubtitles(bool value) async {
+    _useExternalSubtitles = value;
+    await _prefs.setBool(_keyUseExternalSubtitles, value);
+    notifyListeners();
+  }
 
   bool _sportsEnabled = true;
   bool get sportsEnabled => _sportsEnabled;
@@ -85,6 +93,7 @@ class SettingsService extends ChangeNotifier {
 
     if (config['use_external_subtitles'] != null) {
       _useExternalSubtitles = config['use_external_subtitles'] == true || config['use_external_subtitles'].toString().toLowerCase() == 'true';
+      _prefs.setBool(_keyUseExternalSubtitles, _useExternalSubtitles);
     }
 
     notifyListeners();
