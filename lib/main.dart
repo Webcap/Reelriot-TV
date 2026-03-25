@@ -13,15 +13,24 @@ void main() async {
 }
 
 Future<void> bootstrap(String envFile) async {
+  debugPrint('[Main] 🚀 Bootstrapping with $envFile');
   WidgetsFlutterBinding.ensureInitialized();
+  
+  debugPrint('[Main] 📝 Loading env file...');
   await dotenv.load(fileName: envFile);
+  debugPrint('[Main] ✅ Env loaded');
 
   // Initialize AdService
+  debugPrint('[Main] 📺 Initializing AdService...');
   await AdService.instance.initialize();
+  debugPrint('[Main] ✅ AdService initialized');
 
   final url = supabaseUrl.trim();
   final anonKey = supabaseAnonKey.trim();
+  debugPrint('[Main] 🔗 Supabase URL: ${url.isNotEmpty ? 'SET' : 'MISSING'}');
+  
   if (url.isNotEmpty && anonKey.isNotEmpty) {
+    debugPrint('[Main] 🛠️ Initializing Supabase...');
     await Supabase.initialize(
       url: url,
       anonKey: anonKey,
