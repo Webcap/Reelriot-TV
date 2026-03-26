@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../env.dart';
 import 'dart:ui' as ui;
+import 'analytics_service.dart';
 
 class SettingsService extends ChangeNotifier {
   static final SettingsService _instance = SettingsService._internal();
@@ -94,6 +95,10 @@ class SettingsService extends ChangeNotifier {
     if (config['use_external_subtitles'] != null) {
       _useExternalSubtitles = config['use_external_subtitles'] == true || config['use_external_subtitles'].toString().toLowerCase() == 'true';
       _prefs.setBool(_keyUseExternalSubtitles, _useExternalSubtitles);
+    }
+
+    if (config['mixpanel_token'] != null && config['mixpanel_token'].toString().isNotEmpty) {
+      AnalyticsService.instance.initialize(config['mixpanel_token'].toString());
     }
 
     notifyListeners();
