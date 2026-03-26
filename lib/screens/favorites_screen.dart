@@ -31,17 +31,22 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
   }
 
   void refresh() {
-    _fetchBookmarks();
+    _fetchBookmarks(quiet: true);
   }
 
-  Future<void> _fetchBookmarks() async {
+  Future<void> _fetchBookmarks({bool quiet = false}) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
 
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    // Only show full loading spinner if not quiet or if we have no data yet
+    final showLoading = !quiet || (_bookmarkedMovies.isEmpty && _bookmarkedTv.isEmpty);
+
+    if (showLoading) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
 
     try {
       final res = await _supabase
