@@ -4,7 +4,9 @@ import 'package:caffeine_tv/screens/pairing_screen.dart';
 import 'package:caffeine_tv/screens/splash_screen.dart';
 import 'package:caffeine_tv/services/ad_service.dart';
 import 'package:caffeine_tv/services/settings_service.dart';
+import 'package:caffeine_tv/utils/cleanup_utils.dart';
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -48,6 +50,9 @@ Future<void> bootstrap(String envFile) async {
 
   // Initialize SettingsService
   await SettingsService().init();
+
+  // Async cleanup of update files (non-blocking)
+  unawaited(cleanupUpdateFiles());
 
   runApp(const CaffeineTvApp());
 }
