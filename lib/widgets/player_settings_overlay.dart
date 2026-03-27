@@ -1,12 +1,14 @@
 import 'package:better_player/better_player.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:caffeine_tv/widgets/language_picker_dialog.dart';
 
 class PlayerSettingsOverlay extends StatefulWidget {
   final BetterPlayerController controller;
   final String? currentProvider;
   final List<Map<String, String>>? allProviders;
   final Function(String)? onChangeProvider;
+  final Function(String)? onSearchMore;
   final String providerLabel;
 
   const PlayerSettingsOverlay({
@@ -15,6 +17,7 @@ class PlayerSettingsOverlay extends StatefulWidget {
     this.currentProvider,
     this.allProviders,
     this.onChangeProvider,
+    this.onSearchMore,
     this.providerLabel = 'Server (Provider)',
   });
 
@@ -96,6 +99,24 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
                     );
                   }).toList(),
                 ),
+                if (widget.onSearchMore != null) ...[
+                  const SizedBox(height: 16),
+                  _TrackChip(
+                    label: '+ Search More Languages',
+                    isSelected: false,
+                    isAction: true,
+                    onPressed: () async {
+                      final langCode = await showDialog<String>(
+                        context: context,
+                        builder: (context) => const LanguagePickerDialog(),
+                      );
+                      if (langCode != null) {
+                        widget.onSearchMore!(langCode);
+                        if (context.mounted) Navigator.of(context).pop();
+                      }
+                    },
+                  ),
+                ],
               ],
               if (widget.onChangeProvider != null && widget.allProviders != null && widget.allProviders!.isNotEmpty) ...[
                 const SizedBox(height: 32),

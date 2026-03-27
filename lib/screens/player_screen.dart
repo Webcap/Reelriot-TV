@@ -14,6 +14,9 @@ import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/scheduler.dart';
 import 'dart:convert';
+import 'package:caffeine_tv/services/subtitle_service.dart';
+import 'package:caffeine_tv/widgets/language_picker_dialog.dart';
+import 'package:caffeine_tv/models/sub_languages.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -32,6 +35,7 @@ class PlayerScreen extends StatefulWidget {
     this.allProviders,
     this.headers,
     this.externalSubtitles,
+    this.imdbId,
   });
 
   final String url;
@@ -48,6 +52,7 @@ class PlayerScreen extends StatefulWidget {
   final List<Map<String, String>>? allProviders;
   final Map<String, String>? headers;
   final List<BetterPlayerSubtitlesSource>? externalSubtitles;
+  final String? imdbId;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -58,6 +63,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _hasError = false;
   String? _errorMessage;
   final WatchHistoryService _historyService = WatchHistoryService();
+  final SubtitleService _subtitleService = SubtitleService();
   final FocusNode _mainFocusNode = FocusNode();
   Timer? _saveTimer;
   bool _controlsVisible = false;
@@ -648,6 +654,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         currentProvider: widget.providerCode,
         allProviders: widget.allProviders,
         providerLabel: _isSports ? 'Select Mirror' : 'Server (Provider)',
+        onSearchMore: _searchMoreSubtitles,
         onChangeProvider: (newProviderCode) {
           // Close settings dialog
           Navigator.of(context).pop();
@@ -706,6 +713,113 @@ class _PlayerScreenState extends State<PlayerScreen> {
       startPosition: position,
       preferredProvider: providerCode,
     );
+  }
+
+  Future<void> _searchMoreSubtitles(String langCode) async {
+    if (widget.imdbId == null) {
+      debugPrint('[PlayerScreen] ❌ IMDB ID is null, cannot search subtitles');
+      return;
+    }
+
+    _safeSetState(() {
+      _isRefreshing = true;
+    });
+
+    try {
+      final searchResults = await _subtitleService.searchSubtitles(
+        imdbId: widget.imdbId!,
+        languageCode: langCode,
+        apiKey: SettingsService().opensubtitlesKey,
+      );
+
+      if (searchResults.isNotEmpty) {
+        debugPrint('[PlayerScreen] ✅ Found ${searchResults.length} new subtitles');
+        
+        final List<BetterPlayerSubtitlesSource> newSubs = [];
+        final langName = supportedLanguages
+            .firstWhere((l) => l.languageCode == langCode,
+                orElse: () => SubLanguages(languageName: '', languageCode: '', englishName: 'Unknown'))
+            .englishName;
+
+        for (var data in searchResults) {
+          final fileId = data.attr?.files?.first.fileId;
+          if (fileId != null) {
+            final downloadUrl = await _subtitleService.downloadSubtitle(
+              fileId,
+              SettingsService().opensubtitlesKey,
+            );
+            if (downloadUrl != null) {
+              newSubs.add(
+                BetterPlayerSubtitlesSource(
+                  name: '$langName (OS)',
+                  urls: [downloadUrl],
+                  type: BetterPlayerSubtitlesSourceType.network,
+                ),
+              );
+            }
+          }
+        }
+
+        if (newSubs.isEmpty) {
+          debugPrint('[PlayerScreen] ❌ Failed to download any new subtitles');
+          return;
+        }
+
+        // Merge with existing external subtitles if any
+        final List<BetterPlayerSubtitlesSource> updatedExternalSubs = [
+          ...widget.externalSubtitles ?? [],
+          ...newSubs,
+        ];
+
+        // Unique filter to avoid duplicates
+        final Map<String, BetterPlayerSubtitlesSource> uniqueSubs = {};
+        for (var sub in updatedExternalSubs) {
+           // Use name as key, might want to be more specific if possible
+           uniqueSubs[sub.name!] = sub;
+        }
+
+        final finalSubs = uniqueSubs.values.toList();
+
+        final currentPosition = _controller?.videoPlayerController?.value.position ?? Duration.zero;
+        final currentUrl = widget.url;
+
+        // Re-setup data source with new subtitles
+        await _controller?.setupDataSource(
+          BetterPlayerDataSource(
+            BetterPlayerDataSourceType.network,
+            currentUrl,
+            videoFormat: currentUrl.contains('m3u8') ||
+                    currentUrl.contains('playlist') ||
+                    currentUrl.contains('proxy/stream')
+                ? BetterPlayerVideoFormat.hls
+                : null,
+            useAsmsTracks: true,
+            useAsmsAudioTracks: true,
+            useAsmsSubtitles: true,
+            subtitles: finalSubs,
+            preferredAudioLanguage: SettingsService().defaultAudioLanguage,
+            headers: _getMergedHeaders(currentUrl, widget.referrer, widget.headers),
+            bufferingConfiguration: const BetterPlayerBufferingConfiguration(
+              minBufferMs: 30000,
+              maxBufferMs: 60000,
+              bufferForPlaybackMs: 2500,
+              bufferForPlaybackAfterRebufferMs: 5000,
+            ),
+          ),
+        );
+
+        _controller?.seekTo(currentPosition);
+        _controller?.play();
+      } else {
+         debugPrint('[PlayerScreen] ℹ️ No subtitles found for language: $langCode');
+      }
+    } catch (e) {
+      debugPrint('[PlayerScreen] ❌ Error searching more subtitles: $e');
+    } finally {
+      _safeSetState(() {
+        _isRefreshing = false;
+      });
+    }
   }
 
   @override
@@ -800,7 +914,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (!_controlsVisible) {
             debugPrint('[PlayerScreen] 🚀 Showing controls');
             if (!_isDisposed) _controller?.setControlsVisibility(true);
-            return KeyEventResult.handled;
           } else {
             // Safety: keep-alive the visibility timer.
             if (!_isDisposed) _controller?.setControlsVisibility(true);

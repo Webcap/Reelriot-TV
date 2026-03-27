@@ -154,11 +154,11 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
             allSubtitleLinks.addAll(response.links!.first.subtitles);
           }
 
+          String? imdbId;
           // Open Subtitles 
           if (_settings.useExternalSubtitles && _settings.opensubtitlesKey.isNotEmpty) {
             debugPrint('[VideoLoader] 🔍 External subtitles enabled. Checking Open Subtitles...');
             try {
-              String? imdbId;
               if (widget.movie != null) {
                 imdbId = await _api.fetchMovieExternalIds(widget.movie!.id);
               } else {
@@ -233,6 +233,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
                 allProviders: _providers,
                 headers: response.links!.first.headers,
                 externalSubtitles: subs,
+                imdbId: imdbId,
               ),
             ),
           );
