@@ -9,6 +9,7 @@ import 'package:caffeine_tv/services/subtitle_service.dart';
 import 'package:caffeine_tv/models/sub_languages.dart';
 import 'package:caffeine_tv/services/watch_history_service.dart';
 import 'package:caffeine_tv/widgets/provider_loading_widget.dart';
+import 'package:caffeine_tv/utils/video_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:better_player/better_player.dart';
@@ -144,22 +145,16 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
           debugPrint('[VideoLoader] ✅ Found ${response.links!.length} stream(s) from $providerName');
           if (!mounted) return;
 
-          List<BetterPlayerSubtitlesSource> subs = [];
+          // 1. Collect all potential subtitle links
+          List<core.SubtitleLink> allSubtitleLinks = [];
           
-          // 1. Process internal subtitles from provider
+          // Internal subtitles from provider
           if (response.links!.first.subtitles.isNotEmpty) {
             debugPrint('[VideoLoader] 📝 Found ${response.links!.first.subtitles.length} internal subtitles');
-            subs.addAll(response.links!.first.subtitles.map((s) => BetterPlayerSubtitlesSource(
-              type: BetterPlayerSubtitlesSourceType.network,
-              name: s.label,
-              urls: [s.file],
-              selectedByDefault: s.isDefault ?? false,
-            )));
-          } else {
-            debugPrint('[VideoLoader] ℹ️ No internal subtitles from provider');
+            allSubtitleLinks.addAll(response.links!.first.subtitles);
           }
 
-          // 2. Open Subtitles 
+          // Open Subtitles 
           if (_settings.useExternalSubtitles && _settings.opensubtitlesKey.isNotEmpty) {
             debugPrint('[VideoLoader] 🔍 External subtitles enabled. Checking Open Subtitles...');
             try {
@@ -170,11 +165,8 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
                 imdbId = await _api.fetchTvExternalIds(widget.tvShow!.id);
               }
 
-              debugPrint('[VideoLoader] 🆔 IMDB ID: $imdbId');
-
               if (imdbId != null && imdbId.isNotEmpty) {
                 final langCode = _settings.language;
-                debugPrint('[VideoLoader] 🌐 Searching for language: $langCode');
                 final extSubs = await _subtitleService.searchSubtitles(
                   imdbId: imdbId, 
                   languageCode: langCode, 
@@ -184,32 +176,39 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
                 );
 
                 if (extSubs.isNotEmpty) {
-                  debugPrint('[VideoLoader] ✅ Found ${extSubs.length} Open Subtitles');
-                  final fileId = extSubs.first.attr?.files?.first.fileId;
-                  if (fileId != null) {
-                    debugPrint('[VideoLoader] 📥 Downloading subtitle file: $fileId');
-                    final downloadUrl = await _subtitleService.downloadSubtitle(fileId, _settings.opensubtitlesKey);
-                    if (downloadUrl != null) {
-                       debugPrint('[VideoLoader] ✨ External subtitle added: $downloadUrl');
-                       subs.add(BetterPlayerSubtitlesSource(
-                        type: BetterPlayerSubtitlesSourceType.network,
-                        name: 'OpenSubtitles ($langCode)',
-                        urls: [downloadUrl],
-                      ));
+                  debugPrint('[VideoLoader] ✅ Found ${extSubs.length} Open Subtitles. Adding top tracks...');
+                  // Take up to 5 tracks from OpenSubtitles
+                  for (var i = 0; i < (extSubs.length > 5 ? 5 : extSubs.length); i++) {
+                    final fileId = extSubs[i].attr?.files?.first.fileId;
+                    if (fileId != null) {
+                      final downloadUrl = await _subtitleService.downloadSubtitle(fileId, _settings.opensubtitlesKey);
+                      if (downloadUrl != null) {
+                        allSubtitleLinks.add(core.SubtitleLink(
+                          file: downloadUrl,
+                          label: 'OpenSubtitles $i ($langCode)',
+                        ));
+                      }
                     }
                   }
-                } else {
-                  debugPrint('[VideoLoader] ℹ️ No Open Subtitles found for $imdbId in $langCode');
                 }
               }
             } catch (e) {
               debugPrint('[VideoLoader] ⚠️ External subtitle search failed: $e');
             }
-          } else {
-            debugPrint('[VideoLoader] ℹ️ External subtitles disabled or API key missing');
           }
 
-          debugPrint('[VideoLoader] 🏁 Total subtitles collected: ${subs.length}');
+          // 2. Parse and process all collected subtitles
+          final langIndex = supportedLanguages.indexWhere((l) => l.languageCode == _settings.language);
+          final defaultLanguage = langIndex != -1 ? supportedLanguages[langIndex].englishName : 'English';
+
+          final List<BetterPlayerSubtitlesSource> subs = await VideoUtils.parseSubtitles(
+            subtitles: allSubtitleLinks,
+            defaultLanguage: defaultLanguage,
+            fetchAllLanguages: true, // TV app generally wants more choice
+            getSubtitleContent: _subtitleService.getSubtitleContent,
+          );
+
+          debugPrint('[VideoLoader] 🏁 Total processed subtitles: ${subs.length}');
 
           setState(() {
             _providerStates[i].status = ProviderStatus.success;

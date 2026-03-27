@@ -68,4 +68,17 @@ class SubtitleService {
       return null;
     }
   }
+
+  Future<String?> getSubtitleContent(String url) async {
+    try {
+      final response = await http.get(Uri.parse(url))
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        return response.body;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
 }
