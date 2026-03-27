@@ -82,31 +82,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
 
-      // 2. Fetch watch history and aggregate time from completed_watch_history
-      final historyRes = await Supabase.instance.client
+      // 2. Fetch watch history from both completed and continue watching updated in the last 14 days
+      final twoWeeksAgo = DateTime.now().subtract(const Duration(days: 14)).toUtc().toIso8601String();
+      
+      final completedRes = await Supabase.instance.client
           .from('completed_watch_history')
           .select('time_watched_ms, media_type')
-          .eq('user_id', user.id);
+          .eq('user_id', user.id)
+          .gte('updated_at', twoWeeksAgo);
 
-      if ((historyRes as List).isNotEmpty) {
-        int movieTime = 0;
-        int tvTime = 0;
-        
-        for (var row in (historyRes as List)) {
-          final ms = row['time_watched_ms'] as int? ?? 0;
-          if (row['media_type'] == 'movie') {
-            movieTime += ms;
-          } else {
-            tvTime += ms;
-          }
-        }
+      final continueRes = await Supabase.instance.client
+          .from('continue_watching_history')
+          .select('elapsed_ms, media_type')
+          .eq('user_id', user.id)
+          .gte('updated_at', twoWeeksAgo);
 
-        if (mounted) {
-          setState(() {
-            _movieWatchTimeMs = movieTime;
-            _tvWatchTimeMs = tvTime;
-          });
+      int movieTime = 0;
+      int tvTime = 0;
+
+      for (var row in (completedRes as List)) {
+        final ms = row['time_watched_ms'] as int? ?? 0;
+        if (row['media_type'] == 'movie') {
+          movieTime += ms;
+        } else {
+          tvTime += ms;
         }
+      }
+
+      for (var row in (continueRes as List)) {
+        final ms = row['elapsed_ms'] as int? ?? 0;
+        if (row['media_type'] == 'movie') {
+          movieTime += ms;
+        } else {
+          tvTime += ms;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _movieWatchTimeMs = movieTime;
+          _tvWatchTimeMs = tvTime;
+        });
       }
     } catch (e) {
       debugPrint('Error loading settings data: $e');
@@ -124,7 +140,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final minutes = duration.inMinutes % 60;
     
     if (hours > 0) {
-      return '${hours}h ${minutes}m';
+      return '${hours}h${minutes}m';
     } else {
       return '${minutes}m';
     }
@@ -200,6 +216,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           label: 'Movie Watch Time',
                           value: _formatDuration(_movieWatchTimeMs),
                           icon: Icons.movie_outlined,
+                          subtitle: '(Last 2 weeks)',
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -208,6 +225,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           label: 'TV Watch Time',
                           value: _formatDuration(_tvWatchTimeMs),
                           icon: Icons.tv_rounded,
+                          subtitle: '(Last 2 weeks)',
                         ),
                       ),
                     ],
@@ -562,11 +580,13 @@ class _StatCard extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
+  final String? subtitle;
 
   const _StatCard({
     required this.label,
     required this.value,
     required this.icon,
+    this.subtitle,
   });
 
   @override
@@ -598,6 +618,16 @@ class _StatCard extends StatelessWidget {
               fontSize: 12,
             ),
           ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle!,
+              style: const TextStyle(
+                color: Colors.white38,
+                fontSize: 10,
+              ),
+            ),
+          ],
         ],
       ),
     );

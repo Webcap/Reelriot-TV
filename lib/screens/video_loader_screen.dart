@@ -147,47 +147,51 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
 
           // 1. Collect all potential subtitle links
           List<core.SubtitleLink> allSubtitleLinks = [];
-          
-          // Internal subtitles from provider
-          if (response.links!.first.subtitles.isNotEmpty) {
-            debugPrint('[VideoLoader] 📝 Found ${response.links!.first.subtitles.length} internal subtitles');
-            allSubtitleLinks.addAll(response.links!.first.subtitles);
-          }
 
-          String? imdbId;
-          // Open Subtitles 
-          if (_settings.useExternalSubtitles && _settings.opensubtitlesKey.isNotEmpty) {
-            debugPrint('[VideoLoader] 🔍 External subtitles enabled. Checking Open Subtitles...');
+          // External Subtitles (Prioritized)
+          if (_settings.useExternalSubtitles &&
+              _settings.opensubtitlesKey.isNotEmpty) {
+            debugPrint(
+                '[VideoLoader] 🔍 External subtitles enabled. Checking Open Subtitles...');
             try {
-              if (widget.movie != null) {
-                imdbId = await _api.fetchMovieExternalIds(widget.movie!.id);
-              } else {
-                imdbId = await _api.fetchTvExternalIds(widget.tvShow!.id);
-              }
+              final int tmdbId = widget.movie?.id ?? widget.tvShow!.id;
+              // Search for English, Spanish, and the user's default language
+              final searchLangs = {'en', 'es', _settings.language}.join(',');
 
-              if (imdbId != null && imdbId.isNotEmpty) {
-                final langCode = _settings.language;
-                final extSubs = await _subtitleService.searchSubtitles(
-                  imdbId: imdbId, 
-                  languageCode: langCode, 
-                  apiKey: _settings.opensubtitlesKey,
-                  seasonNumber: widget.season,
-                  episodeNumber: widget.episode,
-                );
+              final extSubs = await _subtitleService.searchSubtitles(
+                tmdbId: tmdbId,
+                languageCode: searchLangs,
+                apiKey: _settings.opensubtitlesKey,
+                seasonNumber: widget.season,
+                episodeNumber: widget.episode,
+              );
 
-                if (extSubs.isNotEmpty) {
-                  debugPrint('[VideoLoader] ✅ Found ${extSubs.length} Open Subtitles. Adding top tracks...');
-                  // Take up to 5 tracks from OpenSubtitles
-                  for (var i = 0; i < (extSubs.length > 5 ? 5 : extSubs.length); i++) {
-                    final fileId = extSubs[i].attr?.files?.first.fileId;
-                    if (fileId != null) {
-                      final downloadUrl = await _subtitleService.downloadSubtitle(fileId, _settings.opensubtitlesKey);
-                      if (downloadUrl != null) {
-                        allSubtitleLinks.add(core.SubtitleLink(
-                          file: downloadUrl,
-                          label: 'OpenSubtitles $i ($langCode)',
-                        ));
-                      }
+              if (extSubs.isNotEmpty) {
+                debugPrint(
+                    '[VideoLoader] ✅ Found ${extSubs.length} Open Subtitles. Adding top tracks...');
+
+                // Track added languages to ensure diversity (one best per lang)
+                final addedLangs = <String>{};
+                int addedCount = 0;
+
+                for (var sub in extSubs) {
+                  if (addedCount >= 4) break;
+
+                  final lang = sub.attr?.language ?? '';
+                  final fileId = sub.attr?.files?.first.fileId;
+
+                  if (fileId != null && !addedLangs.contains(lang)) {
+                    final downloadUrl = await _subtitleService.downloadSubtitle(
+                        fileId, _settings.opensubtitlesKey);
+
+                    if (downloadUrl != null) {
+                      addedLangs.add(lang);
+                      addedCount++;
+                      allSubtitleLinks.add(core.SubtitleLink(
+                        file: downloadUrl,
+                        label:
+                            '${sub.attr?.languageName ?? lang} (OpenSubtitles)',
+                      ));
                     }
                   }
                 }
@@ -195,6 +199,13 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
             } catch (e) {
               debugPrint('[VideoLoader] ⚠️ External subtitle search failed: $e');
             }
+          }
+
+          // Internal subtitles from provider (Fallback/Secondary)
+          if (response.links!.first.subtitles.isNotEmpty) {
+            debugPrint(
+                '[VideoLoader] 📝 Found ${response.links!.first.subtitles.length} internal subtitles');
+            allSubtitleLinks.addAll(response.links!.first.subtitles);
           }
 
           // 2. Parse and process all collected subtitles
@@ -233,7 +244,6 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
                 allProviders: _providers,
                 headers: response.links!.first.headers,
                 externalSubtitles: subs,
-                imdbId: imdbId,
               ),
             ),
           );

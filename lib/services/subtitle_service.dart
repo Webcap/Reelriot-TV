@@ -6,15 +6,20 @@ class SubtitleService {
   static const String _baseUrl = 'https://api.opensubtitles.com/api/v1';
 
   Future<List<SubtitleData>> searchSubtitles({
-    required String imdbId,
+    required int tmdbId,
     required String languageCode,
     required String apiKey,
     int? seasonNumber,
     int? episodeNumber,
   }) async {
-    if (imdbId.isEmpty || apiKey.isEmpty) return [];
+    if (tmdbId == 0 || apiKey.isEmpty) return [];
 
-    String url = '$_baseUrl/subtitles?imdb_id=$imdbId&languages=$languageCode&ai_translated=exclude';
+    // Use parent_tmdb_id for episodes as required by OpenSubtitles API
+    final String idParam = (seasonNumber != null && episodeNumber != null) 
+        ? 'parent_tmdb_id' 
+        : 'tmdb_id';
+
+    String url = '$_baseUrl/subtitles?$idParam=$tmdbId&languages=$languageCode&ai_translated=exclude';
     if (seasonNumber != null && episodeNumber != null) {
       url += '&season_number=$seasonNumber&episode_number=$episodeNumber';
     }
@@ -26,6 +31,7 @@ class SubtitleService {
           'Api-Key': apiKey,
           'Accept': 'application/json',
           'User-Agent': 'caffeine_tv v1.0.0',
+          'X-User-Agent': 'caffeine_tv v1.0.0',
         },
       ).timeout(const Duration(seconds: 10));
 
@@ -71,8 +77,12 @@ class SubtitleService {
 
   Future<String?> getSubtitleContent(String url) async {
     try {
-      final response = await http.get(Uri.parse(url))
-          .timeout(const Duration(seconds: 15));
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'User-Agent': 'caffeine_tv v1.0.0',
+        },
+      ).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
         return response.body;
       }

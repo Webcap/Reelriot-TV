@@ -35,7 +35,6 @@ class PlayerScreen extends StatefulWidget {
     this.allProviders,
     this.headers,
     this.externalSubtitles,
-    this.imdbId,
   });
 
   final String url;
@@ -52,7 +51,6 @@ class PlayerScreen extends StatefulWidget {
   final List<Map<String, String>>? allProviders;
   final Map<String, String>? headers;
   final List<BetterPlayerSubtitlesSource>? externalSubtitles;
-  final String? imdbId;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -716,8 +714,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _searchMoreSubtitles(String langCode) async {
-    if (widget.imdbId == null) {
-      debugPrint('[PlayerScreen] ❌ IMDB ID is null, cannot search subtitles');
+    final int? tmdbId = widget.item is Map 
+        ? (widget.item['id'] ?? widget.item['media_id'])
+        : widget.item?.id;
+
+    if (tmdbId == null) {
+      debugPrint('[PlayerScreen] ❌ TMDB ID is null, cannot search subtitles');
       return;
     }
 
@@ -727,9 +729,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     try {
       final searchResults = await _subtitleService.searchSubtitles(
-        imdbId: widget.imdbId!,
+        tmdbId: tmdbId,
         languageCode: langCode,
         apiKey: SettingsService().opensubtitlesKey,
+        seasonNumber: widget.season,
+        episodeNumber: widget.episode,
       );
 
       if (searchResults.isNotEmpty) {

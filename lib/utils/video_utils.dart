@@ -46,19 +46,23 @@ class VideoUtils {
 
     // 1. Identify which subtitles match the preferred language
     final preferredIndices = <int>{};
+    int? bestPreferredIndex;
     for (int i = 0; i < subtitles.length; i++) {
       final lang = (subtitles[i].label ?? '').toLowerCase();
-      if (lang.startsWith(defaultLanguage.toLowerCase()) || 
+      if (lang.startsWith(defaultLanguage.toLowerCase()) ||
           lang == defaultLanguage.toLowerCase()) {
         preferredIndices.add(i);
+        bestPreferredIndex ??= i;
       }
     }
 
     // 2. If no preferred language found, try to find English as fallback if it wasn't the default
-    if (preferredIndices.isEmpty && defaultLanguage.toLowerCase() != 'english') {
+    if (preferredIndices.isEmpty &&
+        defaultLanguage.toLowerCase() != 'english') {
       for (int i = 0; i < subtitles.length; i++) {
         if (_isDefaultEnglish(subtitles[i].label ?? '')) {
           preferredIndices.add(i);
+          bestPreferredIndex ??= i;
           break; // Just one fallback is enough
         }
       }
@@ -67,6 +71,7 @@ class VideoUtils {
     // 3. Fallback to the first one if still nothing
     if (preferredIndices.isEmpty) {
       preferredIndices.add(0);
+      bestPreferredIndex = 0;
     }
 
     // 4. Determine which subtitles to fetch
@@ -83,16 +88,16 @@ class VideoUtils {
       try {
         final url = subtitles[i].file ?? '';
         if (url.isEmpty) continue;
-        
+
         final content = await getSubtitleContent(url);
         if (content == null) continue;
 
-        final isPreferred = preferredIndices.contains(i);
+        final isDefault = i == bestPreferredIndex;
 
         subs.add(
           BetterPlayerSubtitlesSource(
             name: subtitles[i].label ?? 'Unknown',
-            selectedByDefault: isPreferred,
+            selectedByDefault: isDefault,
             content: url.toLowerCase().endsWith('srt')
                 ? content
                 : processVttFileTimestamps(content),
