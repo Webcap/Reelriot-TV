@@ -7,24 +7,39 @@ class UpdateService {
   factory UpdateService() => _instance;
   UpdateService._internal();
 
-  /// Compares current version with latest version.
-  /// Returns [UpdateInfo] with details.
-  Future<UpdateInfo> checkForUpdate(CaffeineApiConfig config) async {
+  /// Compares current version with latest version using the new structured API.
+  Future<UpdateInfo> checkForUpdate(String caffeineApiUrl, {String env = 'prod'}) async {
     final packageInfo = await PackageInfo.fromPlatform();
     final currentVersion = packageInfo.version;
-    final latestVersion = config.tvLatestVersion ?? currentVersion;
+    
+    // Fetch from new structured endpoint
+    final updateInfo = await fetchUpdateInfo(
+      caffeineApiUrl: caffeineApiUrl,
+      platform: 'tv',
+      environment: env,
+    );
 
+    if (updateInfo == null) {
+      return UpdateInfo(
+        isUpdateAvailable: false,
+        latestVersion: currentVersion,
+        currentVersion: currentVersion,
+        isForced: false,
+      );
+    }
+
+    final latestVersion = updateInfo.latestVersion;
     final isUpdateAvailable = _isVersionHigher(latestVersion, currentVersion);
     
-    debugPrint('[UpdateService] 🔍 Checking update: Current=$currentVersion, Latest=$latestVersion, Available=$isUpdateAvailable');
+    debugPrint('[UpdateService] 🔍 Checking structured update: Current=$currentVersion, Latest=$latestVersion, Avail=$isUpdateAvailable');
 
     return UpdateInfo(
       isUpdateAvailable: isUpdateAvailable,
       latestVersion: latestVersion,
       currentVersion: currentVersion,
-      isForced: config.tvForcedUpdate ?? false,
-      downloadUrl: config.tvUpdateDownloadUrl,
-      changelog: config.tvUpdateChangelog,
+      isForced: updateInfo.isForced,
+      downloadUrl: updateInfo.downloadUrl,
+      changelog: updateInfo.changelog,
     );
   }
 

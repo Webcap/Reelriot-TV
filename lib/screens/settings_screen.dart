@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/api_service.dart';
 import '../services/update_service.dart';
+import '../env.dart';
 import 'update_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -489,10 +490,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       final api = ApiService();
-      final rawConfig = await api.loadConfig();
-      final config = CaffeineApiConfig.fromMap(rawConfig);
+      await api.loadConfig();
       
-      final info = await UpdateService().checkForUpdate(config);
+      final info = await UpdateService().checkForUpdate(
+        caffeineApiUrl,
+        env: environment,
+      );
 
       if (!mounted) return;
 

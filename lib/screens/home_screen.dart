@@ -12,6 +12,7 @@ import 'package:caffeine_tv/services/watch_history_service.dart';
 import 'package:caffeine_tv/services/recommendation_service.dart';
 import 'package:caffeine_tv/screens/video_loader_screen.dart';
 import 'package:caffeine_tv/screens/player_screen.dart';
+import 'package:caffeine_tv/env.dart';
 import 'package:caffeine_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -434,10 +435,15 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
   Future<void> _checkForUpdate() async {
     try {
-      final rawConfig = await _api.loadConfig();
-      final config = CaffeineApiConfig.fromMap(rawConfig);
-      final info = await UpdateService().checkForUpdate(config);
-      debugPrint('[HomeScreen] 🏁 Update check result: available=${info.isUpdateAvailable}, version=${info.latestVersion}, forced=${info.isForced}');
+      await _api.loadConfig();
+      
+      // Use new structured update check
+      final info = await UpdateService().checkForUpdate(
+        caffeineApiUrl,
+        env: environment,
+      );
+      
+      debugPrint('[HomeScreen] 🏁 Structured Update check result: available=${info.isUpdateAvailable}, version=${info.latestVersion}, forced=${info.isForced}');
       if (mounted) {
         setState(() => _updateInfo = info);
         // If forced, jump to update screen immediately

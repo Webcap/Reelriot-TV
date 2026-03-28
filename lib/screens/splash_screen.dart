@@ -95,8 +95,10 @@ class _SplashScreenState extends State<SplashScreen>
       SettingsService().updateFromConfig(config);
       AdService.instance.updateEnabledStatus(SettingsService().adsEnabled);
 
-      final apiConfig = core.CaffeineApiConfig.fromMap(config);
-      final updateInfo = await UpdateService().checkForUpdate(apiConfig);
+      final updateInfo = await UpdateService().checkForUpdate(
+        caffeineApiUrl,
+        env: environment,
+      );
       
       if (updateInfo.isUpdateAvailable && updateInfo.isForced) {
         if (mounted) {
