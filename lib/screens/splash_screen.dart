@@ -8,7 +8,7 @@ import 'package:caffeine_tv/services/ad_service.dart';
 import 'package:caffeine_tv/services/update_service.dart';
 import 'package:caffeine_tv/screens/update_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+
 
 class SplashScreen extends StatefulWidget {
   final Widget destination;
@@ -76,79 +76,62 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _bootstrap() async {
-    // Load posters and config
+    // 1. Load API Config
     try {
       final api = ApiService();
+      final config = await api.loadConfig().timeout(const Duration(seconds: 5));
+      SettingsService().updateFromConfig(config);
+      AdService.instance.updateEnabledStatus(SettingsService().adsEnabled);
+
+      final apiConfig = core.CaffeineApiConfig.fromMap(config);
+      final updateInfo = await UpdateService().checkForUpdate(apiConfig);
       
-      // 1. Load API Config
-      try {
-        final config = await api.loadConfig().timeout(const Duration(seconds: 10));
-        SettingsService().updateFromConfig(config);
-        
-        // Apply ad configuration
-        AdService.instance.updateEnabledStatus(SettingsService().adsEnabled);
-
-        // 1.1 Check for Forced Update
-        final apiConfig = core.CaffeineApiConfig.fromMap(config);
-        final updateInfo = await UpdateService().checkForUpdate(apiConfig);
-        
-        if (updateInfo.isUpdateAvailable && updateInfo.isForced) {
-          if (mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => UpdateScreen(updateInfo: updateInfo)),
-            );
-            return; // Stop bootstrap
-          }
+      if (updateInfo.isUpdateAvailable && updateInfo.isForced) {
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => UpdateScreen(updateInfo: updateInfo)),
+          );
+          return;
         }
-      } catch (e) {
-        debugPrint('[Splash] Config fetch failed: $e');
-      }
-
-      // 2. Fetch posters
-      final List<String> paths = [];
-      final seen = <String>{};
-
-      Future<void> fetchBatch(Future<core.MovieListResponse> call) async {
-        try {
-          final page = await call.timeout(const Duration(seconds: 15));
-          for (final m in page.results) {
-            if (m.posterPath != null && seen.add(m.posterPath!)) {
-              paths.add(m.posterPath!);
-            }
-          }
-        } catch (e) {
-          debugPrint('[Splash] Batch fetch failed: $e');
-        }
-      }
-
-      await Future.wait([
-        fetchBatch(api.fetchTrendingMovies()),
-        fetchBatch(api.fetchPopularMovies()),
-        fetchBatch(api.fetchTopRatedMovies()),
-      ]);
-
-      // Shuffle so it looks varied every launch
-      paths.shuffle(Random());
-
-      if (mounted) {
-        setState(() {
-          _posterPaths = paths;
-          _postersLoaded = true;
-        });
-        _startScrolling();
       }
     } catch (e) {
-      debugPrint('[Splash] Bootstrap error: $e');
-      if (mounted) setState(() => _postersLoaded = true);
+      debugPrint('[Splash] Config/Update check failed: $e');
     }
 
-    // Start content animation after a short delay
-    await Future.delayed(const Duration(milliseconds: 200));
+    // 2. Load Local Posters
+    const String posterDir = 'assets/images/posters/';
+    final List<String> localPosters = [
+      '1_Peaky Blinders The Immortal Man.jpg', '2_Project Hail Mary.jpg', '3_How to Make a Killing.jpg',
+      '4_Agent Zeta.jpg', '5_Send Help.jpg', '6_They Will Kill You.jpg', '7_War Machine.jpg',
+      '8_Greenland 2 Migration.jpg', '9_GOAT.jpg', '10_Scream 7.jpg', '11_Avatar Fire and Ash.jpg',
+      '12_Zootopia 2.jpg', '13_Marty Supreme.jpg', '14_Hoppers.jpg', '15_Dhurandhar The Revenge.jpg',
+      '16_The Drama.jpg', '17_Spider-Man Brand New Day.jpg', '18_Ready or Not Here I Come.jpg',
+      '19_Scary Movie.jpg', '20_One Battle After Another.jpg', 'movie_1_Project Hail Mary.jpg',
+      'movie_2_Send Help.jpg', 'movie_3_GOAT.jpg', 'movie_4_Mike  Nick  Nick  Alice.jpg',
+      'movie_5_Pretty Lethal.jpg', 'movie_6_Hoppers.jpg', 'movie_7_Peaky Blinders The Immortal Man.jpg',
+      'movie_8_The Super Mario Galaxy Movie.jpg', 'movie_9_How to Make a Killing.jpg', 'movie_10_Scream 7.jpg',
+      'tv_1_JUJUTSU KAISEN.jpg', 'tv_2_Daredevil Born Again.jpg', 'tv_3_Frieren Beyond Journeys End.jpg',
+      'tv_4_One Piece.jpg', 'tv_5_ONE PIECE.jpg', 'tv_6_Something Very Bad is Going to Happen.jpg',
+      'tv_7_Scrubs.jpg', 'tv_8_Invincible.jpg', 'tv_9_Detective Hole.jpg', 'tv_10_The Pitt.jpg'
+    ];
+
+    final paths = localPosters.map((p) => '$posterDir$p').toList();
+    paths.shuffle(Random());
+
+    if (mounted) {
+      setState(() {
+        _posterPaths = paths;
+        _postersLoaded = true;
+      });
+      _startScrolling();
+    }
+
+    // Start content animation
+    await Future.delayed(const Duration(milliseconds: 100));
     if (mounted) _contentController.forward();
 
-    // Navigate after splash duration - reduced from 4s to 2.5s for faster startup
-    // OR wait until posters are loaded, with a max timeout
-    await Future.delayed(const Duration(milliseconds: 2200));
+    // Fast transition for local assets
+    await Future.delayed(const Duration(milliseconds: 1800));
     
     if (mounted) {
       Navigator.of(context).pushReplacement(
@@ -165,6 +148,7 @@ class _SplashScreenState extends State<SplashScreen>
       );
     }
   }
+
 
   void _startScrolling() {
     for (int i = 0; i < _rowCount; i++) {
@@ -266,24 +250,17 @@ class _SplashScreenState extends State<SplashScreen>
                     itemCount: row.length,
                     separatorBuilder: (_, __) => const SizedBox(width: gap),
                     itemBuilder: (_, idx) {
-                      final rawPath = row[idx];
-                      final path = rawPath.startsWith('/') ? rawPath : '/$rawPath';
-                      final imageUrl = '${tmdbImageBaseUrl}w342$path';
+                      final path = row[idx];
                       
                       return ClipRRect(
                         borderRadius: BorderRadius.circular(6),
-                        child: CachedNetworkImage(
-                          imageUrl: imageUrl,
+                        child: Image.asset(
+                          path,
                           width: posterW,
                           height: posterH,
                           fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            width: posterW,
-                            height: posterH,
-                            color: Colors.white.withOpacity(0.05),
-                          ),
-                          errorWidget: (context, url, error) {
-                            debugPrint('[Splash] Failed to load image: $imageUrl');
+                          errorBuilder: (context, error, stackTrace) {
+                            debugPrint('[Splash] Failed to load local asset: $path');
                             return Container(
                               width: posterW,
                               height: posterH,
@@ -295,6 +272,7 @@ class _SplashScreenState extends State<SplashScreen>
                       );
                     },
                   ),
+
                 );
               }),
             ),

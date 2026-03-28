@@ -72,6 +72,8 @@ flutter:
     - .env.prod
     - assets/svg/
     - assets/images/
+    - assets/images/posters/
+
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
