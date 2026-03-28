@@ -219,6 +219,14 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
       awayTeam = competitors.firstWhere((c) => c['homeAway'] == 'away', orElse: () => competitors[0]);
     }
 
+    // Safely extract values as strings to avoid TypeErrors if the API returns an object
+    String? getStringValue(dynamic val) {
+      if (val == null) return null;
+      if (val is String) return val;
+      if (val is Map && val['href'] != null) return val['href'].toString();
+      return val.toString();
+    }
+
     // MMA/UFC Header: Do not show scores as they are often irrelevant or not provided natively
     final isCombat = header?['league']?['slug']?.toString().contains('mma') == true || 
                     header?['league']?['slug']?.toString().contains('ufc') == true ||
@@ -228,20 +236,26 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
     final awayScore = isCombat ? null : (awayTeam?['score'] ?? '0');
     
     // Support both 'team' (NFL/NBA) and 'athlete' (UFC/MMA) structures
-    final homeName = homeTeam?['team']?['displayName'] ?? homeTeam?['athlete']?['displayName'] ?? 'Home';
-    final awayName = awayTeam?['team']?['displayName'] ?? awayTeam?['athlete']?['displayName'] ?? 'Away';
+    // Use getStringValue to prevent TypeErrors if names are nested objects
+    final homeName = getStringValue(homeTeam?['team']?['displayName']) ?? 
+                    getStringValue(homeTeam?['athlete']?['displayName']) ?? 
+                    'Home';
+    final awayName = getStringValue(awayTeam?['team']?['displayName']) ?? 
+                    getStringValue(awayTeam?['athlete']?['displayName']) ?? 
+                    'Away';
     
     // Core API structure for logos is often team.logo or team.logos
     // For athletes, it can be athlete.headshot or athlete.flag
-    final homeLogo = homeTeam?['team']?['logos']?.first?['href'] ?? 
-                    homeTeam?['team']?['logo'] ?? 
-                    homeTeam?['athlete']?['headshot'] ??
-                    homeTeam?['athlete']?['flag'];
+
+    final homeLogo = getStringValue(homeTeam?['team']?['logos']?.first?['href']) ?? 
+                    getStringValue(homeTeam?['team']?['logo']) ?? 
+                    getStringValue(homeTeam?['athlete']?['headshot']) ??
+                    getStringValue(homeTeam?['athlete']?['flag']);
                     
-    final awayLogo = awayTeam?['team']?['logos']?.first?['href'] ?? 
-                    awayTeam?['team']?['logo'] ?? 
-                    awayTeam?['athlete']?['headshot'] ??
-                    awayTeam?['athlete']?['flag'];
+    final awayLogo = getStringValue(awayTeam?['team']?['logos']?.first?['href']) ?? 
+                    getStringValue(awayTeam?['team']?['logo']) ?? 
+                    getStringValue(awayTeam?['athlete']?['headshot']) ??
+                    getStringValue(awayTeam?['athlete']?['flag']);
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -257,14 +271,14 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildTeamHeader(awayName, awayLogo, awayScore),
+              _buildTeamHeader(awayName, awayLogo, awayScore?.toString()),
               const Text('vs', style: TextStyle(color: Colors.white54, fontSize: 24)),
-              _buildTeamHeader(homeName, homeLogo, homeScore),
+              _buildTeamHeader(homeName, homeLogo, homeScore?.toString()),
             ],
           ),
           const SizedBox(height: 16),
           Text(
-            header?['status']?['type']?['detail'] ?? 'Final',
+            getStringValue(header?['status']?['type']?['detail']) ?? 'Final',
             style: const TextStyle(color: Colors.white70, fontSize: 18),
           ),
           if (_streamUrl != null) ...[
@@ -291,14 +305,17 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
     );
   }
 
-  Widget _buildTeamHeader(String name, String? logo, String score) {
+  Widget _buildTeamHeader(String name, String? logo, String? score) {
     return Column(
       children: [
-        if (logo != null)
-          Image.network(logo, height: 64, width: 64, errorBuilder: (c, e, s) => const Icon(Icons.sports, size: 64)),
+        if (logo != null && logo.isNotEmpty)
+          Image.network(logo, height: 64, width: 64, errorBuilder: (c, e, s) => const Icon(Icons.sports, size: 64))
+        else
+          const Icon(Icons.sports, size: 64, color: Colors.white24),
         const SizedBox(height: 8),
         Text(name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-        Text(score, style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.blue)),
+        if (score != null)
+          Text(score, style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.blue)),
       ],
     );
   }
