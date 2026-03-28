@@ -173,7 +173,29 @@ class _EspnGame {
 
   factory _EspnGame.fromJson(Map<String, dynamic> json, {String? sport, String? league}) {
     final comps = json['competitions'] as List<dynamic>? ?? [];
-    final comp = comps.isNotEmpty && comps.first is Map ? comps.first as Map<String, dynamic> : <String, dynamic>{};
+    
+    // Improved selection for UFC/MMA: Find the active fight or default to the Main Event
+    final isMma = (sport?.toLowerCase() == 'mma' || league?.toLowerCase() == 'ufc');
+    Map<String, dynamic>? comp;
+    if (comps.isNotEmpty) {
+      if (isMma) {
+        // 1. Try to find the currently active fight ('in' status)
+        comp = comps.firstWhere(
+            (c) => c is Map && c['status']?['type']?['state'] == 'in',
+            orElse: () => null) as Map<String, dynamic>?;
+
+        // 2. If no active fight, try to find the next upcoming fight ('pre' status)
+        comp ??= comps.firstWhere(
+            (c) => c is Map && c['status']?['type']?['state'] == 'pre',
+            orElse: () => null) as Map<String, dynamic>?;
+
+        // 3. Fallback to the Main Event (last)
+        comp ??= comps.last as Map<String, dynamic>?;
+      } else {
+        comp = comps.first as Map<String, dynamic>?;
+      }
+    }
+    comp ??= <String, dynamic>{};
     final compets = comp['competitors'] as List<dynamic>? ?? [];
 
     Map<String, dynamic>? away, home;
@@ -211,8 +233,10 @@ class _EspnGame {
     final statusType = statusJson?['type'] as Map<String, dynamic>?;
     final state = statusType?['state']?.toString() ?? 'pre';
     final isLive = state == 'in';
-    final isCompleted = state == 'post';
-    final isMma = (sport?.toLowerCase() == 'mma' || league?.toLowerCase() == 'ufc');
+    // For MMA, only mark the event as completed if EVERY competition is finished
+    final isCompleted = isMma 
+        ? comps.every((c) => (c as Map)['status']?['type']?['state'] == 'post')
+        : state == 'post';
     final awayS = isMma ? null : teamScore(away);
     final homeS = isMma ? null : teamScore(home);
     final scoreLine = (awayS != null && homeS != null) ? '$awayS  -  $homeS' : null;

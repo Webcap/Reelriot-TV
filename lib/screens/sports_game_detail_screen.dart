@@ -142,6 +142,11 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
     }
   }
 
+  bool get _isCombat =>
+      _summary?['header']?['league']?['slug']?.toString().contains('mma') == true ||
+      _summary?['header']?['league']?['slug']?.toString().contains('ufc') == true ||
+      _summary?['header']?['id']?.toString() == '600057366';
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -195,6 +200,7 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
       body: ListView(
         children: [
           _buildHeader(),
+          if (_isCombat) _buildFightCard(),
           _buildWinProbability(),
           _buildRecentPlays(),
           _buildBoxscore(),
@@ -206,7 +212,28 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
   Widget _buildHeader() {
     final header = _summary?['header'];
     final competitions = header?['competitions'] as List?;
-    final competition = competitions?.first;
+    
+    // Improved selection for UFC/MMA: Find the active fight or default to the Main Event (last)
+    dynamic competition;
+    if (competitions != null && competitions.isNotEmpty) {
+      if (_isCombat) {
+        // 1. Try to find the currently active fight ('in' status)
+        competition = competitions.firstWhere(
+            (c) => c['status']?['type']?['state'] == 'in',
+            orElse: () => null);
+
+        // 2. If no active fight, try to find the next upcoming fight ('pre' status)
+        competition ??= competitions.firstWhere(
+            (c) => c['status']?['type']?['state'] == 'pre',
+            orElse: () => null);
+
+        // 3. Fallback to the Main Event (usually the last in the list)
+        competition ??= competitions.last;
+      } else {
+        competition = competitions.first;
+      }
+    }
+
     final competitors = competition?['competitors'] as List?;
     
     // Safely find home and away teams using orElse to avoid StateError
@@ -314,9 +341,95 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
           const Icon(Icons.sports, size: 64, color: Colors.white24),
         const SizedBox(height: 8),
         Text(name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-        if (score != null)
+        if (score != null && score != '0')
           Text(score, style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.blue)),
       ],
+    );
+  }
+
+  Widget _buildFightCard() {
+    final competitions = _summary?['header']?['competitions'] as List?;
+    if (competitions == null || competitions.isEmpty) return const SizedBox.shrink();
+
+    String? getStringValue(dynamic val) {
+      if (val == null) return null;
+      if (val is String) return val;
+      if (val is Map && val['href'] != null) return val['href'].toString();
+      return val.toString();
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(color: Colors.grey[900], borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Fight Card', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          ...competitions.reversed.map((comp) {
+            final status = getStringValue(comp['status']?['type']?['detail']) ?? 'Scheduled';
+
+            final items = comp['competitors'] as List?;
+            if (items == null || items.length < 2) return const SizedBox.shrink();
+
+            final home = items[0];
+            final away = items[1];
+
+            final homeName = getStringValue(home['athlete']?['displayName']) ?? 'TBD';
+            final awayName = getStringValue(away['athlete']?['displayName']) ?? 'TBD';
+            
+            final homeResult = home['winner'] == true ? 'WIN' : '';
+            final awayResult = away['winner'] == true ? 'WIN' : '';
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(homeName, style: TextStyle(color: homeResult == 'WIN' ? Colors.green : Colors.white70, fontWeight: FontWeight.bold)),
+                            if (homeResult == 'WIN') const Icon(Icons.check_circle, color: Colors.green, size: 14),
+                          ],
+                        ),
+                        const Text('vs', style: TextStyle(color: Colors.white24, fontSize: 10)),
+                        Row(
+                          children: [
+                            Text(awayName, style: TextStyle(color: awayResult == 'WIN' ? Colors.green : Colors.white70, fontWeight: FontWeight.bold)),
+                            if (awayResult == 'WIN') const Icon(Icons.check_circle, color: Colors.green, size: 14),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: status.contains('Final') ? Colors.black45 : Colors.red[900],
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      status,
+                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
     );
   }
 
