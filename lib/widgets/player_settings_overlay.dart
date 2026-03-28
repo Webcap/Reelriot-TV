@@ -139,6 +139,69 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
                   }).toList(),
                 ),
               ],
+              const SizedBox(height: 32),
+              const _CategoryHeader(title: 'Subtitle Sync'),
+              const SizedBox(height: 8),
+              Text(
+                'Current Offset: ${(widget.controller.betterPlayerSubtitlesSource?.offset ?? 0) / 1000}s',
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _TrackChip(
+                    label: '-1.0s',
+                    isSelected: false,
+                    isAction: true,
+                    onPressed: () {
+                      final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
+                      widget.controller.setSubtitleOffset(currentOffset - 1000);
+                      setState(() {});
+                    },
+                  ),
+                  _TrackChip(
+                    label: '-0.1s',
+                    isSelected: false,
+                    isAction: true,
+                    onPressed: () {
+                      final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
+                      widget.controller.setSubtitleOffset(currentOffset - 100);
+                      setState(() {});
+                    },
+                  ),
+                  _TrackChip(
+                    label: 'Reset',
+                    isSelected: false,
+                    isAction: true,
+                    onPressed: () {
+                      widget.controller.setSubtitleOffset(0);
+                      setState(() {});
+                    },
+                  ),
+                  _TrackChip(
+                    label: '+0.1s',
+                    isSelected: false,
+                    isAction: true,
+                    onPressed: () {
+                      final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
+                      widget.controller.setSubtitleOffset(currentOffset + 100);
+                      setState(() {});
+                    },
+                  ),
+                  _TrackChip(
+                    label: '+1.0s',
+                    isSelected: false,
+                    isAction: true,
+                    onPressed: () {
+                      final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
+                      widget.controller.setSubtitleOffset(currentOffset + 1000);
+                      setState(() {});
+                    },
+                  ),
+                ],
+              ),
               const SizedBox(height: 48),
               Center(
                 child: _TrackChip(

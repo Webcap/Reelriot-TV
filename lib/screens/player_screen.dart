@@ -118,10 +118,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _autoDiscoverSubtitles() async {
-    if (!SettingsService().useExternalSubtitles) return;
-    if (_isSports || _isRefreshing || _isDisposed) return;
-
+    final useExternal = SettingsService().useExternalSubtitles;
     final langCode = SettingsService().language;
+    final apiKey = SettingsService().opensubtitlesKey;
+
+    debugPrint('[PlayerScreen] 🔍 Auto-discovery started (useExternal: $useExternal, language: $langCode, key: ${apiKey.isNotEmpty ? "YES" : "NO"})');
+
+    if (!useExternal) return;
+    if (_isSports || _isRefreshing || _isDisposed) return;
     if (langCode.isEmpty) return;
 
     final lang = supportedLanguages.firstWhere(
@@ -138,25 +142,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
        return;
     }
 
-    final int? tmdbId = widget.item is Map 
+    // Robust ID extraction for Map and model types
+    final dynamic rawId = widget.item is Map 
         ? (widget.item['id'] ?? widget.item['media_id'])
         : widget.item?.id;
 
-    if (tmdbId == null) return;
+    final int? tmdbId = rawId is int 
+        ? rawId 
+        : int.tryParse(rawId?.toString() ?? '');
 
-    debugPrint('[PlayerScreen] 🔍 Auto-discovering $langName subtitles for TMDB ID: $tmdbId');
+    debugPrint('[PlayerScreen] 🔍 Extracted ID: $tmdbId (from raw: $rawId)');
+
+    if (tmdbId == null || tmdbId == 0) {
+      debugPrint('[PlayerScreen] ❌ Could not extract a valid TMDb ID, aborting auto-discovery.');
+      return;
+    }
 
     try {
+      debugPrint('[PlayerScreen] 📡 Searching OpenSubtitles for $langName ($langCode)...');
       final downloadUrl = await _subtitleService.discoverBestSubtitle(
         tmdbId: tmdbId,
         languageCode: langCode,
-        apiKey: SettingsService().opensubtitlesKey,
+        apiKey: apiKey,
         seasonNumber: widget.season,
         episodeNumber: widget.episode,
       );
 
       if (downloadUrl != null && !_isDisposed && mounted) {
-        debugPrint('[PlayerScreen] ✅ Auto-discovered subtitle found, adding to list...');
+        debugPrint('[PlayerScreen] ✅ Subtitle URL found: $downloadUrl');
         
         final newSource = BetterPlayerSubtitlesSource(
           name: '$langName (Auto)',
@@ -173,12 +186,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // Ensure uniqueness by name
         final Map<String, BetterPlayerSubtitlesSource> uniqueSubs = {};
         for (var sub in updatedExternalSubs) {
-           uniqueSubs[sub.name!] = sub;
+           if (sub.name != null) uniqueSubs[sub.name!] = sub;
         }
         final finalSubs = uniqueSubs.values.toList();
 
         final currentPosition = _controller?.videoPlayerController?.value.position ?? Duration.zero;
         final currentUrl = widget.url;
+
+        debugPrint('[PlayerScreen] 🔄 Updating data source with ${finalSubs.length} subtitles...');
 
         // Re-setup data source with new subtitles but don't auto-activate
         await _controller?.setupDataSource(
@@ -209,10 +224,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _controller?.seekTo(currentPosition);
           _controller?.play();
           
-          debugPrint('[PlayerScreen] ✅ Auto-subtitle "$langName (Auto)" added and ready for selection.');
+          debugPrint('[PlayerScreen] ✅ Auto-subtitle "$langName (Auto)" added to menu.');
         }
       } else {
-        debugPrint('[PlayerScreen] ℹ️ No auto-subtitles found for language: $langCode');
+        debugPrint('[PlayerScreen] ℹ️ No suitable auto-subtitles found for TMDB ID $tmdbId, language: $langCode');
       }
     } catch (e) {
       debugPrint('[PlayerScreen] ❌ Auto-discovery error: $e');
