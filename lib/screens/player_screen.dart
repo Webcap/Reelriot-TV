@@ -107,7 +107,116 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Ensure we have focus on start
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _mainFocusNode.requestFocus();
+      
+      // Auto-discover subtitles after a short delay to allow stream to initialize
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted && !_isDisposed) {
+          _autoDiscoverSubtitles();
+        }
+      });
     });
+  }
+
+  Future<void> _autoDiscoverSubtitles() async {
+    if (!SettingsService().useExternalSubtitles) return;
+    if (_isSports || _isRefreshing || _isDisposed) return;
+
+    final langCode = SettingsService().language;
+    if (langCode.isEmpty) return;
+
+    final lang = supportedLanguages.firstWhere(
+      (l) => l.languageCode == langCode,
+      orElse: () => SubLanguages(languageName: '', languageCode: '', englishName: 'Unknown'),
+    );
+
+    final langName = lang.englishName;
+
+    // 1. Check if we already have this language in externalSubtitles
+    final existing = widget.externalSubtitles?.any((s) => s.name?.contains(langName) ?? false) ?? false;
+    if (existing) {
+       debugPrint('[PlayerScreen] ℹ️ Subtitles for $langName already present, skipping auto-discovery.');
+       return;
+    }
+
+    final int? tmdbId = widget.item is Map 
+        ? (widget.item['id'] ?? widget.item['media_id'])
+        : widget.item?.id;
+
+    if (tmdbId == null) return;
+
+    debugPrint('[PlayerScreen] 🔍 Auto-discovering $langName subtitles for TMDB ID: $tmdbId');
+
+    try {
+      final downloadUrl = await _subtitleService.discoverBestSubtitle(
+        tmdbId: tmdbId,
+        languageCode: langCode,
+        apiKey: SettingsService().opensubtitlesKey,
+        seasonNumber: widget.season,
+        episodeNumber: widget.episode,
+      );
+
+      if (downloadUrl != null && !_isDisposed && mounted) {
+        debugPrint('[PlayerScreen] ✅ Auto-discovered subtitle found, adding to list...');
+        
+        final newSource = BetterPlayerSubtitlesSource(
+          name: '$langName (Auto)',
+          urls: [downloadUrl],
+          type: BetterPlayerSubtitlesSourceType.network,
+        );
+
+        // Merge with existing external subtitles
+        final List<BetterPlayerSubtitlesSource> updatedExternalSubs = [
+          ...widget.externalSubtitles ?? [],
+          newSource,
+        ];
+
+        // Ensure uniqueness by name
+        final Map<String, BetterPlayerSubtitlesSource> uniqueSubs = {};
+        for (var sub in updatedExternalSubs) {
+           uniqueSubs[sub.name!] = sub;
+        }
+        final finalSubs = uniqueSubs.values.toList();
+
+        final currentPosition = _controller?.videoPlayerController?.value.position ?? Duration.zero;
+        final currentUrl = widget.url;
+
+        // Re-setup data source with new subtitles but don't auto-activate
+        await _controller?.setupDataSource(
+          BetterPlayerDataSource(
+            BetterPlayerDataSourceType.network,
+            currentUrl,
+            videoFormat: currentUrl.contains('m3u8') ||
+                    currentUrl.contains('playlist') ||
+                    currentUrl.contains('proxy/stream')
+                ? BetterPlayerVideoFormat.hls
+                : null,
+            useAsmsTracks: true,
+            useAsmsAudioTracks: true,
+            useAsmsSubtitles: true,
+            subtitles: finalSubs,
+            preferredAudioLanguage: SettingsService().defaultAudioLanguage,
+            headers: _getMergedHeaders(currentUrl, widget.referrer, widget.headers),
+            bufferingConfiguration: const BetterPlayerBufferingConfiguration(
+              minBufferMs: 30000,
+              maxBufferMs: 60000,
+              bufferForPlaybackMs: 2500,
+              bufferForPlaybackAfterRebufferMs: 5000,
+            ),
+          ),
+        );
+
+        if (!_isDisposed && mounted) {
+          _controller?.seekTo(currentPosition);
+          _controller?.play();
+          
+          debugPrint('[PlayerScreen] ✅ Auto-subtitle "$langName (Auto)" added and ready for selection.');
+        }
+      } else {
+        debugPrint('[PlayerScreen] ℹ️ No auto-subtitles found for language: $langCode');
+      }
+    } catch (e) {
+      debugPrint('[PlayerScreen] ❌ Auto-discovery error: $e');
+    }
   }
 
   void _startProgressTimer() {
@@ -117,12 +226,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _saveCurrentProgress({bool isFinished = false}) async {
-    if (_controller == null || _controller!.videoPlayerController == null)
+    if (_controller == null || _controller!.videoPlayerController == null) {
       return;
+    }
 
     final duration =
         _controller!.videoPlayerController!.value.duration ?? Duration.zero;
-    if (duration == Duration.zero) return;
+    if (duration == Duration.zero) {
+      return;
+    }
 
     final position = isFinished
         ? duration
@@ -644,7 +756,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _showSettings() {
-    if (_controller == null) return;
+    if (_controller == null) {
+      return;
+    }
     showDialog(
       context: context,
       builder: (context) => PlayerSettingsOverlay(
@@ -654,6 +768,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         providerLabel: _isSports ? 'Select Mirror' : 'Server (Provider)',
         onSearchMore: _searchMoreSubtitles,
         onChangeProvider: (newProviderCode) {
+          if (!mounted) return;
           // Close settings dialog
           Navigator.of(context).pop();
           final currentPos = _controller?.videoPlayerController?.value.position;
@@ -930,9 +1045,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       child: PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, result) async {
-          if (didPop) return;
+          if (didPop) {
+            return;
+          }
           await _saveCurrentProgress();
-          if (mounted) Navigator.of(context).pop();
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
         },
         child: Scaffold(
           backgroundColor: Colors.black,

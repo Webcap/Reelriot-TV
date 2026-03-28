@@ -91,4 +91,33 @@ class SubtitleService {
       return null;
     }
   }
+
+  /// Automatically discovers and returns the best subtitle link for the given content.
+  Future<String?> discoverBestSubtitle({
+    required int tmdbId,
+    required String languageCode,
+    required String apiKey,
+    int? seasonNumber,
+    int? episodeNumber,
+  }) async {
+    final subs = await searchSubtitles(
+      tmdbId: tmdbId,
+      languageCode: languageCode,
+      apiKey: apiKey,
+      seasonNumber: seasonNumber,
+      episodeNumber: episodeNumber,
+    );
+
+    if (subs.isEmpty) return null;
+
+    // Pick the first result that has a fileId
+    for (final sub in subs) {
+      final fileId = sub.attr?.files?.first.fileId;
+      if (fileId != null) {
+        return await downloadSubtitle(fileId, apiKey);
+      }
+    }
+
+    return null;
+  }
 }
