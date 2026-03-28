@@ -184,13 +184,26 @@ class _EspnGame {
       }
     }
 
+    // MMA/UFC Fallback: If no explicit home/away, use positional indices
+    if (away == null && home == null && compets.isNotEmpty) {
+      away = compets[0] as Map<String, dynamic>?;
+      if (compets.length > 1) {
+        home = compets[1] as Map<String, dynamic>?;
+      }
+    }
+
     String? teamName(Map<String, dynamic>? c) {
       final team = c?['team'] as Map<String, dynamic>?;
-      return team?['displayName']?.toString();
+      final athlete = c?['athlete'] as Map<String, dynamic>?;
+      return team?['displayName']?.toString() ?? athlete?['displayName']?.toString();
     }
     String? teamLogo(Map<String, dynamic>? c) {
       final team = c?['team'] as Map<String, dynamic>?;
-      return team?['logo']?.toString();
+      final athlete = c?['athlete'] as Map<String, dynamic>?;
+      return team?['logo']?.toString() ?? 
+             team?['logos']?[0]?['href']?.toString() ?? 
+             athlete?['headshot']?.toString() ?? 
+             athlete?['flag']?.toString();
     }
     String? teamScore(Map<String, dynamic>? c) => c?['score']?.toString();
 
@@ -199,8 +212,9 @@ class _EspnGame {
     final state = statusType?['state']?.toString() ?? 'pre';
     final isLive = state == 'in';
     final isCompleted = state == 'post';
-    final awayS = teamScore(away);
-    final homeS = teamScore(home);
+    final isMma = (sport?.toLowerCase() == 'mma' || league?.toLowerCase() == 'ufc');
+    final awayS = isMma ? null : teamScore(away);
+    final homeS = isMma ? null : teamScore(home);
     final scoreLine = (awayS != null && homeS != null) ? '$awayS  -  $homeS' : null;
 
     return _EspnGame(

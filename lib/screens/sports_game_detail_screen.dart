@@ -209,17 +209,39 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
     final competition = competitions?.first;
     final competitors = competition?['competitors'] as List?;
     
-    // Correcting score retrieval to use header data
-    final homeTeam = competitors?.firstWhere((c) => c['homeAway'] == 'home');
-    final awayTeam = competitors?.firstWhere((c) => c['homeAway'] == 'away');
+    // Safely find home and away teams using orElse to avoid StateError
+    // MMA/UFC often doesn't have home/away; fallback to indices
+    dynamic homeTeam;
+    dynamic awayTeam;
     
-    final homeScore = homeTeam?['score'] ?? '0';
-    final awayScore = awayTeam?['score'] ?? '0';
+    if (competitors != null && competitors.isNotEmpty) {
+      homeTeam = competitors.firstWhere((c) => c['homeAway'] == 'home', orElse: () => competitors.length > 1 ? competitors[1] : competitors[0]);
+      awayTeam = competitors.firstWhere((c) => c['homeAway'] == 'away', orElse: () => competitors[0]);
+    }
+
+    // MMA/UFC Header: Do not show scores as they are often irrelevant or not provided natively
+    final isCombat = header?['league']?['slug']?.toString().contains('mma') == true || 
+                    header?['league']?['slug']?.toString().contains('ufc') == true ||
+                    header?['id']?.toString() == '600057366'; // UFC Event ID constant if needed
+                    
+    final homeScore = isCombat ? null : (homeTeam?['score'] ?? '0');
+    final awayScore = isCombat ? null : (awayTeam?['score'] ?? '0');
     
-    final homeName = homeTeam?['team']?['displayName'] ?? 'Home';
-    final awayName = awayTeam?['team']?['displayName'] ?? 'Away';
-    final homeLogo = homeTeam?['team']?['logos']?.first?['href'];
-    final awayLogo = awayTeam?['team']?['logos']?.first?['href'];
+    // Support both 'team' (NFL/NBA) and 'athlete' (UFC/MMA) structures
+    final homeName = homeTeam?['team']?['displayName'] ?? homeTeam?['athlete']?['displayName'] ?? 'Home';
+    final awayName = awayTeam?['team']?['displayName'] ?? awayTeam?['athlete']?['displayName'] ?? 'Away';
+    
+    // Core API structure for logos is often team.logo or team.logos
+    // For athletes, it can be athlete.headshot or athlete.flag
+    final homeLogo = homeTeam?['team']?['logos']?.first?['href'] ?? 
+                    homeTeam?['team']?['logo'] ?? 
+                    homeTeam?['athlete']?['headshot'] ??
+                    homeTeam?['athlete']?['flag'];
+                    
+    final awayLogo = awayTeam?['team']?['logos']?.first?['href'] ?? 
+                    awayTeam?['team']?['logo'] ?? 
+                    awayTeam?['athlete']?['headshot'] ??
+                    awayTeam?['athlete']?['flag'];
 
     return Container(
       padding: const EdgeInsets.all(24),
