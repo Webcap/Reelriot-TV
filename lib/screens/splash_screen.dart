@@ -7,6 +7,7 @@ import 'package:caffeine_tv/services/settings_service.dart';
 import 'package:caffeine_tv/services/ad_service.dart';
 import 'package:caffeine_tv/services/update_service.dart';
 import 'package:caffeine_tv/screens/update_screen.dart';
+import 'package:caffeine_tv/env.dart';
 import 'package:flutter/material.dart';
 
 
@@ -76,7 +77,18 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _bootstrap() async {
-    // 1. Load API Config
+    // 1. Initialize Feature Flags
+    try {
+      await core.FeatureFlagManager().initialize(
+        apiUrl: caffeineApiUrl,
+        environment: environment,
+        platform: 'tv',
+      );
+    } catch (e) {
+      debugPrint('[Splash] FeatureFlagManager init failed: $e');
+    }
+
+    // 2. Load API Config
     try {
       final api = ApiService();
       final config = await api.loadConfig().timeout(const Duration(seconds: 5));

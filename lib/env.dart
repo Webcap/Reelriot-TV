@@ -15,4 +15,5 @@ bool get requireLogin {
   return v == 'true' || v == '1' || v == 'yes';
 }
 
+String get environment => dotenv.env['ENVIRONMENT']?.trim().toLowerCase() ?? 'prod';
 String get opensubtitlesApiKey => dotenv.env['OPENSUBTITLES_API_KEY'] ?? '';
