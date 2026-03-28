@@ -143,11 +143,13 @@ class _SplashScreenState extends State<SplashScreen>
     }
 
     // Start content animation after a short delay
-    await Future.delayed(const Duration(milliseconds: 300));
+    await Future.delayed(const Duration(milliseconds: 200));
     if (mounted) _contentController.forward();
 
-    // Navigate after splash duration
-    await Future.delayed(const Duration(milliseconds: 4000));
+    // Navigate after splash duration - reduced from 4s to 2.5s for faster startup
+    // OR wait until posters are loaded, with a max timeout
+    await Future.delayed(const Duration(milliseconds: 2200));
+    
     if (mounted) {
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(

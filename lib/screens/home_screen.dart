@@ -23,6 +23,7 @@ import 'package:caffeine_tv/screens/update_screen.dart';
 import 'dart:async';
 import 'dart:ui';
 import 'package:caffeine_tv/widgets/context_menu_dialog.dart';
+import 'package:caffeine_tv/screens/genre_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -390,6 +391,38 @@ class _MainHomeViewState extends State<_MainHomeView> {
   StreamSubscription<AuthState>? _authSubscription;
   final Map<int, String> _liveStreamUrls = {};
   UpdateInfo? _updateInfo;
+
+  final List<Map<String, dynamic>> _movieGenres = [
+    {'id': 28, 'name': 'Action', 'color': const Color(0xFFDC2626)},
+    {'id': 12, 'name': 'Adventure', 'color': const Color(0xFFEA580C)},
+    {'id': 16, 'name': 'Animation', 'color': const Color(0xFFD97706)},
+    {'id': 35, 'name': 'Comedy', 'color': const Color(0xFFCA8A04)},
+    {'id': 80, 'name': 'Crime', 'color': const Color(0xFF65A30D)},
+    {'id': 99, 'name': 'Doc', 'color': const Color(0xFF16A34A)},
+    {'id': 18, 'name': 'Drama', 'color': const Color(0xFF0D9488)},
+    {'id': 10751, 'name': 'Family', 'color': const Color(0xFF0891B2)},
+    {'id': 14, 'name': 'Fantasy', 'color': const Color(0xFF0284C7)},
+    {'id': 36, 'name': 'History', 'color': const Color(0xFF2563EB)},
+    {'id': 27, 'name': 'Horror', 'color': const Color(0xFF4F46E5)},
+    {'id': 10402, 'name': 'Music', 'color': const Color(0xFF7C3AED)},
+    {'id': 9648, 'name': 'Mystery', 'color': const Color(0xFF9333EA)},
+    {'id': 10749, 'name': 'Romance', 'color': const Color(0xFFC026D3)},
+    {'id': 878, 'name': 'Sci-Fi', 'color': const Color(0xFFDB2777)},
+    {'id': 53, 'name': 'Thriller', 'color': const Color(0xFFE11D48)},
+  ];
+
+  final List<Map<String, dynamic>> _tvGenres = [
+    {'id': 10759, 'name': 'Action', 'color': const Color(0xFFDC2626)},
+    {'id': 16, 'name': 'Animation', 'color': const Color(0xFFD97706)},
+    {'id': 35, 'name': 'Comedy', 'color': const Color(0xFFCA8A04)},
+    {'id': 80, 'name': 'Crime', 'color': const Color(0xFF65A30D)},
+    {'id': 99, 'name': 'Doc', 'color': const Color(0xFF16A34A)},
+    {'id': 18, 'name': 'Drama', 'color': const Color(0xFF0D9488)},
+    {'id': 10751, 'name': 'Family', 'color': const Color(0xFF0891B2)},
+    {'id': 10765, 'name': 'Sci-Fi', 'color': const Color(0xFFDB2777)},
+    {'id': 9648, 'name': 'Mystery', 'color': const Color(0xFF9333EA)},
+    {'id': 10764, 'name': 'Reality', 'color': const Color(0xFFF59E0B)},
+  ];
 
   @override
   void initState() {
@@ -1117,6 +1150,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   _buildUpNextRow(context, s),
                 ],
                 SizedBox(height: s(96)),
+                _buildGenreRow(context, s),
+                SizedBox(height: s(96)),
                 _buildRow(context, 'Popular shows this week', _weeklyTrending),
                 SizedBox(height: s(96)),
                 _buildProviderCards(context, s),
@@ -1129,6 +1164,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
               ] else ...[
                 SizedBox(height: s(96)),
                 _buildRow(context, 'Popular movies this week', _weeklyTrending),
+                SizedBox(height: s(96)),
+                _buildGenreRow(context, s),
                 SizedBox(height: s(96)),
                 _buildRow(context, 'Now Playing', _nowPlaying),
                 SizedBox(height: s(96)),
@@ -1531,7 +1568,114 @@ class _MainHomeViewState extends State<_MainHomeView> {
     );
   }
 
+  Widget _buildGenreRow(BuildContext context, double Function(double) s) {
+    final genres = _selectedCategory == 'TV Shows' ? _tvGenres : _movieGenres;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Browse by Genre',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: s(48),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        SizedBox(height: s(42)),
+        SizedBox(
+          height: s(120),
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: genres.length,
+            itemBuilder: (context, index) {
+              final g = genres[index];
+              final color = g['color'] as Color;
+              return Padding(
+                padding: EdgeInsets.only(right: s(24)),
+                child: Focus(
+                  onKeyEvent: (node, event) {
+                    if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select)) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => GenreScreen(
+                            genreId: g['id'],
+                            genreName: g['name'],
+                            isMovie: _selectedCategory != 'TV Shows',
+                          ),
+                        ),
+                      );
+                      return KeyEventResult.handled;
+                    }
+                    return KeyEventResult.ignored;
+                  },
+                  child: Builder(
+                    builder: (context) {
+                      final focused = Focus.of(context).hasFocus;
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => GenreScreen(
+                                genreId: g['id'],
+                                genreName: g['name'],
+                                isMovie: _selectedCategory != 'TV Shows',
+                              ),
+                            ),
+                          );
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: s(220),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                color.withOpacity(focused ? 1.0 : 0.6),
+                                color.withOpacity(focused ? 0.8 : 0.3),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(s(16)),
+                            border: Border.all(
+                              color: focused ? Colors.white : Colors.white12,
+                              width: s(focused ? 4 : 2),
+                            ),
+                            boxShadow: focused ? [
+                              BoxShadow(
+                                color: color.withOpacity(0.5),
+                                blurRadius: s(15),
+                                spreadRadius: s(2),
+                              )
+                            ] : null,
+                          ),
+                          child: Text(
+                            g['name'],
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: s(28),
+                              fontWeight: focused ? FontWeight.w900 : FontWeight.w600,
+                              letterSpacing: s(1),
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildAiringTodayRow(BuildContext context, double Function(double) s) {
+
     if (_airingToday == null || _airingToday!.isEmpty) return const SizedBox.shrink();
     final now = DateTime.now();
     final dateLabel = '${_monthName(now.month)} ${now.day}, ${now.year}';

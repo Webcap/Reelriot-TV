@@ -182,6 +182,16 @@ class ApiService {
     return _fetchTvList(url);
   }
 
+  Future<core.MovieListResponse> fetchMoviesByGenre(int genreId, {int page = 1, String sortBy = 'popularity.desc'}) async {
+    final url = core.Endpoints.moviesForGenreUrl(tmdbBaseUrl, _tmdbKey, genreId, page, language, sortBy: sortBy);
+    return _fetchMovieList(url);
+  }
+
+  Future<core.TvListResponse> fetchTvByGenre(int genreId, {int page = 1, String sortBy = 'popularity.desc'}) async {
+    final url = core.Endpoints.tvShowsForGenreUrl(tmdbBaseUrl, _tmdbKey, genreId, page, language, sortBy: sortBy);
+    return _fetchTvList(url);
+  }
+
   Future<core.MovieListResponse> _fetchMovieList(String url) async {
     final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
     if (res.statusCode != 200) throw Exception('Failed to load movies');

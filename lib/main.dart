@@ -22,39 +22,46 @@ Future<void> bootstrap(String envFile) async {
   await dotenv.load(fileName: envFile);
   debugPrint('[Main] ✅ Env loaded');
 
-  // Initialize AdService
-  debugPrint('[Main] 📺 Initializing AdService...');
-  await AdService.instance.initialize();
-  debugPrint('[Main] ✅ AdService initialized');
-
-  final url = supabaseUrl.trim();
-  final anonKey = supabaseAnonKey.trim();
-  debugPrint('[Main] 🔗 Supabase URL: ${url.isNotEmpty ? 'SET' : 'MISSING'}');
-  
-  if (url.isNotEmpty && anonKey.isNotEmpty) {
-    debugPrint('[Main] 🛠️ Initializing Supabase...');
-    await Supabase.initialize(
-      url: url,
-      anonKey: anonKey,
-      debug: false,
-    );
-
-    // Verify session recovery
-    final session = Supabase.instance.client.auth.currentSession;
-    if (session != null) {
-      debugPrint('[Main] 👤 Session recovered on startup for: ${session.user.email}');
-    } else {
-      debugPrint('[Main] 👤 No session found on startup');
-    }
-  }
-
-  // Initialize SettingsService
+  // Initialize critical SettingsService before rendering
   await SettingsService().init();
+
+  // Background initialization of third-party services
+  // NOTE: These are unawaited to allow immediate transition to runApp()
+  unawaited(_initializeBgServices());
 
   // Async cleanup of update files (non-blocking)
   unawaited(cleanupUpdateFiles());
 
   runApp(const CaffeineTvApp());
+}
+
+Future<void> _initializeBgServices() async {
+  try {
+    // Initialize AdService
+    debugPrint('[Main] 📺 Background initializing AdService...');
+    await AdService.instance.initialize();
+    debugPrint('[Main] ✅ AdService initialized');
+
+    final url = supabaseUrl.trim();
+    final anonKey = supabaseAnonKey.trim();
+    
+    if (url.isNotEmpty && anonKey.isNotEmpty) {
+      debugPrint('[Main] 🛠️ Background initializing Supabase...');
+      await Supabase.initialize(
+        url: url,
+        anonKey: anonKey,
+        debug: false,
+      );
+
+      // Verify session recovery
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session != null) {
+        debugPrint('[Main] 👤 Session recovered on startup for: ${session.user.email}');
+      }
+    }
+  } catch (e) {
+    debugPrint('[Main] ❌ Background initialization failed: $e');
+  }
 }
 
 class CaffeineTvApp extends StatelessWidget {
