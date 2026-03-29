@@ -13,7 +13,7 @@ import 'package:caffeine_tv/utils/video_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:better_player/better_player.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:caffeine_tv/utils/wakelock_manager.dart';
 
 class VideoLoaderScreen extends StatefulWidget {
   final core.MovieDetail? movie;
@@ -61,7 +61,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   @override
   void initState() {
     super.initState();
-    WakelockPlus.enable();
+    WakelockManager.enable();
     
     // Prioritize preferred provider if specified
     if (widget.preferredProvider != null) {
@@ -158,7 +158,8 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
             try {
               final int tmdbId = widget.movie?.id ?? widget.tvShow!.id;
               // Search for English, Spanish, and the user's default language
-              final searchLangs = {'en', 'es', _settings.language}.join(',');
+              final validLangs = {'en', 'es', _settings.language}.where((l) => l.isNotEmpty).toSet();
+              final searchLangs = validLangs.join(',');
 
               final extSubs = await _subtitleService.searchSubtitles(
                 tmdbId: tmdbId,
@@ -278,7 +279,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
 
   @override
   void dispose() {
-    WakelockPlus.disable();
+    WakelockManager.disable();
     super.dispose();
   }
 

@@ -7,7 +7,7 @@ import 'package:caffeine_tv/utils/tv_keys.dart';
 import 'package:caffeine_tv/widgets/player_settings_overlay.dart';
 import 'package:caffeine_tv/widgets/tv_player_controls.dart';
 import 'package:caffeine_tv/screens/video_loader_screen.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:caffeine_tv/utils/wakelock_manager.dart';
 import 'package:caffeine_tv/services/api_service.dart';
 import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'dart:async';
@@ -94,7 +94,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
-    WakelockPlus.enable();
+    WakelockManager.enable();
     _setupController();
     _startProgressTimer();
 
@@ -971,7 +971,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _saveTimer?.cancel();
     _saveCurrentProgress(); // Best effort save
     _visibilitySubscription?.cancel();
-    WakelockPlus.disable();
+    WakelockManager.disable();
 
     // Safety check before controller methods
     try {

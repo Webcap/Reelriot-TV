@@ -94,11 +94,14 @@ class VideoUtils {
 
         final isDefault = i == bestPreferredIndex;
 
+        final uriPath = Uri.tryParse(url)?.path.toLowerCase() ?? url.toLowerCase();
+        final isSrt = uriPath.endsWith('.srt') || (subtitles[i].label ?? '').contains('OpenSubtitles');
+
         subs.add(
           BetterPlayerSubtitlesSource(
             name: subtitles[i].label ?? 'Unknown',
             selectedByDefault: isDefault,
-            content: url.toLowerCase().endsWith('srt')
+            content: isSrt
                 ? content
                 : processVttFileTimestamps(content),
             type: BetterPlayerSubtitlesSourceType.memory,
