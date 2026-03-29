@@ -279,6 +279,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _controller = BetterPlayerController(
       BetterPlayerConfiguration(
         autoPlay: true,
+        allowedScreenSleep: false, // Prevents race condition during source swap
         fit: BoxFit.contain,
         expandToFill: true,
         subtitlesConfiguration: const BetterPlayerSubtitlesConfiguration(
@@ -438,9 +439,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (_isSports) {
           // Special refresh logic for sports: re-query Supabase
           final refreshResult = await _refreshSportsStream();
-          if (refreshResult != null) {
-            newUrl = refreshResult['url'];
-            newReferrer = refreshResult['referrer'];
+          if (refreshResult != null && !_isDisposed) {
+            newUrl = refreshResult['url'] as String?;
+            newReferrer = refreshResult['referrer'] as String?;
+            
+            // Update mirrors if they improved
+            if (refreshResult['sources'] != null && 
+                refreshResult['sources'] is List && 
+                widget.allProviders != null) {
+               // Update our local state if we want to refresh the mirrors list
+               // For now, at least we have the new main URL.
+            }
           }
         } else {
           // Robust ID access for both MovieDetail/TvShowDetail objects and Map objects
@@ -577,7 +586,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  Future<Map<String, String?>?> _refreshSportsStream() async {
+  Future<Map<String, dynamic>?> _refreshSportsStream() async {
     try {
       final String? eventId = widget.item is Map
           ? widget.item['id']?.toString()
@@ -962,6 +971,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _saveTimer?.cancel();
     _saveCurrentProgress(); // Best effort save
     _visibilitySubscription?.cancel();
+    WakelockPlus.disable();
 
     // Safety check before controller methods
     try {
@@ -972,7 +982,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     _mainFocusNode.dispose();
-    WakelockPlus.disable();
     super.dispose();
   }
 

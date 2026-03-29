@@ -13,6 +13,7 @@ import 'package:caffeine_tv/utils/video_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:better_player/better_player.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class VideoLoaderScreen extends StatefulWidget {
   final core.MovieDetail? movie;
@@ -60,6 +61,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   @override
   void initState() {
     super.initState();
+    WakelockPlus.enable();
     
     // Prioritize preferred provider if specified
     if (widget.preferredProvider != null) {
@@ -272,6 +274,12 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
       );
       Navigator.of(context).pop();
     }
+  }
+
+  @override
+  void dispose() {
+    WakelockPlus.disable();
+    super.dispose();
   }
 
   double _scale(BuildContext context, double value) {
