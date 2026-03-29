@@ -435,7 +435,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
   Future<void> _checkForUpdate() async {
     try {
-      await _api.loadConfig();
+      final config = await _api.loadConfig();
+      SettingsService().updateFromConfig(config);
       
       // Use new structured update check
       final info = await UpdateService().checkForUpdate(
@@ -535,6 +536,17 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
         // --- Process "Up Next" Logic (Next Episode) ---
         final List<Map<String, dynamic>> upNextItems = [];
+        final now = DateTime.now();
+        
+        bool isEpReleased(String? airDate) {
+          if (airDate == null || airDate.isEmpty) return false;
+          try {
+            return DateTime.parse(airDate).isBefore(now.add(const Duration(days: 1)));
+          } catch (_) {
+            return false;
+          }
+        }
+
         for (var originalShow in watchingShows) {
           // Rule: Only show episodes in Up Next if the previous episode was completed
           if (originalShow['is_completed'] == true) {
@@ -554,23 +566,25 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 }
               }
 
-              if (nextEp != null) {
+              if (nextEp != null && isEpReleased(nextEp.airDate)) {
                 show['episode_num'] = nextEp.episodeNumber;
                 show['episode_name'] = nextEp.name;
                 show['is_completed'] = false;
                 upNextItems.add(show);
-              } else {
+              } else if (nextEp == null) {
                 // Check if there's a next season
                 final tvDetail = await _api.fetchTvDetail(showId);
                 if (seasonNum < (tvDetail.numberOfSeasons ?? 0)) {
                   final nextSeasonDetail = await _api.fetchSeasonDetail(showId, seasonNum + 1);
                   if (nextSeasonDetail.episodes.isNotEmpty) {
                     final firstEp = nextSeasonDetail.episodes.first;
-                    show['season_num'] = seasonNum + 1;
-                    show['episode_num'] = firstEp.episodeNumber;
-                    show['episode_name'] = firstEp.name;
-                    show['is_completed'] = false;
-                    upNextItems.add(show);
+                    if (isEpReleased(firstEp.airDate)) {
+                      show['season_num'] = seasonNum + 1;
+                      show['episode_num'] = firstEp.episodeNumber;
+                      show['episode_name'] = firstEp.name;
+                      show['is_completed'] = false;
+                      upNextItems.add(show);
+                    }
                   }
                 }
               }

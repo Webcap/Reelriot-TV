@@ -398,6 +398,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     }).toList(),
                   ),
                 ),
+                const SizedBox(height: 24),
+                // Subtitles Toggle
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 48),
+                  child: Focus(
+                    onKeyEvent: (_, event) {
+                      if (event is KeyDownEvent &&
+                          (event.logicalKey == LogicalKeyboardKey.enter ||
+                              event.logicalKey == LogicalKeyboardKey.select)) {
+                        _toggleExternalSubtitles(!_settings.useExternalSubtitles);
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: Builder(builder: (context) {
+                      final focused = Focus.of(context).hasFocus;
+                      final enabled = _settings.useExternalSubtitles;
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: focused ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: focused ? Colors.white38 : Colors.white12),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              enabled ? Icons.subtitles : Icons.subtitles_off,
+                              color: enabled ? const Color(0xFFDC2626) : Colors.white24,
+                              size: 32,
+                            ),
+                            const SizedBox(width: 16),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'External Subtitles (OpenSubtitles)',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Automatically download & select best available tracks',
+                                    style: TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value: enabled,
+                              onChanged: (val) => _toggleExternalSubtitles(val),
+                              activeColor: const Color(0xFFDC2626),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ),
+                ),
               ],
               const SizedBox(height: 32),
               // Update Section
@@ -572,6 +637,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         SnackBar(
           content: Text(
               'Audio language updated to ${_languages.firstWhere((l) => l['code'] == code)['name']}'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _toggleExternalSubtitles(bool value) async {
+    await _settings.setUseExternalSubtitles(value);
+    setState(() {}); // Refresh local state
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('External subtitles ${value ? "enabled" : "disabled"}'),
           duration: const Duration(seconds: 2),
         ),
       );

@@ -150,6 +150,8 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
           // 1. Collect all potential subtitle links
           List<core.SubtitleLink> allSubtitleLinks = [];
 
+          debugPrint('[VideoLoader] ℹ️ Subtitle Settings: useExternal=${_settings.useExternalSubtitles}, hasKey=${_settings.opensubtitlesKey.isNotEmpty}');
+
           // External Subtitles (Prioritized)
           if (_settings.useExternalSubtitles &&
               _settings.opensubtitlesKey.isNotEmpty) {
