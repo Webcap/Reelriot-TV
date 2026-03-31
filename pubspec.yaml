@@ -32,9 +32,9 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   caffeine_core:
-    path: ../packages/caffeine_core
+    path: c:/Users/cnieves/Desktop/Projects/packages/caffeine_core
   better_player:
-    path: ../caffeine_betterplayer
+    path: c:/Users/cnieves/Desktop/Projects/caffeine_betterplayer
   provider: ^6.0.3
   http: ^1.1.0
   cached_network_image: ^3.2.2
@@ -46,6 +46,12 @@ dependencies:
   flutter_svg: ^2.0.7
   package_info_plus: ^9.0.0
   mixpanel_flutter: ^2.4.5
+  wakelock_plus_tizen: ^2.0.0
+  shared_preferences_tizen: ^2.3.2
+  package_info_plus_tizen: ^1.0.5
+  url_launcher_tizen: ^2.1.4
+  sqflite_tizen: ^0.1.3
+  path_provider_tizen: ^2.2.1
 
 dev_dependencies:
   flutter_test:

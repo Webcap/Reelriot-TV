@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui';
 import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'package:caffeine_tv/constants.dart';
 import 'package:caffeine_tv/services/api_service.dart';
@@ -24,6 +25,8 @@ class _SplashScreenState extends State<SplashScreen>
   // --- Poster data ---
   List<String> _posterPaths = [];
   bool _postersLoaded = false;
+  bool _hasError = false;
+  String? _errorMessage;
 
   // --- Scrolling controllers (one per row) ---
   static const int _rowCount = 4;
@@ -42,6 +45,8 @@ class _SplashScreenState extends State<SplashScreen>
 
   // --- Dots loading ---
   late AnimationController _dotsController;
+
+  bool _isRetrying = false;
 
   @override
   void initState() {
@@ -77,6 +82,12 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _bootstrap() async {
+    if (_isRetrying) return;
+
+    setState(() {
+      _isRetrying = true;
+    });
+
     // 1. Initialize Feature Flags
     try {
       await core.FeatureFlagManager().initialize(
@@ -90,8 +101,13 @@ class _SplashScreenState extends State<SplashScreen>
 
     // 2. Load API Config
     try {
+      setState(() {
+        _hasError = false;
+        _errorMessage = null;
+      });
+
       final api = ApiService();
-      final config = await api.loadConfig().timeout(const Duration(seconds: 5));
+      final config = await api.loadConfig().timeout(const Duration(seconds: 7));
       SettingsService().updateFromConfig(config);
       AdService.instance.updateEnabledStatus(SettingsService().adsEnabled);
 
@@ -110,57 +126,24 @@ class _SplashScreenState extends State<SplashScreen>
       }
     } catch (e) {
       debugPrint('[Splash] Config/Update check failed: $e');
+      if (mounted) {
+        setState(() {
+          _isRetrying = false;
+          _hasError = true;
+          _errorMessage = e.toString().contains('TimeoutException') 
+              ? 'Connection timed out. Please check your internet.' 
+              : 'Unable to connect to Caffeine services.';
+        });
+        return; // Stop bootstrap here
+      }
     }
-
-    // 2. Load Local Posters
-    const String posterDir = 'assets/images/posters/';
-    final List<String> localPosters = [
-      '1_Peaky Blinders The Immortal Man.jpg', '2_Project Hail Mary.jpg', '3_How to Make a Killing.jpg',
-      '4_Agent Zeta.jpg', '5_Send Help.jpg', '6_They Will Kill You.jpg', '7_War Machine.jpg',
-      '8_Greenland 2 Migration.jpg', '9_GOAT.jpg', '10_Scream 7.jpg', '11_Avatar Fire and Ash.jpg',
-      '12_Zootopia 2.jpg', '13_Marty Supreme.jpg', '14_Hoppers.jpg', '15_Dhurandhar The Revenge.jpg',
-      '16_The Drama.jpg', '17_Spider-Man Brand New Day.jpg', '18_Ready or Not Here I Come.jpg',
-      '19_Scary Movie.jpg', '20_One Battle After Another.jpg', 'movie_1_Project Hail Mary.jpg',
-      'movie_2_Send Help.jpg', 'movie_3_GOAT.jpg', 'movie_4_Mike  Nick  Nick  Alice.jpg',
-      'movie_5_Pretty Lethal.jpg', 'movie_6_Hoppers.jpg', 'movie_7_Peaky Blinders The Immortal Man.jpg',
-      'movie_8_The Super Mario Galaxy Movie.jpg', 'movie_9_How to Make a Killing.jpg', 'movie_10_Scream 7.jpg',
-      'tv_1_JUJUTSU KAISEN.jpg', 'tv_2_Daredevil Born Again.jpg', 'tv_3_Frieren Beyond Journeys End.jpg',
-      'tv_4_One Piece.jpg', 'tv_5_ONE PIECE.jpg', 'tv_6_Something Very Bad is Going to Happen.jpg',
-      'tv_7_Scrubs.jpg', 'tv_8_Invincible.jpg', 'tv_9_Detective Hole.jpg', 'tv_10_The Pitt.jpg'
-    ];
-
-    final paths = localPosters.map((p) => '$posterDir$p').toList();
-    paths.shuffle(Random());
 
     if (mounted) {
       setState(() {
-        _posterPaths = paths;
-        _postersLoaded = true;
+        _isRetrying = false;
       });
-      _startScrolling();
     }
-
-    // Start content animation
-    await Future.delayed(const Duration(milliseconds: 100));
-    if (mounted) _contentController.forward();
-
-    // Fast transition for local assets
-    await Future.delayed(const Duration(milliseconds: 1800));
-    
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => widget.destination,
-          transitionDuration: const Duration(milliseconds: 600),
-          transitionsBuilder: (_, animation, __, child) {
-            return FadeTransition(
-              opacity: CurvedAnimation(parent: animation, curve: Curves.easeIn),
-              child: child,
-            );
-          },
-        ),
-      );
-    }
+    await _finishBootstrap();
   }
 
 
@@ -374,13 +357,251 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                     const SizedBox(height: 48),
                     // Animated loading dots
-                    _LoadingDots(controller: _dotsController),
+                    if (!_hasError) _LoadingDots(controller: _dotsController),
                   ],
                 ),
               ),
             ),
           ),
+
+          // ── Error Overlay ──────────────────────────────────
+          if (_hasError)
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  color: Colors.black.withOpacity(0.6),
+                  child: Center(
+                    child: Container(
+                      width: 450,
+                      padding: const EdgeInsets.all(40),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1A1A).withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.white12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.5),
+                            blurRadius: 40,
+                            spreadRadius: 10,
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEC1D24).withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.wifi_off_rounded,
+                              color: Color(0xFFEC1D24),
+                              size: 48,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          const Text(
+                            'Connection reaching caffeine API failed',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            _errorMessage ?? 'Please check your internet connection or try again later.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white60,
+                              fontSize: 16,
+                            ),
+                          ),
+                           const SizedBox(height: 40),
+                          SizedBox(
+                            width: 240,
+                            child: _MenuButton(
+                              label: 'Try Again',
+                              icon: Icons.refresh_rounded,
+                              isPrimary: true,
+                              isLoading: _isRetrying,
+                              onTap: () => _bootstrap(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _finishBootstrap() async {
+     // 2. Load Local Posters
+    const String posterDir = 'assets/images/posters/';
+    final List<String> localPosters = [
+      '1_Peaky Blinders The Immortal Man.jpg', '2_Project Hail Mary.jpg', '3_How to Make a Killing.jpg',
+      '4_Agent Zeta.jpg', '5_Send Help.jpg', '6_They Will Kill You.jpg', '7_War Machine.jpg',
+      '8_Greenland 2 Migration.jpg', '9_GOAT.jpg', '10_Scream 7.jpg', '11_Avatar Fire and Ash.jpg',
+      '12_Zootopia 2.jpg', '13_Marty Supreme.jpg', '14_Hoppers.jpg', '15_Dhurandhar The Revenge.jpg',
+      '16_The Drama.jpg', '17_Spider-Man Brand New Day.jpg', '18_Ready or Not Here I Come.jpg',
+      '19_Scary Movie.jpg', '20_One Battle After Another.jpg', 'movie_1_Project Hail Mary.jpg',
+      'movie_2_Send Help.jpg', 'movie_3_GOAT.jpg', 'movie_4_Mike  Nick  Nick  Alice.jpg',
+      'movie_5_Pretty Lethal.jpg', 'movie_6_Hoppers.jpg', 'movie_7_Peaky Blinders The Immortal Man.jpg',
+      'movie_8_The Super Mario Galaxy Movie.jpg', 'movie_9_How to Make a Killing.jpg', 'movie_10_Scream 7.jpg',
+      'tv_1_JUJUTSU KAISEN.jpg', 'tv_2_Daredevil Born Again.jpg', 'tv_3_Frieren Beyond Journeys End.jpg',
+      'tv_4_One Piece.jpg', 'tv_5_ONE PIECE.jpg', 'tv_6_Something Very Bad is Going to Happen.jpg',
+      'tv_7_Scrubs.jpg', 'tv_8_Invincible.jpg', 'tv_9_Detective Hole.jpg', 'tv_10_The Pitt.jpg'
+    ];
+
+    final paths = localPosters.map((p) => '$posterDir$p').toList();
+    paths.shuffle(Random());
+
+    if (mounted) {
+      setState(() {
+        _posterPaths = paths;
+        _postersLoaded = true;
+      });
+      _startScrolling();
+    }
+
+    // Start content animation
+    await Future.delayed(const Duration(milliseconds: 100));
+    if (mounted) _contentController.forward();
+
+    // Fast transition for local assets
+    await Future.delayed(const Duration(milliseconds: 1800));
+    
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => widget.destination,
+          transitionDuration: const Duration(milliseconds: 600),
+          transitionsBuilder: (_, animation, __, child) {
+            return FadeTransition(
+              opacity: CurvedAnimation(parent: animation, curve: Curves.easeIn),
+              child: child,
+            );
+          },
+        ),
+      );
+    }
+  }
+}
+
+class _MenuButton extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final bool isPrimary;
+  final bool isLoading;
+  final VoidCallback onTap;
+
+  const _MenuButton({
+    required this.label,
+    required this.icon,
+    required this.isPrimary,
+    this.isLoading = false,
+    required this.onTap,
+  });
+
+  @override
+  State<_MenuButton> createState() => _MenuButtonState();
+}
+
+class _MenuButtonState extends State<_MenuButton>
+    with SingleTickerProviderStateMixin {
+  bool _isFocused = false;
+  late AnimationController _rotationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    );
+    if (widget.isLoading) {
+      _rotationController.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(_MenuButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isLoading && !oldWidget.isLoading) {
+      _rotationController.repeat();
+    } else if (!widget.isLoading && oldWidget.isLoading) {
+      _rotationController.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _rotationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      onFocusChange: (focused) => setState(() => _isFocused = focused),
+      child: GestureDetector(
+        onTap: widget.isLoading ? null : widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            color: _isFocused
+                ? (widget.isPrimary ? const Color(0xFFEC1D24) : Colors.white10)
+                : (widget.isPrimary
+                    ? const Color(0xFFEC1D24).withOpacity(0.8)
+                    : Colors.white.withOpacity(0.05)),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _isFocused ? Colors.white : Colors.white12,
+              width: 2,
+            ),
+            boxShadow: _isFocused && widget.isPrimary
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFFEC1D24).withOpacity(0.4),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                    )
+                  ]
+                : [],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              RotationTransition(
+                turns: _rotationController,
+                child: Icon(
+                  widget.icon,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                widget.isLoading ? 'Retrying...' : widget.label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

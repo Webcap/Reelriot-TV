@@ -265,6 +265,27 @@ class HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
+          if (SettingsService().isOffline)
+            Padding(
+              padding: EdgeInsets.only(bottom: s(24)),
+              child: Tooltip(
+                message: 'Offline Mode',
+                child: Container(
+                  width: s(54),
+                  height: s(54),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEC1D24).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFEC1D24).withOpacity(0.3), width: s(1)),
+                  ),
+                  child: Icon(
+                    Icons.cloud_off_rounded,
+                    color: const Color(0xFFEC1D24),
+                    size: s(24),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -434,6 +455,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
   }
 
   Future<void> _checkForUpdate() async {
+    if (SettingsService().isOffline) return;
     try {
       final config = await _api.loadConfig();
       SettingsService().updateFromConfig(config);

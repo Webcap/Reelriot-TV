@@ -11,6 +11,13 @@ class SettingsService extends ChangeNotifier {
 
   late SharedPreferences _prefs;
   bool _initialized = false;
+  bool _isOffline = false;
+
+  bool get isOffline => _isOffline;
+  set isOffline(bool value) {
+    _isOffline = value;
+    notifyListeners();
+  }
 
   Future<void> init() async {
     if (_initialized) return;

@@ -276,6 +276,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return;
     }
 
+    // --- ULTIMATE FAILSAFE URL REWRITE ---
+    var safeUrl = widget.url.replaceAll('videostr.net/', 'vidlink.pro');
+    safeUrl = safeUrl.replaceAll('videostr.net', 'vidlink.pro');
+
     _controller = BetterPlayerController(
       BetterPlayerConfiguration(
         autoPlay: true,
@@ -312,11 +316,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
       betterPlayerDataSource: BetterPlayerDataSource(
         BetterPlayerDataSourceType.network,
-        widget.url,
+        safeUrl,
         videoFormat:
-            widget.url.contains('m3u8') ||
-                widget.url.contains('playlist') ||
-                widget.url.contains('proxy/stream')
+            safeUrl.contains('m3u8') ||
+                safeUrl.contains('playlist') ||
+                safeUrl.contains('proxy/stream')
             ? BetterPlayerVideoFormat.hls
             : null,
         useAsmsTracks: true,
@@ -324,7 +328,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         useAsmsSubtitles: true,
         subtitles: widget.externalSubtitles,
         preferredAudioLanguage: SettingsService().defaultAudioLanguage,
-        headers: _getMergedHeaders(widget.url, widget.referrer, widget.headers),
+        headers: _getMergedHeaders(safeUrl, widget.referrer, widget.headers),
         bufferingConfiguration: const BetterPlayerBufferingConfiguration(
           minBufferMs: 30000,
           maxBufferMs: 60000,
@@ -333,9 +337,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ),
       ),
     );
-    debugPrint('[PlayerScreen] 📺 Playing: ${widget.url}');
+    debugPrint('[PlayerScreen] 📺 Playing: $safeUrl');
     debugPrint(
-      '[PlayerScreen] 🔗 Referrer: ${widget.referrer ?? _getReferer(widget.url)}',
+      '[PlayerScreen] 🔗 Referrer: ${widget.referrer ?? _getReferer(safeUrl)}',
     );
 
     _controller!.addEventsListener((event) async {
@@ -656,7 +660,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String _getReferer(String url) {
     try {
       final uri = Uri.parse(url);
-      return '${uri.scheme}://${uri.host}/';
+      return '${uri.scheme}://${uri.host}';
     } catch (_) {
       return '';
     }
@@ -718,12 +722,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     }
 
-    // Add Referrer (double R) as a duplicate of Referer for extra compatibility
-    // Some streams specifically check for this variation.
-    if (headers.containsKey('Referer')) {
-      headers['Referrer'] = headers['Referer']!;
-    }
-
     // Extract headers from URL query if present (as a final override)
     // This is crucial for proxy URLs that encode their required headers in the query string.
     try {
@@ -739,6 +737,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     } catch (_) {
       // Ignore parsing errors
+    }
+
+    // --- FAILSAFE OVERRIDE ---
+    // If the API hasn't been updated and is still sending trailing slashes or the old videostr.net domain,
+    // we forcibly correct it here to ensure the proxy does not throw a 403 Forbidden.
+    if (url.contains('storm.vodvidl.site') || url.contains('vidlink')) {
+      headers['Referer'] = 'https://vidlink.pro';
+      headers['Origin'] = 'https://vidlink.pro';
     }
 
     return headers;
