@@ -22,6 +22,8 @@ class TvPlayerControls extends StatefulWidget {
 class _TvPlayerControlsState extends State<TvPlayerControls> {
   bool _isVisible = false;
   bool _isBuffering = false;
+  bool _showBufferingOverlay = false;
+  Timer? _bufferingDebounce;
   Timer? _hideTimer;
   final FocusNode _playPauseFocusNode = FocusNode();
   final FocusNode _progressBarFocusNode = FocusNode();
@@ -50,6 +52,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   @override
   void dispose() {
     _hideTimer?.cancel();
+    _bufferingDebounce?.cancel();
     _playPauseFocusNode.dispose();
     _progressBarFocusNode.dispose();
     _settingsFocusNode.dispose();
@@ -68,8 +71,17 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       _hideControls();
     } else if (event.betterPlayerEventType == BetterPlayerEventType.bufferingStart) {
       setState(() => _isBuffering = true);
+      // Debounce: only show the overlay if buffering lasts >800ms to avoid flash
+      _bufferingDebounce?.cancel();
+      _bufferingDebounce = Timer(const Duration(milliseconds: 800), () {
+        if (mounted && _isBuffering) setState(() => _showBufferingOverlay = true);
+      });
     } else if (event.betterPlayerEventType == BetterPlayerEventType.bufferingEnd) {
-      setState(() => _isBuffering = false);
+      _bufferingDebounce?.cancel();
+      setState(() {
+        _isBuffering = false;
+        _showBufferingOverlay = false;
+      });
     }
   }
 
@@ -125,18 +137,12 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // Buffering Indicator (Always checked, independent of controls visibility)
-        if (_isBuffering)
-          Center(
-            child: SizedBox(
-              width: 80,
-              height: 80,
-              child: CircularProgressIndicator(
-                color: const Color(0xFFEC1D24),
-                strokeWidth: 4,
-                backgroundColor: Colors.white.withOpacity(0.1),
-              ),
-            ),
+        // ── Buffering Overlay (debounced, only shows after 800ms of buffering) ───
+        if (_showBufferingOverlay)
+          _BufferingOverlay(
+            controller: widget.controller,
+            title: widget.controller.betterPlayerControlsConfiguration.name,
+            watchingText: widget.controller.betterPlayerControlsConfiguration.watchingText,
           ),
 
         // Controls Overlay
@@ -304,19 +310,23 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   Widget _buildProgressBar([dynamic currentVideoValue]) {
     final videoController = widget.controller.videoPlayerController;
     if (videoController == null) return const SizedBox.shrink();
-    
+
     if (currentVideoValue != null) {
-      // Called from ValueListenableBuilder — use the passed value directly
       final videoValue = currentVideoValue;
       final duration = videoValue.duration as Duration?;
       final position = videoValue.position as Duration;
+
       final double playedPart = (duration == null || duration == Duration.zero)
           ? 0.0
           : position.inMilliseconds / duration.inMilliseconds;
-      return _buildProgressBarWidget(playedPart);
+
+      final double bufferedPart = (duration == null || duration == Duration.zero)
+          ? 0.0
+          : _getBufferEnd(videoValue) / duration.inMilliseconds;
+
+      return _buildProgressBarWidget(playedPart, bufferedPart);
     }
 
-    // Fallback: subscribe via ValueListenableBuilder
     return ValueListenableBuilder(
       valueListenable: videoController,
       builder: (context, videoValue, _) {
@@ -324,12 +334,28 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
         final double playedPart = (duration == null || duration == Duration.zero)
             ? 0.0
             : videoValue.position.inMilliseconds / duration.inMilliseconds;
-        return _buildProgressBarWidget(playedPart);
+
+        final double bufferedPart = (duration == null || duration == Duration.zero)
+            ? 0.0
+            : _getBufferEnd(videoValue) / duration.inMilliseconds;
+
+        return _buildProgressBarWidget(playedPart, bufferedPart);
       },
     );
   }
 
-  Widget _buildProgressBarWidget(double playedPart) {
+  double _getBufferEnd(VideoPlayerValue value) {
+    if (value.buffered.isEmpty) return 0;
+    final pos = value.position.inMilliseconds;
+    for (final range in value.buffered) {
+      if (range.start.inMilliseconds <= pos && range.end.inMilliseconds >= pos) {
+        return range.end.inMilliseconds.toDouble();
+      }
+    }
+    return 0;
+  }
+
+  Widget _buildProgressBarWidget(double playedPart, double bufferedPart) {
     final videoController = widget.controller.videoPlayerController;
     if (videoController == null) return const SizedBox.shrink();
     final videoValue = videoController.value;
@@ -411,6 +437,17 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
                     ),
                     child: Stack(
                       children: [
+                        // Buffered progress
+                        FractionallySizedBox(
+                          widthFactor: (bufferedPart).clamp(0.0, 1.0),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white24,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                        ),
+                        // Played progress
                         FractionallySizedBox(
                           widthFactor: playedPart.clamp(0.0, 1.0),
                           child: Container(
@@ -623,6 +660,247 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
             ),
           );
         }
+      ),
+    );
+  }
+}
+
+// ─── TV Buffering Overlay ─────────────────────────────────────────────────────
+
+class _BufferingOverlay extends StatefulWidget {
+  final BetterPlayerController controller;
+  final String title;
+  final String? watchingText;
+
+  const _BufferingOverlay({
+    required this.controller,
+    required this.title,
+    this.watchingText,
+  });
+
+  @override
+  State<_BufferingOverlay> createState() => _BufferingOverlayState();
+}
+
+class _BufferingOverlayState extends State<_BufferingOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 0.85, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  /// Returns seconds buffered ahead of the current position.
+  double _bufferedAheadSeconds(VideoPlayerValue value) {
+    if (value.buffered.isEmpty || value.duration == null) return 0;
+    final pos = value.position.inMilliseconds;
+    double maxEnd = 0;
+    for (final range in value.buffered) {
+      if (range.end.inMilliseconds > pos) {
+        maxEnd = range.end.inMilliseconds.toDouble();
+      }
+    }
+    return ((maxEnd - pos) / 1000).clamp(0, value.duration!.inSeconds.toDouble());
+  }
+
+  /// Returns buffer fill fraction (0–1) relative to total duration.
+  double _bufferFraction(VideoPlayerValue value) {
+    if (value.buffered.isEmpty || value.duration == null || value.duration == Duration.zero) return 0;
+    final pos = value.position.inMilliseconds;
+    double maxEnd = 0;
+    for (final range in value.buffered) {
+      if (range.end.inMilliseconds > pos) {
+        maxEnd = range.end.inMilliseconds.toDouble();
+      }
+    }
+    return ((maxEnd - pos) / value.duration!.inMilliseconds).clamp(0.0, 1.0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final videoController = widget.controller.videoPlayerController;
+
+    return Positioned.fill(
+      child: Container(
+        // Semi-transparent cinematic backdrop
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xCC000000),
+              Color(0xE6000000),
+              Color(0xCC000000),
+            ],
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Pulsing branded spinner
+            ScaleTransition(
+              scale: _pulseAnim,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Outer glow ring
+                  SizedBox(
+                    width: 120,
+                    height: 120,
+                    child: CircularProgressIndicator(
+                      color: const Color(0xFFEC1D24).withOpacity(0.25),
+                      strokeWidth: 2,
+                      value: 1,
+                    ),
+                  ),
+                  // Spinning progress indicator
+                  SizedBox(
+                    width: 100,
+                    height: 100,
+                    child: CircularProgressIndicator(
+                      color: const Color(0xFFEC1D24),
+                      strokeWidth: 3,
+                      backgroundColor: Colors.white.withOpacity(0.08),
+                    ),
+                  ),
+                  // Center icon
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withOpacity(0.6),
+                      border: Border.all(color: Colors.white12, width: 1),
+                    ),
+                    child: const Icon(
+                      Icons.play_arrow_rounded,
+                      color: Color(0xFFEC1D24),
+                      size: 40,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // "Buffering..." label
+            const Text(
+              'Buffering…',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+              ),
+            ),
+
+            // Title and episode info
+            if (widget.title.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                widget.title,
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+            if (widget.watchingText != null && widget.watchingText!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                widget.watchingText!,
+                style: const TextStyle(
+                  color: Colors.white38,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+
+            const SizedBox(height: 40),
+
+            // Buffer progress bar
+            if (videoController != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 120),
+                child: ValueListenableBuilder<VideoPlayerValue>(
+                  valueListenable: videoController,
+                  builder: (context, value, _) {
+                    final aheadSecs = _bufferedAheadSeconds(value);
+                    final fraction = _bufferFraction(value);
+
+                    return Column(
+                      children: [
+                        // Bar track
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: Stack(
+                            children: [
+                              // Track
+                              Container(
+                                height: 4,
+                                width: double.infinity,
+                                color: Colors.white12,
+                              ),
+                              // Buffered fill
+                              FractionallySizedBox(
+                                widthFactor: fraction.clamp(0.0, 1.0),
+                                child: Container(
+                                  height: 4,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(4),
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFFEC1D24), Color(0xFFFF6B6B)],
+                                    ),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0x80EC1D24),
+                                        blurRadius: 6,
+                                        spreadRadius: 1,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        // Buffered time label
+                        if (aheadSecs > 0)
+                          Text(
+                            '${aheadSecs.toStringAsFixed(0)}s buffered',
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 13,
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
