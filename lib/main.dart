@@ -18,14 +18,14 @@ Future<void> bootstrap(String envFile) async {
   debugPrint('[Main] 🚀 Bootstrapping with $envFile');
   WidgetsFlutterBinding.ensureInitialized();
   
-  debugPrint('[Main] 📝 Loading env file...');
+  // Load env first as it's required by subsequent service initializations
   await dotenv.load(fileName: envFile);
-  debugPrint('[Main] ✅ Env loaded');
-
-  // Initialize critical SettingsService before rendering
+  
+  // Initialize settings
   await SettingsService().init();
+  debugPrint('[Main] ✅ Minimal requirements (env, settings) loaded');
 
-  // Background initialization of third-party services
+  // Background initialization of third-party services (Supabase, Ads)
   // NOTE: These are unawaited to allow immediate transition to runApp()
   unawaited(_initializeBgServices());
 

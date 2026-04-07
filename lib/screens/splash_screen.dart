@@ -78,6 +78,7 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(milliseconds: 900),
     )..repeat();
 
+    _loadLocalPosters();
     _bootstrap();
   }
 
@@ -88,18 +89,7 @@ class _SplashScreenState extends State<SplashScreen>
       _isRetrying = true;
     });
 
-    // 1. Initialize Feature Flags
-    try {
-      await core.FeatureFlagManager().initialize(
-        apiUrl: caffeineApiUrl,
-        environment: environment,
-        platform: 'tv',
-      );
-    } catch (e) {
-      debugPrint('[Splash] FeatureFlagManager init failed: $e');
-    }
-
-    // 2. Load API Config
+    // 1. Run all critical async tasks in parallel for speed
     try {
       setState(() {
         _hasError = false;
@@ -107,16 +97,37 @@ class _SplashScreenState extends State<SplashScreen>
       });
 
       final api = ApiService();
-      final config = await api.loadConfig().timeout(const Duration(seconds: 7));
-      SettingsService().updateFromConfig(config);
-      AdService.instance.updateEnabledStatus(SettingsService().adsEnabled);
 
-      final updateInfo = await UpdateService().checkForUpdate(
-        caffeineApiUrl,
-        env: environment,
-      );
-      
-      if (updateInfo.isUpdateAvailable && updateInfo.isForced) {
+      // Parallelize initialization tasks
+      final results = await Future.wait([
+        core.FeatureFlagManager().initialize(
+          apiUrl: caffeineApiUrl,
+          environment: environment,
+          platform: 'tv',
+        ).catchError((e) {
+          debugPrint('[Splash] FeatureFlagManager failed: $e');
+          return null; // Don't block for non-critical flags
+        }),
+        api.loadConfig().timeout(const Duration(seconds: 4)),
+        UpdateService().checkForUpdate(
+          caffeineApiUrl,
+          env: environment,
+        ).catchError((e) {
+          debugPrint('[Splash] Update check failed: $e');
+          return null as dynamic; 
+        }),
+      ]);
+
+      // Handle config result
+      final config = results[1] as Map<String, dynamic>?;
+      if (config != null) {
+        SettingsService().updateFromConfig(config);
+        AdService.instance.updateEnabledStatus(SettingsService().adsEnabled);
+      }
+
+      // Handle update result
+      final updateInfo = results[2] as UpdateInfo?;
+      if (updateInfo != null && updateInfo.isUpdateAvailable && updateInfo.isForced) {
         if (mounted) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => UpdateScreen(updateInfo: updateInfo)),
@@ -125,25 +136,16 @@ class _SplashScreenState extends State<SplashScreen>
         }
       }
     } catch (e) {
-      debugPrint('[Splash] Config/Update check failed: $e');
+      debugPrint('[Splash] Bootstrap tasks failed (non-critical items): $e');
+    } finally {
       if (mounted) {
         setState(() {
           _isRetrying = false;
-          _hasError = true;
-          _errorMessage = e.toString().contains('TimeoutException') 
-              ? 'Connection timed out. Please check your internet.' 
-              : 'Unable to connect to Caffeine services.';
         });
-        return; // Stop bootstrap here
       }
     }
 
-    if (mounted) {
-      setState(() {
-        _isRetrying = false;
-      });
-    }
-    await _finishBootstrap();
+    await _finishBootstrapTransition();
   }
 
 
@@ -444,8 +446,8 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
-  Future<void> _finishBootstrap() async {
-     // 2. Load Local Posters
+  void _loadLocalPosters() {
+    // Load posters and start scrolling immediately for immediate visual feedback
     const String posterDir = 'assets/images/posters/';
     final List<String> localPosters = [
       '1_Peaky Blinders The Immortal Man.jpg', '2_Project Hail Mary.jpg', '3_How to Make a Killing.jpg',
@@ -471,14 +473,14 @@ class _SplashScreenState extends State<SplashScreen>
         _postersLoaded = true;
       });
       _startScrolling();
+      // Start content animation immediately
+      _contentController.forward();
     }
+  }
 
-    // Start content animation
-    await Future.delayed(const Duration(milliseconds: 100));
-    if (mounted) _contentController.forward();
-
-    // Fast transition for local assets
-    await Future.delayed(const Duration(milliseconds: 1800));
+  Future<void> _finishBootstrapTransition() async {
+    // Wait for a minimal time to ensure the animation is visible
+    await Future.delayed(const Duration(milliseconds: 600));
     
     if (mounted) {
       Navigator.of(context).pushReplacement(
