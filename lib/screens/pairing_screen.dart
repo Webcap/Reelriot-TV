@@ -39,6 +39,15 @@ class _PairingScreenState extends State<PairingScreen> {
   @override
   void initState() {
     super.initState();
+    // Proactive check: if we somehow landed here with a session, go home immediately.
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session != null) {
+      _log('Proactive check: Session found, navigating home');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _onLinked();
+      });
+      return;
+    }
     _createCode();
   }
 

@@ -17,6 +17,7 @@ import 'dart:convert';
 import 'package:caffeine_tv/services/subtitle_service.dart';
 import 'package:caffeine_tv/widgets/language_picker_dialog.dart';
 import 'package:caffeine_tv/models/sub_languages.dart';
+import 'package:caffeine_tv/services/analytics_service.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -72,6 +73,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _isDisposed = false;
   bool _isHandlingException = false;
   Duration? _lastKnownPosition;
+  DateTime? _loadStartTime;
+  DateTime? _bufferingStartTime;
 
   void _safeSetState(VoidCallback fn) {
     if (!mounted || _isDisposed) return;
@@ -212,10 +215,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
             preferredAudioLanguage: SettingsService().defaultAudioLanguage,
             headers: _getMergedHeaders(currentUrl, widget.referrer, widget.headers),
             bufferingConfiguration: const BetterPlayerBufferingConfiguration(
-              minBufferMs: 30000,
-              maxBufferMs: 60000,
-              bufferForPlaybackMs: 2500,
-              bufferForPlaybackAfterRebufferMs: 5000,
+              minBufferMs: 50000,
+              maxBufferMs: 120000,
+              bufferForPlaybackMs: 8000,
+              bufferForPlaybackAfterRebufferMs: 12000,
             ),
           ),
         );
@@ -330,13 +333,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
         preferredAudioLanguage: SettingsService().defaultAudioLanguage,
         headers: _getMergedHeaders(safeUrl, widget.referrer, widget.headers),
         bufferingConfiguration: const BetterPlayerBufferingConfiguration(
-          minBufferMs: 30000,
-          maxBufferMs: 60000,
-          bufferForPlaybackMs: 2500,
-          bufferForPlaybackAfterRebufferMs: 5000,
+          minBufferMs: 50000,
+          maxBufferMs: 120000,
+          bufferForPlaybackMs: 8000,
+          bufferForPlaybackAfterRebufferMs: 12000,
         ),
       ),
     );
+
+    _loadStartTime = DateTime.now();
+    AnalyticsService.instance.trackQoSEvent('Playback Attempt', {
+      'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
+      'id': widget.item is Map ? widget.item['id']?.toString() : widget.item?.id?.toString(),
+      'name': widget.title,
+      'url_host': Uri.tryParse(safeUrl)?.host,
+    });
     debugPrint('[PlayerScreen] 📺 Playing: $safeUrl');
     debugPrint(
       '[PlayerScreen] 🔗 Referrer: ${widget.referrer ?? _getReferer(safeUrl)}',
@@ -350,8 +361,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
         await _saveCurrentProgress(isFinished: true);
         if (mounted && !_isDisposed) Navigator.of(context).pop();
-      } else if (event.betterPlayerEventType ==
-          BetterPlayerEventType.initialized) {
+      } else if (event.betterPlayerEventType == BetterPlayerEventType.initialized) {
+        if (_loadStartTime != null) {
+          final loadTime = DateTime.now().difference(_loadStartTime!).inMilliseconds;
+          AnalyticsService.instance.trackQoSEvent('Playback Loaded', {
+            'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
+            'id': widget.item is Map ? widget.item['id']?.toString() : widget.item?.id?.toString(),
+            'load_time_ms': loadTime,
+          });
+          _loadStartTime = null;
+        }
+
         // Try multiple times as tracks might load late in HLS manifest
         _selectPreferredAudioTrack();
         Future.delayed(
@@ -370,8 +390,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
           const Duration(milliseconds: 5000),
           () => _selectPreferredAudioTrack(),
         );
+      } else if (event.betterPlayerEventType == BetterPlayerEventType.bufferingStart) {
+        _bufferingStartTime = DateTime.now();
+        AnalyticsService.instance.trackQoSEvent('Buffering Start', {
+          'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
+          'id': widget.item is Map ? widget.item['id']?.toString() : widget.item?.id?.toString(),
+        });
+      } else if (event.betterPlayerEventType == BetterPlayerEventType.bufferingEnd) {
+        if (_bufferingStartTime != null) {
+          final bufferTime = DateTime.now().difference(_bufferingStartTime!).inMilliseconds;
+          AnalyticsService.instance.trackQoSEvent('Buffering End', {
+            'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
+            'id': widget.item is Map ? widget.item['id']?.toString() : widget.item?.id?.toString(),
+            'buffer_time_ms': bufferTime,
+          });
+          _bufferingStartTime = null;
+        }
       } else if (event.betterPlayerEventType ==
           BetterPlayerEventType.exception) {
+        AnalyticsService.instance.trackQoSEvent('Playback Error', {
+          'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
+          'id': widget.item is Map ? widget.item['id']?.toString() : widget.item?.id?.toString(),
+          'error': event.parameters?['exception']?.toString(),
+        });
         if (!_isDisposed) _handlePlayerException(event);
       } else if (event.betterPlayerEventType ==
           BetterPlayerEventType.progress) {

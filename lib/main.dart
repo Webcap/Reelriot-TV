@@ -25,8 +25,30 @@ Future<void> bootstrap(String envFile) async {
   await SettingsService().init();
   debugPrint('[Main] ✅ Minimal requirements (env, settings) loaded');
 
-  // Background initialization of third-party services (Supabase, Ads)
-  // NOTE: These are unawaited to allow immediate transition to runApp()
+  // Initialize Supabase synchronously to ensure session recovery
+  final url = supabaseUrl.trim();
+  final anonKey = supabaseAnonKey.trim();
+  if (url.isNotEmpty && anonKey.isNotEmpty) {
+    debugPrint('[Main] 🛠️ Initializing Supabase...');
+    try {
+      await Supabase.initialize(
+        url: url,
+        anonKey: anonKey,
+        debug: false,
+      );
+      // Verify session recovery
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session != null) {
+        debugPrint('[Main] 👤 Session recovered on startup for: ${session.user.email}');
+      } else {
+        debugPrint('[Main] 👤 No session found on startup');
+      }
+    } catch (e) {
+      debugPrint('[Main] ❌ Supabase initialization failed: $e');
+    }
+  }
+
+  // Background initialization of other third-party services (Ads)
   unawaited(_initializeBgServices());
 
   // Async cleanup of update files (non-blocking)
@@ -41,24 +63,6 @@ Future<void> _initializeBgServices() async {
     debugPrint('[Main] 📺 Background initializing AdService...');
     await AdService.instance.initialize();
     debugPrint('[Main] ✅ AdService initialized');
-
-    final url = supabaseUrl.trim();
-    final anonKey = supabaseAnonKey.trim();
-    
-    if (url.isNotEmpty && anonKey.isNotEmpty) {
-      debugPrint('[Main] 🛠️ Background initializing Supabase...');
-      await Supabase.initialize(
-        url: url,
-        anonKey: anonKey,
-        debug: false,
-      );
-
-      // Verify session recovery
-      final session = Supabase.instance.client.auth.currentSession;
-      if (session != null) {
-        debugPrint('[Main] 👤 Session recovered on startup for: ${session.user.email}');
-      }
-    }
   } catch (e) {
     debugPrint('[Main] ❌ Background initialization failed: $e');
   }
