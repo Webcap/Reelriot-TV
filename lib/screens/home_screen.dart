@@ -141,8 +141,8 @@ class HomeScreenState extends State<HomeScreen> {
                 index: _selectedIndex,
                 children: [
                   const SearchScreen(),
-                  _MainHomeView(key: _homeKey),
-                  if (SettingsService().sportsEnabled) SportsScreen(key: _sportsKey),
+                  RepaintBoundary(child: _MainHomeView(key: _homeKey)),
+                  if (SettingsService().sportsEnabled) RepaintBoundary(child: SportsScreen(key: _sportsKey)),
                   const SettingsScreen(),
                   FavoritesScreen(key: _favoritesKey),
                 ],
@@ -413,6 +413,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
   StreamSubscription<AuthState>? _authSubscription;
   final Map<int, String> _liveStreamUrls = {};
   UpdateInfo? _updateInfo;
+  Timer? _debounceTimer;
 
   final List<Map<String, dynamic>> _movieGenres = [
     {'id': 28, 'name': 'Action', 'color': const Color(0xFFDC2626)},
@@ -910,6 +911,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     _scrollController.dispose();
     _autoSlideTimer?.cancel();
     _authSubscription?.cancel();
+    _debounceTimer?.cancel();
     super.dispose();
   }
 
@@ -923,30 +925,34 @@ class _MainHomeViewState extends State<_MainHomeView> {
       if (idx != -1) _trendingIndex = idx;
     }
     
-    try {
-      if (!effectiveIsMovie) {
-        final detail = await _api.fetchTvDetail(id);
-        if (mounted) {
-          setState(() {
-            _focusedMovie = MovieDetail(
-              id: detail.id,
-              title: detail.name,
-              overview: detail.overview,
-              posterPath: detail.posterPath,
-              backdropPath: detail.backdropPath,
-              voteAverage: detail.voteAverage,
-            );
-          });
+    // Debounce the backdrop update to prevent jank during fast scrolling
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 250), () async {
+      try {
+        if (!effectiveIsMovie) {
+          final detail = await _api.fetchTvDetail(id);
+          if (mounted) {
+            setState(() {
+              _focusedMovie = MovieDetail(
+                id: detail.id,
+                title: detail.name,
+                overview: detail.overview,
+                posterPath: detail.posterPath,
+                backdropPath: detail.backdropPath,
+                voteAverage: detail.voteAverage,
+              );
+            });
+          }
+        } else {
+          final detail = await _api.fetchMovieDetail(id);
+          if (mounted) {
+            setState(() {
+              _focusedMovie = detail;
+            });
+          }
         }
-      } else {
-        final detail = await _api.fetchMovieDetail(id);
-        if (mounted) {
-          setState(() {
-            _focusedMovie = detail;
-          });
-        }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    });
   }
 
   double _scale(BuildContext context, double value) {
@@ -1189,7 +1195,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 ],
                 if (_watchingShows != null && _watchingShows!.isNotEmpty) ...[
                   SizedBox(height: s(96)),
-                  _buildUpNextRow(context, s),
+                  RepaintBoundary(child: _buildUpNextRow(context, s)),
                 ],
                 SizedBox(height: s(96)),
                 _buildGenreRow(context, s),
@@ -1207,17 +1213,17 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 SizedBox(height: s(96)),
                 _buildRow(context, 'Popular movies this week', _weeklyTrending),
                 SizedBox(height: s(96)),
-                _buildGenreRow(context, s),
+                RepaintBoundary(child: _buildGenreRow(context, s)),
                 SizedBox(height: s(96)),
-                _buildRow(context, 'Now Playing', _nowPlaying),
+                RepaintBoundary(child: _buildRow(context, 'Now Playing', _nowPlaying)),
                 SizedBox(height: s(96)),
-                _buildProviderCards(context, s),
+                RepaintBoundary(child: _buildProviderCards(context, s)),
                 SizedBox(height: s(96)),
-                _buildRow(context, 'Top Rated Movies', _topRated),
+                RepaintBoundary(child: _buildRow(context, 'Top Rated Movies', _topRated)),
                 SizedBox(height: s(96)),
-                _buildRow(context, 'Upcoming Movies', _upcoming),
+                RepaintBoundary(child: _buildRow(context, 'Upcoming Movies', _upcoming)),
                 SizedBox(height: s(96)),
-                _buildRow(context, 'Popular Movies', _popular),
+                RepaintBoundary(child: _buildRow(context, 'Popular Movies', _popular)),
               ],
               SizedBox(height: s(150)),
             ],
@@ -1677,8 +1683,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                               colors: [
-                                color.withOpacity(focused ? 1.0 : 0.6),
-                                color.withOpacity(focused ? 0.8 : 0.3),
+                                color.withValues(alpha: focused ? 1.0 : 0.6),
+                                color.withValues(alpha: focused ? 0.8 : 0.3),
                               ],
                             ),
                             borderRadius: BorderRadius.circular(s(16)),
@@ -1688,7 +1694,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                             ),
                             boxShadow: focused ? [
                               BoxShadow(
-                                color: color.withOpacity(0.5),
+                                color: color.withValues(alpha: 0.5),
                                 blurRadius: s(15),
                                 spreadRadius: s(2),
                               )

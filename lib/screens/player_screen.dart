@@ -104,7 +104,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _visibilitySubscription = _controller?.controlsVisibilityStream.listen((
       visible,
     ) {
-      _safeSetState(() => _controlsVisible = visible);
+      if (_controlsVisible != visible) {
+        _safeSetState(() => _controlsVisible = visible);
+      }
     });
 
     // Ensure we have focus on start
@@ -198,6 +200,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         debugPrint('[PlayerScreen] 🔄 Updating data source with ${finalSubs.length} subtitles...');
 
+        // Only auto-setup if we are within the first 60 seconds of playback
+        // Otherwise, it's too disruptive to restart the player.
+        if (currentPosition.inSeconds > 60) {
+          debugPrint('[PlayerScreen] ℹ️ Subtitles found too late in playback (>60s), skipping disruptive data source reset.');
+          return;
+        }
+
         // Re-setup data source with new subtitles but don't auto-activate
         await _controller?.setupDataSource(
           BetterPlayerDataSource(
@@ -215,10 +224,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
             preferredAudioLanguage: SettingsService().defaultAudioLanguage,
             headers: _getMergedHeaders(currentUrl, widget.referrer, widget.headers),
             bufferingConfiguration: const BetterPlayerBufferingConfiguration(
-              minBufferMs: 50000,
-              maxBufferMs: 120000,
-              bufferForPlaybackMs: 8000,
-              bufferForPlaybackAfterRebufferMs: 12000,
+              minBufferMs: 30000,
+              maxBufferMs: 60000,
+              bufferForPlaybackMs: 5000,
+              bufferForPlaybackAfterRebufferMs: 8000,
             ),
           ),
         );
@@ -333,10 +342,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         preferredAudioLanguage: SettingsService().defaultAudioLanguage,
         headers: _getMergedHeaders(safeUrl, widget.referrer, widget.headers),
         bufferingConfiguration: const BetterPlayerBufferingConfiguration(
-          minBufferMs: 50000,
-          maxBufferMs: 120000,
-          bufferForPlaybackMs: 8000,
-          bufferForPlaybackAfterRebufferMs: 12000,
+          minBufferMs: 30000,
+          maxBufferMs: 60000,
+          bufferForPlaybackMs: 5000,
+          bufferForPlaybackAfterRebufferMs: 8000,
         ),
       ),
     );
@@ -372,22 +381,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _loadStartTime = null;
         }
 
-        // Try multiple times as tracks might load late in HLS manifest
+        // Try twice as tracks might load late in HLS manifest
         _selectPreferredAudioTrack();
-        Future.delayed(
-          const Duration(milliseconds: 500),
-          () => _selectPreferredAudioTrack(),
-        );
         Future.delayed(
           const Duration(milliseconds: 1500),
           () => _selectPreferredAudioTrack(),
         );
         Future.delayed(
-          const Duration(milliseconds: 3000),
-          () => _selectPreferredAudioTrack(),
-        );
-        Future.delayed(
-          const Duration(milliseconds: 5000),
+          const Duration(milliseconds: 4000),
           () => _selectPreferredAudioTrack(),
         );
       } else if (event.betterPlayerEventType == BetterPlayerEventType.bufferingStart) {
@@ -417,7 +418,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       } else if (event.betterPlayerEventType ==
           BetterPlayerEventType.progress) {
         if (!_isDisposed) {
-          _lastKnownPosition = event.parameters?['progress'] as Duration?;
+          final progress = event.parameters?['progress'] as Duration?;
+          if (progress != null && 
+              (_lastKnownPosition == null || (progress.inSeconds != _lastKnownPosition!.inSeconds))) {
+              _lastKnownPosition = progress;
+          }
         }
       }
     });

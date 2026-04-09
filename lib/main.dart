@@ -6,6 +6,7 @@ import 'package:caffeine_tv/services/ad_service.dart';
 import 'package:caffeine_tv/services/settings_service.dart';
 import 'package:caffeine_tv/utils/cleanup_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -15,6 +16,11 @@ void main() async {
 }
 
 Future<void> bootstrap(String envFile) async {
+  // If in release mode, override debugPrint to do nothing
+  if (kReleaseMode) {
+    debugPrint = (String? message, {int? wrapWidth}) {};
+  }
+
   debugPrint('[Main] 🚀 Bootstrapping with $envFile');
   WidgetsFlutterBinding.ensureInitialized();
   

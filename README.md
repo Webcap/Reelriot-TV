@@ -29,6 +29,11 @@ flutter run --flavor dev -t lib/main_dev.dart
 flutter run --flavor prod -t lib/main_prod.dart
 ```
 
+### Production with Profile
+```bash
+flutter run --flavor prod -t lib/main_prod.dart --profile
+```
+
 > [!NOTE]
 > Using `flutter run` without flags will use the default `main.dart` and `.env`, but it is recommended to use the flavor commands above for consistent environment separation.
 

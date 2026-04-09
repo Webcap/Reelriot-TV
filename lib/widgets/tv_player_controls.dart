@@ -40,7 +40,6 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
     _startHideTimer();
     widget.controller.addEventsListener(_onPlayerEvent);
     _visibilitySubscription = widget.controller.controlsVisibilityStream.listen((isVisible) {
-      debugPrint('[TvPlayerControls] 📻 Stream received: $isVisible');
       if (isVisible) {
         _showControls();
       } else {
@@ -64,7 +63,6 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   }
 
   void _onPlayerEvent(BetterPlayerEvent event) {
-    debugPrint('[TvPlayerControls] 📩 Received event: ${event.betterPlayerEventType}');
     if (event.betterPlayerEventType == BetterPlayerEventType.controlsVisible) {
       _showControls();
     } else if (event.betterPlayerEventType == BetterPlayerEventType.controlsHiddenEnd) {
@@ -86,7 +84,6 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   }
 
   void _showControls() {
-    debugPrint('[TvPlayerControls] 👁️ _showControls (isVisible: $_isVisible)');
     if (!_isVisible) {
       setState(() {
         _isVisible = true;
@@ -97,7 +94,6 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       _startHideTimer();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _playPauseFocusNode.requestFocus();
-        debugPrint('[TvPlayerControls] 🎯 Play/Pause focus requested (post-frame). Has focus: ${_playPauseFocusNode.hasFocus}');
       });
     } else {
       _startHideTimer();
@@ -105,7 +101,6 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   }
 
   void _hideControls() {
-    debugPrint('[TvPlayerControls] 🌑 Setting _isVisible = false');
     if (!_isVisible) return;
     setState(() {
       _isVisible = false;
@@ -146,139 +141,144 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
           ),
 
         // Controls Overlay
-        AnimatedOpacity(
-          opacity: _isVisible ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 300),
-          child: IgnorePointer(
+        Visibility(
+          visible: _isVisible,
+          maintainState: true,
+          maintainAnimation: true,
+          child: AnimatedOpacity(
+            opacity: _isVisible ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 300),
+            child: IgnorePointer(
             ignoring: !_isVisible,
             child: FocusScope(
               canRequestFocus: _isVisible,
               child: Stack(
-                children: [
-                  // Background Gradient Overlay
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.black.withOpacity(0.7),
-                              Colors.transparent,
-                              Colors.transparent,
-                              Colors.black.withOpacity(0.7),
-                            ],
-                            stops: const [0.0, 0.2, 0.8, 1.0],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  
-                  // Top Bar (Title & Info)
-                  Positioned(
-                    top: 40,
-                    left: 60,
-                    right: 60,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.controller.betterPlayerControlsConfiguration.name.toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 32,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -1,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            _buildInfoBadge('HD'),
-                            const SizedBox(width: 12),
-                            Text(
-                              widget.controller.betterPlayerControlsConfiguration.watchingText ?? '',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.6),
-                                fontSize: 18,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
+              children: [
+                // Background Gradient Overlay
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.7),
+                            Colors.transparent,
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.7),
                           ],
-                        ),
-                      ],
-                    ),
-                  ),
-        
-                  // Pause Icon (Only when NOT buffering and NOT playing)
-                  Center(
-                    child: IgnorePointer(
-                      child: AnimatedScale(
-                        scale: (widget.controller.isPlaying() == true || _isBuffering) ? 0.0 : 1.0,
-                        duration: const Duration(milliseconds: 200),
-                        child: Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: Colors.black45,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white24, width: 2),
-                          ),
-                          child: const Icon(Icons.pause_rounded, color: Colors.white, size: 60),
+                          stops: const [0.0, 0.2, 0.8, 1.0],
                         ),
                       ),
                     ),
                   ),
-        
-                  // Bottom Bar (Progress & Controls)
-                  Positioned(
-                    bottom: 40,
-                    left: 60,
-                    right: 60,
-                    child: Builder(
-                      builder: (context) {
-                        final videoController = widget.controller.videoPlayerController;
-                        if (videoController == null) return const SizedBox.shrink();
-                        
-                        return ValueListenableBuilder(
-                          valueListenable: videoController,
-                          builder: (context, videoValue, _) {
-                            return Column(
-                              children: [
-                                _buildProgressBar(videoValue),
-                                const SizedBox(height: 24),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    _buildTimeText(videoValue.position),
-                                    const Spacer(),
-                                    _buildRewindButton(),
-                                    const SizedBox(width: 24),
-                                    _buildPlayPauseButton(),
-                                    const SizedBox(width: 24),
-                                    _buildFastForwardButton(),
-                                    const SizedBox(width: 48),
-                                    _buildSettingsButton(),
-                                    const Spacer(),
-                                    _buildTimeText(videoValue.duration),
-                                  ],
-                                ),
-                              ],
-                            );
-                          },
-                        );
-                      }
+                ),
+                
+                // Top Bar (Title & Info)
+                Positioned(
+                  top: 40,
+                  left: 60,
+                  right: 60,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.controller.betterPlayerControlsConfiguration.name.toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -1,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          _buildInfoBadge('HD'),
+                          const SizedBox(width: 12),
+                          Text(
+                            widget.controller.betterPlayerControlsConfiguration.watchingText ?? '',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+      
+                // Pause Icon (Only when NOT buffering and NOT playing)
+                Center(
+                  child: IgnorePointer(
+                    child: AnimatedScale(
+                      scale: (widget.controller.isPlaying() == true || _isBuffering) ? 0.0 : 1.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.black45,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white24, width: 2),
+                        ),
+                        child: const Icon(Icons.pause_rounded, color: Colors.white, size: 60),
+                      ),
                     ),
                   ),
-                ],
-              ),
+                ),
+      
+                // Bottom Bar (Progress & Controls)
+                Positioned(
+                  bottom: 40,
+                  left: 60,
+                  right: 60,
+                  child: Builder(
+                    builder: (context) {
+                      final videoController = widget.controller.videoPlayerController;
+                      if (videoController == null) return const SizedBox.shrink();
+                      
+                      return ValueListenableBuilder(
+                        valueListenable: videoController,
+                        builder: (context, videoValue, _) {
+                          return Column(
+                            children: [
+                              _buildProgressBar(videoValue),
+                              const SizedBox(height: 24),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  _buildTimeText(videoValue.position),
+                                  const Spacer(),
+                                  _buildRewindButton(),
+                                  const SizedBox(width: 24),
+                                  _buildPlayPauseButton(),
+                                  const SizedBox(width: 24),
+                                  _buildFastForwardButton(),
+                                  const SizedBox(width: 48),
+                                  _buildSettingsButton(),
+                                  const Spacer(),
+                                  _buildTimeText(videoValue.duration),
+                                ],
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    }
+                  ),
+                ),
+              ],
             ),
           ),
         ),
-      ],
-    );
-  }
+        ),
+      ),
+    ],
+  );
+}
 
   Widget _buildInfoBadge(String text) {
     return Container(
@@ -511,7 +511,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
                 color: isFocused ? Colors.white : Colors.transparent,
                 shape: BoxShape.circle,
                 boxShadow: isFocused ? [
-                  BoxShadow(color: Colors.white.withOpacity(0.3), blurRadius: 20, spreadRadius: 5)
+                  BoxShadow(color: Colors.white.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 5)
                 ] : null,
               ),
               child: Icon(
@@ -564,7 +564,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
                 color: isFocused ? Colors.white : Colors.transparent,
                 shape: BoxShape.circle,
                 boxShadow: isFocused ? [
-                  BoxShadow(color: Colors.white.withOpacity(0.3), blurRadius: 20, spreadRadius: 5)
+                  BoxShadow(color: Colors.white.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 5)
                 ] : null,
               ),
               child: Icon(
@@ -649,7 +649,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
                 color: isFocused ? Colors.white : Colors.transparent,
                 shape: BoxShape.circle,
                 boxShadow: isFocused ? [
-                  BoxShadow(color: Colors.white.withOpacity(0.3), blurRadius: 20, spreadRadius: 5)
+                  BoxShadow(color: Colors.white.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 5)
                 ] : null,
               ),
               child: Icon(
@@ -749,157 +749,158 @@ class _BufferingOverlayState extends State<_BufferingOverlay>
             ],
           ),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Pulsing branded spinner
-            ScaleTransition(
-              scale: _pulseAnim,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Outer glow ring
-                  SizedBox(
-                    width: 120,
-                    height: 120,
-                    child: CircularProgressIndicator(
-                      color: const Color(0xFFEC1D24).withOpacity(0.25),
-                      strokeWidth: 2,
-                      value: 1,
+        child: RepaintBoundary(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Pulsing branded spinner
+              ScaleTransition(
+                scale: _pulseAnim,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Outer glow ring
+                    SizedBox(
+                      width: 120,
+                      height: 120,
+                      child: CircularProgressIndicator(
+                        color: const Color(0xFFEC1D24).withValues(alpha: 0.25),
+                        strokeWidth: 2,
+                        value: 1,
+                      ),
                     ),
-                  ),
-                  // Spinning progress indicator
-                  SizedBox(
-                    width: 100,
-                    height: 100,
-                    child: CircularProgressIndicator(
-                      color: const Color(0xFFEC1D24),
-                      strokeWidth: 3,
-                      backgroundColor: Colors.white.withOpacity(0.08),
+                    // Spinning progress indicator
+                    SizedBox(
+                      width: 100,
+                      height: 100,
+                      child: CircularProgressIndicator(
+                        color: const Color(0xFFEC1D24),
+                        strokeWidth: 3,
+                        backgroundColor: Colors.white.withValues(alpha: 0.08),
+                      ),
                     ),
-                  ),
-                  // Center icon
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.black.withOpacity(0.6),
-                      border: Border.all(color: Colors.white12, width: 1),
+                    // Center icon
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black.withValues(alpha: 0.6),
+                        border: Border.all(color: Colors.white12, width: 1),
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Color(0xFFEC1D24),
+                        size: 40,
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.play_arrow_rounded,
-                      color: Color(0xFFEC1D24),
-                      size: 40,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 32),
-
-            // "Buffering..." label
-            const Text(
-              'Buffering…',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.5,
-              ),
-            ),
-
-            // Title and episode info
-            if (widget.title.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                widget.title,
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
+                  ],
                 ),
-                textAlign: TextAlign.center,
               ),
-            ],
-            if (widget.watchingText != null && widget.watchingText!.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                widget.watchingText!,
-                style: const TextStyle(
-                  color: Colors.white38,
-                  fontSize: 14,
+
+              const SizedBox(height: 32),
+
+              // "Buffering..." label
+              const Text(
+                'Buffering…',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
                 ),
-                textAlign: TextAlign.center,
               ),
-            ],
 
-            const SizedBox(height: 40),
+              // Title and episode info
+              if (widget.title.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  widget.title,
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+              if (widget.watchingText != null && widget.watchingText!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  widget.watchingText!,
+                  style: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
 
-            // Buffer progress bar
-            if (videoController != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 120),
-                child: ValueListenableBuilder<VideoPlayerValue>(
-                  valueListenable: videoController,
-                  builder: (context, value, _) {
-                    final aheadSecs = _bufferedAheadSeconds(value);
-                    final fraction = _bufferFraction(value);
+              const SizedBox(height: 40),
 
-                    return Column(
-                      children: [
-                        // Bar track
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: Stack(
-                            children: [
-                              // Track
-                              Container(
-                                height: 4,
-                                width: double.infinity,
-                                color: Colors.white12,
-                              ),
-                              // Buffered fill
-                              FractionallySizedBox(
-                                widthFactor: fraction.clamp(0.0, 1.0),
-                                child: Container(
+              if (videoController != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 120),
+                  child: ValueListenableBuilder<VideoPlayerValue>(
+                    valueListenable: videoController,
+                    builder: (context, value, _) {
+                      final aheadSecs = _bufferedAheadSeconds(value);
+                      final fraction = _bufferFraction(value);
+
+                      return Column(
+                        children: [
+                          // Bar track
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: Stack(
+                              children: [
+                                // Track
+                                Container(
                                   height: 4,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(4),
-                                    gradient: const LinearGradient(
-                                      colors: [Color(0xFFEC1D24), Color(0xFFFF6B6B)],
-                                    ),
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        color: Color(0x80EC1D24),
-                                        blurRadius: 6,
-                                        spreadRadius: 1,
+                                  width: double.infinity,
+                                  color: Colors.white12,
+                                ),
+                                // Buffered fill
+                                FractionallySizedBox(
+                                  widthFactor: fraction.clamp(0.0, 1.0),
+                                  child: Container(
+                                    height: 4,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(4),
+                                      gradient: const LinearGradient(
+                                        colors: [Color(0xFFEC1D24), Color(0xFFFF6B6B)],
                                       ),
-                                    ],
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Color(0x80EC1D24),
+                                          blurRadius: 6,
+                                          spreadRadius: 1,
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        // Buffered time label
-                        if (aheadSecs > 0)
-                          Text(
-                            '${aheadSecs.toStringAsFixed(0)}s buffered',
-                            style: const TextStyle(
-                              color: Colors.white38,
-                              fontSize: 13,
+                              ],
                             ),
                           ),
-                      ],
-                    );
-                  },
+                          const SizedBox(height: 10),
+                          // Buffered time label
+                          if (aheadSecs > 0)
+                            Text(
+                              '${aheadSecs.toStringAsFixed(0)}s buffered',
+                              style: const TextStyle(
+                                color: Colors.white38,
+                                fontSize: 13,
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

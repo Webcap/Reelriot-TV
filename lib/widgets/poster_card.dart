@@ -33,14 +33,11 @@ class _PosterCardState extends State<PosterCard> {
     return '$tmdbImageBaseUrl/w500${widget.posterPath}';
   }
 
-  double _scale(BuildContext context, double value) {
-    final width = MediaQuery.of(context).size.width;
-    return (value * width) / 1920;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final s = (double v) => _scale(context, v);
+    // Read once at the top of build
+    final screenWidth = MediaQuery.of(context).size.width;
+    final s = (double v) => (v * screenWidth) / 1920;
 
     return LongPressFocus(
       focusNode: widget.focusNode,
@@ -62,66 +59,68 @@ class _PosterCardState extends State<PosterCard> {
               width: cardWidth,
               height: cardHeight,
               margin: EdgeInsets.only(right: s(24)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(s(20)), // rounded-xl
-                      child: Container(
-                        width: cardWidth,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[900],
-                          border: Border.all(
-                            color: hasFocus ? Colors.white : Colors.transparent,
-                            width: s(4), // 4px focus ring
+                child: RepaintBoundary(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(s(20)), // rounded-xl
+                          child: Container(
+                            width: cardWidth,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              border: Border.all(
+                                color: hasFocus ? Colors.white : Colors.transparent,
+                                width: s(4), // 4px focus ring
+                              ),
+                              boxShadow: hasFocus ? [
+                                BoxShadow(
+                                  color: const Color(0xFFEC1D24).withValues(alpha: 0.45),
+                                  blurRadius: s(28),
+                                  spreadRadius: s(3),
+                                )
+                              ] : null,
+                            ),
+                            child: _imageUrl.isNotEmpty
+                              ? CachedNetworkImage(
+                                  imageUrl: _imageUrl,
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => Container(color: Colors.grey[900]),
+                                  errorWidget: (context, url, error) => const Icon(Icons.error),
+                                )
+                              : Container(color: Colors.grey[900]),
                           ),
-                          boxShadow: hasFocus ? [
-                            BoxShadow(
-                              color: const Color(0xFFEC1D24).withOpacity(0.45),
-                              blurRadius: s(28),
-                              spreadRadius: s(3),
-                            )
-                          ] : null,
                         ),
-                        child: _imageUrl.isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: _imageUrl,
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(color: Colors.grey[900]),
-                              errorWidget: (context, url, error) => const Icon(Icons.error),
-                            )
-                          : Container(color: Colors.grey[900]),
                       ),
-                    ),
-                  ),
-                  SizedBox(height: s(12)),
-                  Text(
-                    widget.title,
-                    style: TextStyle(
-                      color: hasFocus ? Colors.white : Colors.white70,
-                      fontSize: s(24),
-                      fontWeight: hasFocus ? FontWeight.bold : FontWeight.w500,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (widget.subtitle != null) ...[
-                    SizedBox(height: s(4)),
-                    Text(
-                      widget.subtitle!,
-                      style: TextStyle(
-                        color: hasFocus ? Colors.white70 : Colors.white38,
-                        fontSize: s(18),
-                        fontWeight: FontWeight.w400,
+                      SizedBox(height: s(12)),
+                      Text(
+                        widget.title,
+                        style: TextStyle(
+                          color: hasFocus ? Colors.white : Colors.white70,
+                          fontSize: s(24),
+                          fontWeight: hasFocus ? FontWeight.bold : FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ],
-              ),
+                      if (widget.subtitle != null) ...[
+                        SizedBox(height: s(4)),
+                        Text(
+                          widget.subtitle!,
+                          style: TextStyle(
+                            color: hasFocus ? Colors.white70 : Colors.white38,
+                            fontSize: s(18),
+                            fontWeight: FontWeight.w400,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
             ),
           );
         },

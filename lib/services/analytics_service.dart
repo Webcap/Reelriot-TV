@@ -53,7 +53,6 @@ class AnalyticsService {
 
   /// Track a technical Quality of Service (QoS) event (Supabase only to save Mixpanel quota)
   void trackQoSEvent(String eventName, [Map<String, dynamic>? properties]) {
-    debugPrint('Analytics [QoS]: $eventName ${properties ?? ""}');
     _logToSupabase(eventName, properties, isQoS: true);
   }
 
