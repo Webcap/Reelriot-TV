@@ -104,7 +104,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _visibilitySubscription = _controller?.controlsVisibilityStream.listen((
       visible,
     ) {
-      if (_controlsVisible != visible) {
+      if (_controlsVisible != visible && mounted && !_isDisposed) {
         _safeSetState(() => _controlsVisible = visible);
       }
     });
@@ -329,6 +329,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       betterPlayerDataSource: BetterPlayerDataSource(
         BetterPlayerDataSourceType.network,
         safeUrl,
+        liveStream: _isSports || safeUrl.contains('m3u8') || safeUrl.contains('playlist'),
         videoFormat:
             safeUrl.contains('m3u8') ||
                 safeUrl.contains('playlist') ||
@@ -341,12 +342,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         subtitles: widget.externalSubtitles,
         preferredAudioLanguage: SettingsService().defaultAudioLanguage,
         headers: _getMergedHeaders(safeUrl, widget.referrer, widget.headers),
-        bufferingConfiguration: const BetterPlayerBufferingConfiguration(
-          minBufferMs: 30000,
-          maxBufferMs: 60000,
-          bufferForPlaybackMs: 5000,
-          bufferForPlaybackAfterRebufferMs: 8000,
-        ),
+        bufferingConfiguration: _getBufferingConfig(),
       ),
     );
 
@@ -441,16 +437,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Only retry for network/source errors, especially if we've been playing for a while
     // or if the error code suggests a source issue (2001, 2002)
     final errorStr = exception?.toString().toLowerCase() ?? '';
+    
+    // Specific HLS Live errors
+    final isBehindLiveWindow = errorStr.contains('behindlivewindowexception');
+    final isPlaylistStuck = errorStr.contains('playliststuckexception');
+
     final isSourceError =
+        isBehindLiveWindow ||
+        isPlaylistStuck ||
         errorStr.contains('source error') ||
         errorStr.contains('httpdatasource') ||
         errorStr.contains('sockettimeout') ||
         errorStr.contains('unexpected end of stream');
+
     // 403 = IP-locked / auth error — retrying the same URL is pointless, skip straight to fallback
     final is403 =
         errorStr.contains('response code: 403') ||
         errorStr.contains('invalidresponsecodeexception') &&
             errorStr.contains('403');
+
+    if (isBehindLiveWindow || isPlaylistStuck) {
+      AnalyticsService.instance.trackQoSEvent('HLS Recovery Attempt', {
+        'error_type': isBehindLiveWindow ? 'BehindLiveWindow' : 'PlaylistStuck',
+        'url': widget.url,
+      });
+      debugPrint('[PlayerScreen] 🔄 Recovering from HLS specific error: $errorStr');
+    }
 
     if (is403) {
       debugPrint(
@@ -586,18 +598,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 newReferrer ?? widget.referrer,
                 newHeaders,
               ),
-              bufferingConfiguration: const BetterPlayerBufferingConfiguration(
-                minBufferMs: 30000,
-                maxBufferMs: 60000,
-                bufferForPlaybackMs: 2500,
-                bufferForPlaybackAfterRebufferMs: 5000,
-              ),
+              bufferingConfiguration: _getBufferingConfig(),
             ),
           );
 
           if (!_isDisposed && mounted) {
             _controller?.play();
-            _controller?.seekTo(currentPosition);
+            // Critical for Live: If we hit a BehindLiveWindow exception, 
+            // seeking to the 'currentPosition' (which failed) is fatal.
+            // We must seek to Duration.zero (the new live edge).
+            if (_isSports || newUrl.contains('m3u8')) {
+              debugPrint('[PlayerScreen] 🎯 Recovery: Seeking to live edge (0)');
+              _controller?.seekTo(Duration.zero);
+            } else {
+              _controller?.seekTo(currentPosition);
+            }
             _safeSetState(() => _isRefreshing = false);
           }
         } else {
@@ -1067,7 +1082,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             _controller?.play();
           }
           if (!_controlsVisible && !_isDisposed)
-            _controller?.setControlsVisibility(true);
+            _setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 
@@ -1078,7 +1093,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             _controller?.seekTo(pos + const Duration(seconds: 10));
           }
           if (!_controlsVisible && !_isDisposed)
-            _controller?.setControlsVisibility(true);
+            _setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 
@@ -1092,7 +1107,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             );
           }
           if (!_controlsVisible && !_isDisposed)
-            _controller?.setControlsVisibility(true);
+            _setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 
@@ -1108,10 +1123,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (TvKeys.isNavigation(key)) {
           if (!_controlsVisible) {
             debugPrint('[PlayerScreen] 🚀 Showing controls');
-            if (!_isDisposed) _controller?.setControlsVisibility(true);
+            _setControlsVisibility(true);
           } else {
             // Safety: keep-alive the visibility timer.
-            if (!_isDisposed) _controller?.setControlsVisibility(true);
+            _setControlsVisibility(true);
           }
           return KeyEventResult.ignored;
         }
@@ -1166,5 +1181,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ),
       ),
     );
+  }
+  BetterPlayerBufferingConfiguration _getBufferingConfig() {
+    if (_isSports) {
+      // Aggressive buffering for live manifests with short windows (standard IPTV)
+      return const BetterPlayerBufferingConfiguration(
+        minBufferMs: 2500, // 2.5 seconds (allocate up to)
+        maxBufferMs: 15000, // 15 seconds max memory footprint
+        bufferForPlaybackMs: 500, // Start playing at 0.5s to minimize latency
+        bufferForPlaybackAfterRebufferMs: 1000, // Recover fast if dropped
+      );
+    }
+    return const BetterPlayerBufferingConfiguration(
+      minBufferMs: 30000,
+      maxBufferMs: 60000,
+      bufferForPlaybackMs: 3000,
+      bufferForPlaybackAfterRebufferMs: 6000,
+    );
+  }
+
+  void _setControlsVisibility(bool visible) {
+    if (_isDisposed || !mounted || _controller == null) return;
+    try {
+      _controller?.setControlsVisibility(visible);
+    } catch (e) {
+      debugPrint('[PlayerScreen] ⚠️ Failed to set controls visibility: $e');
+    }
   }
 }
