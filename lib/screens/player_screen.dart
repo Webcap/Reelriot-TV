@@ -223,12 +223,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             subtitles: finalSubs,
             preferredAudioLanguage: SettingsService().defaultAudioLanguage,
             headers: _getMergedHeaders(currentUrl, widget.referrer, widget.headers),
-            bufferingConfiguration: const BetterPlayerBufferingConfiguration(
-              minBufferMs: 30000,
-              maxBufferMs: 60000,
-              bufferForPlaybackMs: 5000,
-              bufferForPlaybackAfterRebufferMs: 8000,
-            ),
+            bufferingConfiguration: _getBufferingConfig(),
           ),
         );
 
@@ -1009,12 +1004,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             subtitles: finalSubs,
             preferredAudioLanguage: SettingsService().defaultAudioLanguage,
             headers: _getMergedHeaders(currentUrl, widget.referrer, widget.headers),
-            bufferingConfiguration: const BetterPlayerBufferingConfiguration(
-              minBufferMs: 30000,
-              maxBufferMs: 60000,
-              bufferForPlaybackMs: 2500,
-              bufferForPlaybackAfterRebufferMs: 5000,
-            ),
+            bufferingConfiguration: _getBufferingConfig(),
           ),
         );
 
@@ -1184,12 +1174,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
   BetterPlayerBufferingConfiguration _getBufferingConfig() {
     if (_isSports) {
-      // Aggressive buffering for live manifests with short windows (standard IPTV)
+      // Stability-first buffering for live manifests (IPTV/Sports)
+      // On Chromecast/Wi-Fi, we need at least 10s of data to avoid stalls.
       return const BetterPlayerBufferingConfiguration(
-        minBufferMs: 2500, // 2.5 seconds (allocate up to)
-        maxBufferMs: 15000, // 15 seconds max memory footprint
-        bufferForPlaybackMs: 500, // Start playing at 0.5s to minimize latency
-        bufferForPlaybackAfterRebufferMs: 1000, // Recover fast if dropped
+        minBufferMs: 30000, // 30 seconds (ensure we have enough data)
+        maxBufferMs: 120000, // 120 seconds max footprint
+        bufferForPlaybackMs: 10000, // Start playing after 10s of data
+        bufferForPlaybackAfterRebufferMs: 15000, // Recover with 15s of data
       );
     }
     return const BetterPlayerBufferingConfiguration(
