@@ -23,6 +23,15 @@ class WatchHistoryService {
   Future<void>? _activeSaveProcess;
   final Map<String, List<Map<String, dynamic>>> _cachedHistory = {};
   final Map<String, DateTime> _lastFetchTime = {};
+  
+  /// Awaits any active background save processes to complete.
+  /// Use this before refreshing history after a player session ends.
+  Future<void> waitForPendingSaves() async {
+    while (_activeSaveProcess != null) {
+      debugPrint('[WatchHistory] ⏳ Waiting for pending saves...');
+      await _activeSaveProcess;
+    }
+  }
 
   Future<void> saveProgress({
     required dynamic item,
@@ -37,10 +46,6 @@ class WatchHistoryService {
     final user = _supabase.auth.currentUser;
     if (user == null || item == null) return;
 
-    if (item is Map) {
-      debugPrint('[WatchHistory] ℹ️ Item is a Map (likely Live Stream), skipping watch history for now.');
-      return;
-    }
 
     final saveData = {
       'item': item,
@@ -100,17 +105,26 @@ class WatchHistoryService {
       String? backdropPath;
       int? mediaId;
 
+      String? mType;
       if (isMovie) {
         if (item is MovieDetail) {
           mediaId = item.id;
           title = item.title;
           posterPath = item.posterPath;
           backdropPath = item.backdropPath;
+          mType = item.mediaType;
         } else if (item is MovieListItem) {
           mediaId = item.id;
           title = item.title;
           posterPath = item.posterPath;
           backdropPath = item.backdropPath;
+          mType = item.mediaType;
+        } else if (item is Map) {
+          mediaId = item['media_id'] ?? item['id'];
+          title = item['title'];
+          posterPath = item['poster_path'];
+          backdropPath = item['backdrop_path'];
+          mType = item['mediaType'] ?? item['type'] ?? item['media_type'];
         } else {
           return;
         }
@@ -125,10 +139,23 @@ class WatchHistoryService {
           title = item.name;
           posterPath = item.posterPath;
           backdropPath = item.backdropPath;
+        } else if (item is Map) {
+          mediaId = item['media_id'] ?? item['id'];
+          title = item['name'] ?? item['title'];
+          posterPath = item['poster_path'];
+          backdropPath = item['backdrop_path'];
+          mType = item['mediaType'] ?? item['type'] ?? item['media_type'];
         } else {
           return;
         }
       }
+      
+      if (mType == 'live' || mediaId == -100) {
+        debugPrint('[WatchHistory] ℹ️ Skipping watch history for live content.');
+        return;
+      }
+      
+      if (mediaId == null) return;
 
       final now = DateTime.now().toIso8601String();
 

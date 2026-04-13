@@ -77,6 +77,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Duration? _lastKnownPosition;
   DateTime? _loadStartTime;
   DateTime? _bufferingStartTime;
+  DateTime? _sessionStartTime;
 
   void _safeSetState(VoidCallback fn) {
     if (!mounted || _isDisposed) return;
@@ -259,6 +260,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
     });
   }
 
+  void _trackSessionEnd() {
+    if (_sessionStartTime != null) {
+      final duration = DateTime.now().difference(_sessionStartTime!).inSeconds;
+      if (duration > 0) {
+        AnalyticsService.instance.trackEvent('Playback Session', {
+          'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
+          'id': widget.item is Map ? widget.item['id']?.toString() : widget.item?.id?.toString(),
+          'name': widget.title,
+          'duration_seconds': duration,
+          'provider': widget.providerCode,
+        });
+      }
+      _sessionStartTime = null;
+    }
+  }
+
   Future<void> _saveCurrentProgress({bool isFinished = false}) async {
     if (_controller == null || _controller!.videoPlayerController == null) {
       return;
@@ -270,9 +287,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return;
     }
 
-    final position = isFinished
-        ? duration
-        : _controller!.videoPlayerController!.value.position;
+    // Capture the most reliable position. If the controller reports zero (often during 
+    // error states or resets), fallback to the last progress event we captured.
+    Duration position;
+    if (isFinished) {
+      position = duration;
+    } else {
+      final ctrlPos = _controller!.videoPlayerController!.value.position;
+      position = (ctrlPos > Duration.zero) 
+          ? ctrlPos 
+          : (_lastKnownPosition ?? Duration.zero);
+    }
 
     await _historyService.saveProgress(
       item: widget.item,
@@ -387,6 +412,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _hasInitialized = true;
         });
         _initWatchdogTimer?.cancel();
+        _sessionStartTime = DateTime.now();
 
         if (_loadStartTime != null) {
           final loadTime = DateTime.now().difference(_loadStartTime!).inMilliseconds;
@@ -473,9 +499,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     // 403 = IP-locked / auth error — retrying the same URL is pointless, skip straight to fallback
     final is403 =
-        errorStr.contains('response code: 403') ||
-        errorStr.contains('invalidresponsecodeexception') &&
-            errorStr.contains('403');
+        errorStr.contains('403') ||
+        errorStr.contains('forbidden') ||
+        errorStr.contains('invalidresponsecodeexception');
 
     if (isBehindLiveWindow || isPlaylistStuck) {
       AnalyticsService.instance.trackQoSEvent('HLS Recovery Attempt', {
@@ -490,8 +516,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         '[PlayerScreen] 🚫 403 Forbidden — IP-locked URL, skipping retries, falling back...',
       );
       _isHandlingException = false;
-      _safeSetState(() => _isRefreshing = false);
-      _fallbackToNextProvider();
+      await _fallbackToNextProvider();
       return;
     }
 
@@ -625,13 +650,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
           if (!_isDisposed && mounted) {
             _controller?.play();
-            // Critical for Live: If we hit a BehindLiveWindow exception, 
-            // seeking to the 'currentPosition' (which failed) is fatal.
-            // We must seek to Duration.zero (the new live edge).
-            if (_isSports || newUrl.contains('m3u8')) {
+            // Only seek to live edge for actual live/sports content.
+            // VOD HLS content (movies/shows that use m3u8) must resume from
+            // the saved position, not restart from the beginning.
+            if (_isSports) {
               debugPrint('[PlayerScreen] 🎯 Recovery: Seeking to live edge (0)');
               _controller?.seekTo(Duration.zero);
-            } else {
+            } else if (currentPosition > Duration.zero) {
+              debugPrint('[PlayerScreen] ⏩ Recovery: Restoring position to ${currentPosition.inSeconds}s');
               _controller?.seekTo(currentPosition);
             }
             _safeSetState(() => _isRefreshing = false);
@@ -639,17 +665,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
         } else {
           debugPrint('[PlayerScreen] ❌ Re-fetch failed or returned no links');
           _isHandlingException = false;
-          _safeSetState(() {
-            _isRefreshing = false;
-            if (widget.isMovie || widget.episode != null) {
-              // Automatically try another provider if re-fetch failed
-              _fallbackToNextProvider();
-            } else {
+          _safeSetState(() => _isRefreshing = false);
+          if (widget.isMovie || widget.episode != null) {
+            // Automatically try another provider if re-fetch failed
+            await _fallbackToNextProvider();
+          } else {
+            _safeSetState(() {
               _hasError = true;
               _errorMessage =
                   'Failed to refresh stream. Please try again later.';
-            }
-          });
+            });
+          }
         }
       } catch (e) {
         debugPrint('[PlayerScreen] ❌ Error during refresh: $e');
@@ -659,16 +685,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } else {
       debugPrint('[PlayerScreen] ❌ Max retries reached or non-source error');
       _isHandlingException = false;
-      _safeSetState(() {
-        _isRefreshing = false;
-        if (isSourceError && (widget.isMovie || widget.episode != null)) {
-          // Source kept failing after retries — try next provider automatically
-          _fallbackToNextProvider();
-        } else {
+      _safeSetState(() => _isRefreshing = false);
+      if (isSourceError && (widget.isMovie || widget.episode != null)) {
+        // Source kept failing after retries — try next provider automatically
+        await _fallbackToNextProvider();
+      } else {
+        _safeSetState(() {
           _hasError = true;
           _errorMessage = exception?.toString() ?? 'Playback error';
-        }
-      });
+        });
+      }
     }
   }
 
@@ -742,7 +768,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String _getReferer(String url) {
     try {
       final uri = Uri.parse(url);
-      return '${uri.scheme}://${uri.host}';
+      if (uri.scheme.isEmpty || uri.host.isEmpty) return '';
+      // Most CDNs (vixsrc, vidlink, vidsrc) require the trailing slash on Referer
+      return '${uri.scheme}://${uri.host}/';
     } catch (_) {
       return '';
     }
@@ -795,7 +823,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (extra != null) {
       for (final entry in extra.entries) {
         final normalizedKey = normalizeKey(entry.key);
-        final value = (normalizedKey == 'Referer' || normalizedKey == 'Origin')
+        // CRITICAL: Relax Referer normalization. While Origin must NEVER have a trailing slash,
+        // Referer SHOULD have one when pointing to a root domain for many CDNs (Vixsrc/VidLink).
+        final value = (normalizedKey == 'Origin')
             ? stripTrailingSlash(entry.value)
             : entry.value;
         headers[normalizedKey] = value;
@@ -837,21 +867,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // Ignore parsing errors
     }
 
-    // --- FAILSAFE OVERRIDE ---
-    // If the API hasn't been updated and is still sending trailing slashes or the old videostr.net domain,
-    // we forcibly correct it here to ensure the proxy does not throw a 403 Forbidden.
+    // --- PROXY AUTH OVERRIDE ---
+    // The ?headers= query params are instructions for the PROXY to use when
+    // fetching from upstream CDNs — they are NOT client-to-proxy auth headers.
+    // The proxy itself requires vidlink.pro Origin/Referer from the client.
     if (url.contains('storm.vodvidl.site') || url.contains('vidlink')) {
-      headers['Referer'] = 'https://vidlink.pro';
+      headers['Referer'] = 'https://vidlink.pro/';
       headers['Origin'] = 'https://vidlink.pro';
     }
+
+    if (url.contains('vixsrc.to') || url.contains('vixsrc')) {
+      headers['Referer'] = 'https://vixsrc.to';
+      headers['Origin'] = 'https://vixsrc.to';
+    }
+
+    // Log final resolved headers for debugging proxy issues
+    debugPrint('[PlayerScreen] 🔑 Final headers for ${Uri.tryParse(url)?.host}: '
+        'Referer=${headers['Referer']}, Origin=${headers['Origin']}');
 
     return headers;
   }
 
-  void _fallbackToNextProvider() {
+  Future<void> _fallbackToNextProvider() async {
+    _trackSessionEnd();
+    await _saveCurrentProgress();
     if (_isDisposed || !mounted) return;
 
-    final currentPos = _controller?.videoPlayerController?.value.position;
+    // Capture current position and save it to history before switching
+    await _saveCurrentProgress();
+    final currentPos = _controller?.videoPlayerController?.value.position ?? _lastKnownPosition;
 
     if (widget.allProviders == null || widget.allProviders!.isEmpty) {
       debugPrint('[PlayerScreen] ❌ No provider list for auto-fallback');
@@ -872,11 +916,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
         '[PlayerScreen] 🔄 Auto-falling back to next provider: $nextProviderCode',
       );
 
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => _buildVideoLoader(nextProviderCode, currentPos),
-        ),
-      );
+      if (mounted && !_isDisposed) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => _buildVideoLoader(nextProviderCode, currentPos),
+          ),
+        );
+      }
     } else {
       debugPrint('[PlayerScreen] ❌ All providers exhausted for auto-fallback');
       _showSettings(); // Show picker as last resort
@@ -895,11 +941,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
         allProviders: widget.allProviders,
         providerLabel: _isSports ? 'Select Mirror' : 'Server (Provider)',
         onSearchMore: _searchMoreSubtitles,
-        onChangeProvider: (newProviderCode) {
+        onChangeProvider: (newProviderCode) async {
           if (!mounted) return;
           // Close settings dialog
           Navigator.of(context).pop();
-          final currentPos = _controller?.videoPlayerController?.value.position;
+
+          // Save current position before switching
+          await _saveCurrentProgress();
+          if (!mounted || _isDisposed) return;
+          
+          final currentPos = _controller?.videoPlayerController?.value.position ?? _lastKnownPosition;
+
           debugPrint(
             '[PlayerScreen] 🔄 Changing provider to: $newProviderCode',
           );
@@ -932,12 +984,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
             }
           }
 
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) =>
-                  _buildVideoLoader(newProviderCode, currentPos),
-            ),
-          );
+          if (mounted && !_isDisposed) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) =>
+                    _buildVideoLoader(newProviderCode, currentPos),
+              ),
+            );
+          }
         },
       ),
     );
@@ -1074,7 +1128,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// firing BetterPlayerEventType.initialized.
   Future<void> _forcePlayerReset() async {
     if (_controller == null || _isDisposed || !mounted) return;
-    debugPrint('[PlayerScreen] 🔄 Forcing player reset via setupDataSource...');
+    
+    // Capture current position BEFORE reset so we can restore it
+    await _saveCurrentProgress();
+    final currentPosition = _controller?.videoPlayerController?.value.position ?? _lastKnownPosition;
+
+    debugPrint('[PlayerScreen] 🔄 Forcing player reset via setupDataSource... '
+        '(saving position: ${currentPosition?.inSeconds}s)');
     try {
     // Smart host-only rewrite — preserve encoded query params intact
     var safeUrl = widget.url;
@@ -1108,10 +1168,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       if (!_isDisposed && mounted) {
         _controller?.play();
-        // Restore saved resume position if applicable
-        if (widget.startPosition != null && widget.startPosition! > Duration.zero) {
+        // Restore the CURRENT position (not just the initial startPosition)
+        final resumePos = currentPosition ?? widget.startPosition;
+        if (resumePos != null && resumePos > Duration.zero) {
           await Future.delayed(const Duration(milliseconds: 500));
-          if (!_isDisposed && mounted) _controller?.seekTo(widget.startPosition!);
+          if (!_isDisposed && mounted) {
+            _controller?.seekTo(resumePos);
+            debugPrint('[PlayerScreen] ⏩ Restored position to ${resumePos.inSeconds}s');
+          }
         }
         debugPrint('[PlayerScreen] ✅ Forced reset complete, playback started');
       }
@@ -1123,6 +1187,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     _isDisposed = true;
+    _trackSessionEnd();
     _saveTimer?.cancel();
     _initWatchdogTimer?.cancel();
     _saveCurrentProgress(); // Best effort save
@@ -1400,10 +1465,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
     }
     return const BetterPlayerBufferingConfiguration(
-      minBufferMs: 45000, // Deep buffer (45s) for high-bitrate stability
-      maxBufferMs: 90000, // Allow up to 90s in memory (safe for 2GB RAM Chromecast)
-      bufferForPlaybackMs: 12000, // Wait for 12s of video before starting (masked by poster)
-      bufferForPlaybackAfterRebufferMs: 18000, // Recover with a heavy 18s cushion
+      minBufferMs: 45000, // Target 45s of buffered data ahead (buffers WHILE playing)
+      maxBufferMs: 90000, // Allow up to 90s buffer ceiling
+      bufferForPlaybackMs: 2500, // Start playing after just 2.5s (don't wait 12s)
+      bufferForPlaybackAfterRebufferMs: 5000, // Resume after 5s on rebuffer (was 18s!)
     );
   }
 

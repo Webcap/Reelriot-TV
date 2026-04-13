@@ -531,6 +531,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     
     try {
       if (forceRefresh) {
+        await _historyService.waitForPendingSaves();
         _checkForUpdate();
       } else {
          _checkForUpdate();
@@ -557,67 +558,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
         final watchingShows = results[6] as List<Map<String, dynamic>>;
         debugPrint('[HomeScreen] 📺 Found ${watchingShows.length} watching shows');
 
-        // --- Process "Up Next" Logic (Next Episode) ---
-        final List<Map<String, dynamic>> upNextItems = [];
-        final now = DateTime.now();
-        
-        bool isEpReleased(String? airDate) {
-          if (airDate == null || airDate.isEmpty) return false;
-          try {
-            return DateTime.parse(airDate).isBefore(now.add(const Duration(days: 1)));
-          } catch (_) {
-            return false;
-          }
-        }
-
-        for (var originalShow in watchingShows) {
-          // Rule: Only show episodes in Up Next if the previous episode was completed
-          if (originalShow['is_completed'] == true) {
-            try {
-              final show = Map<String, dynamic>.from(originalShow);
-              final showId = show['id'];
-              final seasonNum = show['season_num'] as int? ?? 1;
-              final episodeNum = show['episode_num'] as int? ?? 1;
-
-              // Check if there's a next episode in the same season
-              final seasonDetail = await _api.fetchSeasonDetail(showId, seasonNum);
-              TvEpisode? nextEp;
-              for (var e in seasonDetail.episodes) {
-                if (e.episodeNumber == episodeNum + 1) {
-                  nextEp = e;
-                  break;
-                }
-              }
-
-              if (nextEp != null && isEpReleased(nextEp.airDate)) {
-                show['episode_num'] = nextEp.episodeNumber;
-                show['episode_name'] = nextEp.name;
-                show['is_completed'] = false;
-                upNextItems.add(show);
-              } else if (nextEp == null) {
-                // Check if there's a next season
-                final tvDetail = await _api.fetchTvDetail(showId);
-                if (seasonNum < (tvDetail.numberOfSeasons ?? 0)) {
-                  final nextSeasonDetail = await _api.fetchSeasonDetail(showId, seasonNum + 1);
-                  if (nextSeasonDetail.episodes.isNotEmpty) {
-                    final firstEp = nextSeasonDetail.episodes.first;
-                    if (isEpReleased(firstEp.airDate)) {
-                      show['season_num'] = seasonNum + 1;
-                      show['episode_num'] = firstEp.episodeNumber;
-                      show['episode_name'] = firstEp.name;
-                      show['is_completed'] = false;
-                      upNextItems.add(show);
-                    }
-                  }
-                }
-              }
-              // If we didn't find a next episode/season, we don't add it to upNextItems (user is caught up)
-            } catch (e) {
-              debugPrint('[HomeScreen] ❌ Error calculating next episode: $e');
-            }
-          }
-          if (upNextItems.length >= 10) break;
-        }
+        final upNextItems = await _processUpNext(watchingShows);
 
          List<MovieListItem>? tvRecommendations;
         String? tvRecommendationsTitle;
@@ -822,17 +763,84 @@ class _MainHomeViewState extends State<_MainHomeView> {
     }
   }
 
+  Future<List<Map<String, dynamic>>> _processUpNext(List<Map<String, dynamic>> watchingShows) async {
+    final List<Map<String, dynamic>> upNextItems = [];
+    final now = DateTime.now();
+    
+    bool isEpReleased(String? airDate) {
+      if (airDate == null || airDate.isEmpty) return false;
+      try {
+        return DateTime.parse(airDate).isBefore(now.add(const Duration(days: 1)));
+      } catch (_) {
+        return false;
+      }
+    }
+
+    for (var originalShow in watchingShows) {
+      // Rule: Only show episodes in Up Next if the previous episode was completed
+      if (originalShow['is_completed'] == true) {
+        try {
+          final show = Map<String, dynamic>.from(originalShow);
+          final showId = show['id'];
+          final seasonNum = show['season_num'] as int? ?? 1;
+          final episodeNum = show['episode_num'] as int? ?? 1;
+
+          // Check if there's a next episode in the same season
+          final seasonDetail = await _api.fetchSeasonDetail(showId, seasonNum);
+          TvEpisode? nextEp;
+          for (var e in seasonDetail.episodes) {
+            if (e.episodeNumber == episodeNum + 1) {
+              nextEp = e;
+              break;
+            }
+          }
+
+          if (nextEp != null && isEpReleased(nextEp.airDate)) {
+            show['episode_num'] = nextEp.episodeNumber;
+            show['episode_name'] = nextEp.name;
+            show['is_completed'] = false;
+            upNextItems.add(show);
+          } else if (nextEp == null) {
+            // Check if there's a next season
+            final tvDetail = await _api.fetchTvDetail(showId);
+            if (seasonNum < (tvDetail.numberOfSeasons ?? 0)) {
+              final nextSeasonDetail = await _api.fetchSeasonDetail(showId, seasonNum + 1);
+              if (nextSeasonDetail.episodes.isNotEmpty) {
+                final firstEp = nextSeasonDetail.episodes.first;
+                if (isEpReleased(firstEp.airDate)) {
+                  show['season_num'] = seasonNum + 1;
+                  show['episode_num'] = firstEp.episodeNumber;
+                  show['episode_name'] = firstEp.name;
+                  show['is_completed'] = false;
+                  upNextItems.add(show);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('[HomeScreen] ❌ Error calculating next episode: $e');
+        }
+      }
+      if (upNextItems.length >= 10) break;
+    }
+    return upNextItems;
+  }
+
   Future<void> _reloadHistory({bool forceRefresh = false}) async {
+    if (forceRefresh) {
+      await _historyService.waitForPendingSaves();
+    }
     final mediaType = _selectedCategory == 'TV Shows' ? 'tv' : 'movie';
     final h = await _historyService.getHistory(mediaType: mediaType, forceRefresh: forceRefresh);
-    List<Map<String, dynamic>>? ws;
+    List<Map<String, dynamic>>? upNext;
     if (mediaType == 'tv') {
-      ws = await _historyService.getRecentlyWatchedShows(forceRefresh: forceRefresh);
+      final watchingShows = await _historyService.getRecentlyWatchedShows(forceRefresh: forceRefresh);
+      upNext = await _processUpNext(watchingShows);
     }
     if (mounted) {
       setState(() {
         _history = h;
-        _watchingShows = ws;
+        _watchingShows = upNext;
       });
     }
   }
@@ -1143,6 +1151,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                                    push.then((_) async {
                                     // Give the player/service 2 seconds to finish any background saving 
                                     // before we force a refresh of the UI data.
+                                    await _historyService.waitForPendingSaves();
                                     await Future.delayed(const Duration(seconds: 2));
                                     _reloadHistory(forceRefresh: true);
                                   });
@@ -1600,7 +1609,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
                       }
                     }
 
-                    // Refresh history so completed items disappear immediately
+                    await _historyService.waitForPendingSaves();
+                    // Give the player/service 2 seconds to finish any background saving 
+                    await Future.delayed(const Duration(seconds: 2));
                     if (mounted) _loadContent(quiet: true, forceRefresh: true);
                     } finally {
                       _isProcessing = false;
@@ -1778,6 +1789,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
                       await Navigator.of(context).push(
                       MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: m.id)),
                     );
+                    await _historyService.waitForPendingSaves();
+                    await Future.delayed(const Duration(seconds: 2));
                     if (mounted) _loadContent(quiet: true, forceRefresh: true);
                     } finally {
                       _isProcessing = false;
@@ -1878,7 +1891,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
                         MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
                       );
                     }
-                    if (mounted) _loadContent(quiet: true);
+                    await _historyService.waitForPendingSaves();
+                    await Future.delayed(const Duration(seconds: 2));
+                    if (mounted) _loadContent(quiet: true, forceRefresh: true);
                   },
                 ),
               );
@@ -1976,7 +1991,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
                         MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: show['id'])),
                       );
                     }
-                    if (mounted) _loadContent(quiet: true);
+                    await _historyService.waitForPendingSaves();
+                    await Future.delayed(const Duration(seconds: 2));
+                    if (mounted) _loadContent(quiet: true, forceRefresh: true);
                   },
                 ),
               );
@@ -2184,6 +2201,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
                         MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
                       );
                     }
+                    await _historyService.waitForPendingSaves();
+                    await Future.delayed(const Duration(seconds: 2));
                     if (mounted) _loadContent(quiet: true, forceRefresh: true);
                   },
                 ),

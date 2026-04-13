@@ -1,6 +1,7 @@
 import 'package:better_player/better_player.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:ui';
 import 'package:caffeine_tv/widgets/language_picker_dialog.dart';
 
 class PlayerSettingsOverlay extends StatefulWidget {
@@ -34,184 +35,214 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
     final currentSubtitle = widget.controller.betterPlayerSubtitlesSource;
 
     return Center(
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.7,
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
-        ),
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white24, width: 2),
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Player Options',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.7,
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+            ),
+            padding: const EdgeInsets.all(40),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.12), 
+                width: 1.5,
               ),
-              const SizedBox(height: 32),
-              if (audioTracks.isNotEmpty) ...[
-                const _CategoryHeader(title: 'Audio Language'),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: audioTracks.map((track) {
-                    final isSelected = currentAudio == track;
-                    return _TrackChip(
-                      label: track.label ?? track.language ?? 'Unknown',
-                      isSelected: isSelected,
-                      onPressed: () {
-                        widget.controller.setAudioTrack(track);
-                        setState(() {});
-                      },
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 32),
-              ],
-              if (subtitleSources.isNotEmpty) ...[
-                const _CategoryHeader(title: 'Subtitles'),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: subtitleSources.map((source) {
-                    final isSelected = currentSubtitle == source;
-                    final name = source.name ?? 'Unknown';
-                    return _TrackChip(
-                      label: name == 'Default subtitles' && source.type == BetterPlayerSubtitlesSourceType.none 
-                          ? 'Off' 
-                          : name,
-                      isSelected: isSelected,
-                      onPressed: () {
-                        widget.controller.setupSubtitleSource(source);
-                        setState(() {});
-                      },
-                    );
-                  }).toList(),
-                ),
-                if (widget.onSearchMore != null) ...[
-                  const SizedBox(height: 16),
-                  _TrackChip(
-                    label: '+ Search More Languages',
-                    isSelected: false,
-                    isAction: true,
-                    onPressed: () async {
-                      final langCode = await showDialog<String>(
-                        context: context,
-                        builder: (context) => const LanguagePickerDialog(),
-                      );
-                      if (langCode != null) {
-                        widget.onSearchMore!(langCode);
-                        if (context.mounted) Navigator.of(context).pop();
-                      }
-                    },
-                  ),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.12),
+                  Colors.white.withValues(alpha: 0.02),
                 ],
-              ],
-              if (widget.onChangeProvider != null && widget.allProviders != null && widget.allProviders!.isNotEmpty) ...[
-                const SizedBox(height: 32),
-                _CategoryHeader(title: widget.providerLabel),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: widget.allProviders!.map((provider) {
-                    final isSelected = widget.currentProvider == provider['code'];
-                    return _TrackChip(
-                      label: provider['name'] ?? 'Unknown',
-                      isSelected: isSelected,
-                      onPressed: () {
-                        if (!isSelected) {
-                          widget.onChangeProvider!(provider['code']!);
-                        }
-                      },
-                    );
-                  }).toList(),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 30,
+                  spreadRadius: 5,
                 ),
               ],
-              const SizedBox(height: 32),
-              const _CategoryHeader(title: 'Subtitle Sync'),
-              const SizedBox(height: 8),
-              Text(
-                'Current Offset: ${(widget.controller.betterPlayerSubtitlesSource?.offset ?? 0) / 1000}s',
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _TrackChip(
-                    label: '-1.0s',
-                    isSelected: false,
-                    isAction: true,
-                    onPressed: () {
-                      final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
-                      widget.controller.setSubtitleOffset(currentOffset - 1000);
-                      setState(() {});
-                    },
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Player Options',
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.5,
+                            ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white70),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
                   ),
-                  _TrackChip(
-                    label: '-0.1s',
-                    isSelected: false,
-                    isAction: true,
-                    onPressed: () {
-                      final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
-                      widget.controller.setSubtitleOffset(currentOffset - 100);
-                      setState(() {});
-                    },
+                  const SizedBox(height: 48),
+                  if (audioTracks.isNotEmpty) ...[
+                    const _CategoryHeader(title: 'Audio Language'),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      children: audioTracks.map((track) {
+                        final isSelected = currentAudio == track;
+                        return _TrackChip(
+                          label: track.label ?? track.language ?? 'Unknown',
+                          isSelected: isSelected,
+                          onPressed: () {
+                            widget.controller.setAudioTrack(track);
+                            setState(() {});
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 48),
+                  ],
+                  if (subtitleSources.isNotEmpty) ...[
+                    const _CategoryHeader(title: 'Subtitles'),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      children: subtitleSources.map((source) {
+                        final isSelected = currentSubtitle == source;
+                        final name = source.name ?? 'Unknown';
+                        return _TrackChip(
+                          label: name == 'Default subtitles' && source.type == BetterPlayerSubtitlesSourceType.none 
+                              ? 'Off' 
+                              : name,
+                          isSelected: isSelected,
+                          onPressed: () {
+                            widget.controller.setupSubtitleSource(source);
+                            setState(() {});
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    if (widget.onSearchMore != null) ...[
+                      const SizedBox(height: 16),
+                      _TrackChip(
+                        label: '+ Search More Languages',
+                        isSelected: false,
+                        isAction: true,
+                        onPressed: () async {
+                          final langCode = await showDialog<String>(
+                            context: context,
+                            builder: (context) => const LanguagePickerDialog(),
+                          );
+                          if (langCode != null) {
+                            widget.onSearchMore!(langCode);
+                            if (context.mounted) Navigator.of(context).pop();
+                          }
+                        },
+                      ),
+                    ],
+                  ],
+                  if (widget.onChangeProvider != null && widget.allProviders != null && widget.allProviders!.isNotEmpty) ...[
+                    const SizedBox(height: 48),
+                    _CategoryHeader(title: widget.providerLabel),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      children: widget.allProviders!.map((provider) {
+                        final isSelected = widget.currentProvider == provider['code'];
+                        return _TrackChip(
+                          label: provider['name'] ?? 'Unknown',
+                          isSelected: isSelected,
+                          onPressed: () {
+                            if (!isSelected) {
+                              widget.onChangeProvider!(provider['code']!);
+                            }
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 48),
+                  const _CategoryHeader(title: 'Subtitle Sync'),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Current Offset: ${(widget.controller.betterPlayerSubtitlesSource?.offset ?? 0) / 1000}s',
+                    style: const TextStyle(
+                      color: Colors.white60, 
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                  _TrackChip(
-                    label: 'Reset',
-                    isSelected: false,
-                    isAction: true,
-                    onPressed: () {
-                      widget.controller.setSubtitleOffset(0);
-                      setState(() {});
-                    },
+                  const SizedBox(height: 24),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 16,
+                    children: [
+                      _TrackChip(
+                        label: '-1.0s',
+                        isSelected: false,
+                        isAction: true,
+                        onPressed: () {
+                          final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
+                          widget.controller.setSubtitleOffset(currentOffset - 1000);
+                          setState(() {});
+                        },
+                      ),
+                      _TrackChip(
+                        label: '-0.1s',
+                        isSelected: false,
+                        isAction: true,
+                        onPressed: () {
+                          final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
+                          widget.controller.setSubtitleOffset(currentOffset - 100);
+                          setState(() {});
+                        },
+                      ),
+                      _TrackChip(
+                        label: 'Reset',
+                        isSelected: false,
+                        isAction: true,
+                        onPressed: () {
+                          widget.controller.setSubtitleOffset(0);
+                          setState(() {});
+                        },
+                      ),
+                      _TrackChip(
+                        label: '+0.1s',
+                        isSelected: false,
+                        isAction: true,
+                        onPressed: () {
+                          final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
+                          widget.controller.setSubtitleOffset(currentOffset + 100);
+                          setState(() {});
+                        },
+                      ),
+                      _TrackChip(
+                        label: '+1.0s',
+                        isSelected: false,
+                        isAction: true,
+                        onPressed: () {
+                          final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
+                          widget.controller.setSubtitleOffset(currentOffset + 1000);
+                          setState(() {});
+                        },
+                      ),
+                    ],
                   ),
-                  _TrackChip(
-                    label: '+0.1s',
-                    isSelected: false,
-                    isAction: true,
-                    onPressed: () {
-                      final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
-                      widget.controller.setSubtitleOffset(currentOffset + 100);
-                      setState(() {});
-                    },
-                  ),
-                  _TrackChip(
-                    label: '+1.0s',
-                    isSelected: false,
-                    isAction: true,
-                    onPressed: () {
-                      final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
-                      widget.controller.setSubtitleOffset(currentOffset + 1000);
-                      setState(() {});
-                    },
-                  ),
+                  const SizedBox(height: 48),
                 ],
               ),
-              const SizedBox(height: 48),
-              Center(
-                child: _TrackChip(
-                  label: 'Close',
-                  isSelected: false,
-                  isAction: true,
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -228,10 +259,10 @@ class _CategoryHeader extends StatelessWidget {
     return Text(
       title.toUpperCase(),
       style: const TextStyle(
-        color: Colors.white54,
-        fontSize: 14,
-        fontWeight: FontWeight.bold,
-        letterSpacing: 1.2,
+        color: Colors.white38,
+        fontSize: 15,
+        fontWeight: FontWeight.w900,
+        letterSpacing: 2.0,
       ),
     );
   }
@@ -259,13 +290,27 @@ class _TrackChipState extends State<_TrackChip> {
 
   @override
   Widget build(BuildContext context) {
-    final bgColor = widget.isSelected 
-        ? const Color(0xFFDC2626) 
-        : (_focused ? Colors.white : Colors.white10);
+    final s = (double v) => (v * MediaQuery.of(context).size.width) / 1920;
     
-    final textColor = widget.isSelected 
-        ? Colors.white 
-        : (_focused ? Colors.black : Colors.white70);
+    // Background color logic
+    Color bgColor;
+    if (widget.isSelected) {
+      bgColor = const Color(0xFFE60000); // Marvel Red
+    } else if (_focused) {
+      bgColor = Colors.white;
+    } else {
+      bgColor = Colors.white.withValues(alpha: 0.05);
+    }
+    
+    // Text color logic
+    Color textColor;
+    if (widget.isSelected) {
+      textColor = Colors.white;
+    } else if (_focused) {
+      textColor = Colors.black;
+    } else {
+      textColor = Colors.white70;
+    }
 
     return Focus(
       onFocusChange: (hasFocus) => setState(() => _focused = hasFocus),
@@ -281,26 +326,31 @@ class _TrackChipState extends State<_TrackChip> {
       child: GestureDetector(
         onTap: widget.onPressed,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          padding: EdgeInsets.symmetric(horizontal: s(32), vertical: s(16)),
           decoration: BoxDecoration(
             color: bgColor,
-            borderRadius: BorderRadius.circular(12),
-            border: _focused ? Border.all(color: Colors.white, width: 2) : null,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _focused ? Colors.white : Colors.white.withValues(alpha: 0.1),
+              width: _focused ? 2 : 1,
+            ),
             boxShadow: _focused ? [
               BoxShadow(
-                color: Colors.white.withValues(alpha: 0.3),
-                blurRadius: 12,
+                color: Colors.white.withValues(alpha: 0.25),
+                blurRadius: 20,
                 spreadRadius: 2,
               )
-            ] : null,
+            ] : [],
           ),
           child: Text(
             widget.label,
             style: TextStyle(
               color: textColor,
-              fontWeight: widget.isSelected || _focused ? FontWeight.bold : FontWeight.normal,
-              fontSize: 16,
+              fontWeight: widget.isSelected || _focused ? FontWeight.w900 : FontWeight.w600,
+              fontSize: 17,
+              letterSpacing: 0.2,
             ),
           ),
         ),
