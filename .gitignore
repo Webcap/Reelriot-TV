@@ -46,4 +46,7 @@ app.*.map.json
 .env
 .env.prod
 .env.dev
+
+#Openclaude
+.openclaude/
 .openclaude-profile.json

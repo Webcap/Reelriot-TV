@@ -65,6 +65,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final SubtitleService _subtitleService = SubtitleService();
   final FocusNode _mainFocusNode = FocusNode();
   Timer? _saveTimer;
+  Timer? _initWatchdogTimer;
   bool _controlsVisible = false;
   StreamSubscription? _visibilitySubscription;
   int _retryCount = 0;
@@ -72,6 +73,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _isRefreshing = false;
   bool _isDisposed = false;
   bool _isHandlingException = false;
+  bool _hasInitialized = false; // Tracks if BetterPlayerEventType.initialized has fired
   Duration? _lastKnownPosition;
   DateTime? _loadStartTime;
   DateTime? _bufferingStartTime;
@@ -112,12 +114,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Ensure we have focus on start
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _mainFocusNode.requestFocus();
-      
-      // Auto-discover subtitles after a short delay to allow stream to initialize
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted && !_isDisposed) {
-          _autoDiscoverSubtitles();
-        }
+
+      // Watchdog: The Chromecast Amlogic AVC decoder (c2.amlogic.avc.decoder) can
+      // flush its pipeline during HLS initialization causing BetterPlayer to get stuck
+      // decoding but never firing BetterPlayerEventType.initialized. A forced
+      // setupDataSource() call kicks it into ExoPlayer STATE_READY.
+      // Guard: skip if already initialized or if the exception handler is active
+      // (to prevent a race condition between the watchdog and retry logic).
+      _initWatchdogTimer = Timer(const Duration(seconds: 3), () {
+        if (!mounted || _isDisposed || _hasInitialized || _isHandlingException) return;
+        debugPrint('[PlayerScreen] ⚠️ Init watchdog fired — player not initialized after 3s, forcing reset');
+        _forcePlayerReset();
       });
     });
   }
@@ -288,9 +295,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return;
     }
 
-    // --- ULTIMATE FAILSAFE URL REWRITE ---
-    var safeUrl = widget.url.replaceAll('videostr.net/', 'vidlink.pro');
-    safeUrl = safeUrl.replaceAll('videostr.net', 'vidlink.pro');
+    // --- SMART URL REWRITE ---
+    // Only rewrite if videostr.net is the actual HOST, never inside encoded
+    // query parameters (e.g. ?headers={"referer":"https://videostr.net/"})
+    // which proxy servers like storm.vodvidl.site read to forward correct auth headers.
+    var safeUrl = widget.url;
+    try {
+      final uri = Uri.parse(widget.url);
+      if (uri.host == 'videostr.net' || uri.host.endsWith('.videostr.net')) {
+        safeUrl = uri.replace(host: 'vidlink.pro').toString();
+      }
+    } catch (_) {}
 
     _controller = BetterPlayerController(
       BetterPlayerConfiguration(
@@ -329,7 +344,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       betterPlayerDataSource: BetterPlayerDataSource(
         BetterPlayerDataSourceType.network,
         safeUrl,
-        liveStream: _isSports || safeUrl.contains('m3u8') || safeUrl.contains('playlist'),
+        liveStream: _isSports, // Only actual live channels should use liveStream: true
         videoFormat:
             safeUrl.contains('m3u8') ||
                 safeUrl.contains('playlist') ||
@@ -367,6 +382,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         await _saveCurrentProgress(isFinished: true);
         if (mounted && !_isDisposed) Navigator.of(context).pop();
       } else if (event.betterPlayerEventType == BetterPlayerEventType.initialized) {
+        // Mark initialized so the watchdog does not fire and overlay hides
+        _safeSetState(() {
+          _hasInitialized = true;
+        });
+        _initWatchdogTimer?.cancel();
+
         if (_loadStartTime != null) {
           final loadTime = DateTime.now().difference(_loadStartTime!).inMilliseconds;
           AnalyticsService.instance.trackQoSEvent('Playback Loaded', {
@@ -765,10 +786,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return key;
     }
 
-    // Merge extra headers first
+    // Helper to strip trailing slashes from URL-like header values
+    String stripTrailingSlash(String value) {
+      return value.endsWith('/') ? value.substring(0, value.length - 1) : value;
+    }
+
+    // Merge extra headers first; strip trailing slashes from URL-like headers
     if (extra != null) {
       for (final entry in extra.entries) {
-        headers[normalizeKey(entry.key)] = entry.value;
+        final normalizedKey = normalizeKey(entry.key);
+        final value = (normalizedKey == 'Referer' || normalizedKey == 'Origin')
+            ? stripTrailingSlash(entry.value)
+            : entry.value;
+        headers[normalizedKey] = value;
       }
     }
 
@@ -778,8 +808,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (!headers.containsKey('Referer')) {
         headers['Referer'] = effectiveReferrer;
       }
+      // CRITICAL: Many CDNs (VidLink, justhd.tv) use strict Origin/Referer matching
+      // as a form of basic anti-bot. If Referer is set, Origin MUST follow.
       if (!headers.containsKey('Origin')) {
         headers['Origin'] = _getOrigin(effectiveReferrer);
+      }
+    } else {
+      // Fallback: use a generic Origin if the Referer is missing but we're in HLS
+      if (!headers.containsKey('Origin')) {
+        headers['Origin'] = 'https://vidlink.pro';
       }
     }
 
@@ -1032,10 +1069,62 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  /// Forces a setupDataSource() reset to recover from the Chromecast Amlogic
+  /// codec flush bug where the player gets stuck in buffering without ever
+  /// firing BetterPlayerEventType.initialized.
+  Future<void> _forcePlayerReset() async {
+    if (_controller == null || _isDisposed || !mounted) return;
+    debugPrint('[PlayerScreen] 🔄 Forcing player reset via setupDataSource...');
+    try {
+    // Smart host-only rewrite — preserve encoded query params intact
+    var safeUrl = widget.url;
+    try {
+      final uri = Uri.parse(widget.url);
+      if (uri.host == 'videostr.net' || uri.host.endsWith('.videostr.net')) {
+        safeUrl = uri.replace(host: 'vidlink.pro').toString();
+      }
+    } catch (_) {}
+
+      await _controller?.setupDataSource(
+        BetterPlayerDataSource(
+          BetterPlayerDataSourceType.network,
+          safeUrl,
+          liveStream: _isSports, // Only actual live channels should use liveStream: true
+          videoFormat:
+              safeUrl.contains('m3u8') ||
+                  safeUrl.contains('playlist') ||
+                  safeUrl.contains('proxy/stream')
+              ? BetterPlayerVideoFormat.hls
+              : null,
+          useAsmsTracks: true,
+          useAsmsAudioTracks: true,
+          useAsmsSubtitles: true,
+          subtitles: widget.externalSubtitles,
+          preferredAudioLanguage: SettingsService().defaultAudioLanguage,
+          headers: _getMergedHeaders(safeUrl, widget.referrer, widget.headers),
+          bufferingConfiguration: _getBufferingConfig(),
+        ),
+      );
+
+      if (!_isDisposed && mounted) {
+        _controller?.play();
+        // Restore saved resume position if applicable
+        if (widget.startPosition != null && widget.startPosition! > Duration.zero) {
+          await Future.delayed(const Duration(milliseconds: 500));
+          if (!_isDisposed && mounted) _controller?.seekTo(widget.startPosition!);
+        }
+        debugPrint('[PlayerScreen] ✅ Forced reset complete, playback started');
+      }
+    } catch (e) {
+      debugPrint('[PlayerScreen] ❌ Error during forced reset: $e');
+    }
+  }
+
   @override
   void dispose() {
     _isDisposed = true;
     _saveTimer?.cancel();
+    _initWatchdogTimer?.cancel();
     _saveCurrentProgress(); // Best effort save
     _visibilitySubscription?.cancel();
     WakelockManager.disable();
@@ -1175,13 +1264,131 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ],
                   ),
                 )
-              : _controller == null
-              ? const Center(child: CircularProgressIndicator())
-              : BetterPlayer(controller: _controller!),
+              : Stack(
+                  children: [
+                    _controller == null
+                        ? const SizedBox.shrink()
+                        : BetterPlayer(controller: _controller!),
+                    // Loading overlay: stays in the tree to allow for the fade-out
+                    // animation when _hasInitialized becomes true.
+                    _buildLoadingOverlay(),
+                  ],
+                ),
         ),
       ),
     );
   }
+
+  /// Returns the TMDB image URL for the backdrop (landscape) if available,
+  /// falling back to poster (portrait). Used as the loading screen background.
+  String? get _posterUrl {
+    try {
+      const base = 'https://image.tmdb.org/t/p/w1280';
+      final item = widget.item;
+      if (item == null) return null;
+      // Prefer backdrop (landscape) for the fullscreen loading look
+      final backdrop = item.backdropPath as String?;
+      if (backdrop != null && backdrop.isNotEmpty) return '$base$backdrop';
+      final poster = item.posterPath as String?;
+      if (poster != null && poster.isNotEmpty) return '$base$poster';
+    } catch (_) {}
+    return null;
+  }
+
+  Widget _buildLoadingOverlay() {
+    final imageUrl = _posterUrl;
+    return IgnorePointer(
+      ignoring: _hasInitialized,
+      child: AnimatedOpacity(
+        opacity: _hasInitialized ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 700),
+        curve: Curves.easeOut,
+        child: Container(
+          color: Colors.black,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Backdrop / poster image
+            if (imageUrl != null)
+              Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            // Dark gradient overlay so the spinner is readable
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.3),
+                    Colors.black.withValues(alpha: 0.85),
+                  ],
+                ),
+              ),
+            ),
+            // Title + spinner at the bottom
+            Positioned(
+              left: 48,
+              right: 48,
+              bottom: 56,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      shadows: [
+                        Shadow(color: Colors.black54, blurRadius: 8),
+                      ],
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (!widget.isMovie && widget.season != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Season ${widget.season}  •  Episode ${widget.episode}'
+                        '${widget.episodeName != null ? "  •  ${widget.episodeName}" : ""}',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 20),
+                  const Row(
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Text(
+                        'Loading…',
+                        style: TextStyle(color: Colors.white70, fontSize: 15),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
   BetterPlayerBufferingConfiguration _getBufferingConfig() {
     if (_isSports) {
       // Aggressive buffering for live manifests with short windows (standard IPTV)
@@ -1193,10 +1400,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
     }
     return const BetterPlayerBufferingConfiguration(
-      minBufferMs: 30000,
-      maxBufferMs: 60000,
-      bufferForPlaybackMs: 3000,
-      bufferForPlaybackAfterRebufferMs: 6000,
+      minBufferMs: 45000, // Deep buffer (45s) for high-bitrate stability
+      maxBufferMs: 90000, // Allow up to 90s in memory (safe for 2GB RAM Chromecast)
+      bufferForPlaybackMs: 12000, // Wait for 12s of video before starting (masked by poster)
+      bufferForPlaybackAfterRebufferMs: 18000, // Recover with a heavy 18s cushion
     );
   }
 

@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'package:caffeine_tv/constants.dart';
 import 'package:caffeine_tv/models/provider_load_state.dart';
@@ -295,93 +294,123 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     final s = (double v) => _scale(context, v);
     final backdropPath = widget.movie?.backdropPath ?? widget.tvShow?.backdropPath;
     final title = widget.movie?.title ?? widget.tvShow?.name ?? 'Loading...';
-    final subtitle = widget.tvShow != null 
-        ? 'Season ${widget.season} • Episode ${widget.episode}${widget.episodeName != null ? " • ${widget.episodeName}" : ""}'
-        : widget.movie?.releaseDate?.split('-').first ?? '';
+    
+    final currentProvider = _providerStates[_currentProviderIndex];
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. Backdrop Background
+          // 1. Fullscreen Backdrop (Crisp, not blurred)
           if (backdropPath != null)
             CachedNetworkImage(
               imageUrl: '$tmdbImageBaseUrl/original$backdropPath',
               fit: BoxFit.cover,
+              errorWidget: (_, __, ___) => const SizedBox.shrink(),
+              placeholder: (_, __) => Container(color: Colors.black),
             ),
           
-          // 2. Blur Layer
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-            child: Container(
-              color: Colors.black.withOpacity(0.65),
+          // 2. Premium Linear Gradient (Matches PlayerScreen)
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.1),
+                  Colors.black.withValues(alpha: 0.4),
+                  Colors.black.withValues(alpha: 0.95),
+                ],
+                stops: const [0.0, 0.4, 1.0],
+              ),
             ),
           ),
 
-          // 3. Glass Loading Card
-          Center(
-            child: Container(
-              width: s(1000),
-              padding: EdgeInsets.all(s(48)),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(s(40)),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.15),
-                  width: s(2),
+          // 3. Content - Anchored to bottom-left
+          Positioned(
+            left: 56,
+            right: 56,
+            bottom: 64,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Minimalist Provider Status
+                _buildStatusIndicator(currentProvider),
+                
+                SizedBox(height: s(24)),
+                
+                // Title
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: s(56),
+                    fontWeight: FontWeight.bold,
+                    shadows: const [
+                      Shadow(color: Colors.black54, blurRadius: 12),
+                    ],
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.4),
-                    blurRadius: s(60),
-                    spreadRadius: s(10),
-                  )
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(s(40)),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                  child: SingleChildScrollView(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: s(48)),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            title.toUpperCase(),
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: s(42),
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: s(2),
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          if (subtitle.isNotEmpty) ...[
-                            SizedBox(height: s(12)),
-                            Text(
-                              subtitle,
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: s(24),
-                                fontWeight: FontWeight.w500,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                          SizedBox(height: s(48)),
-                          ProviderLoadingWidget(
-                            providers: _providerStates,
-                            currentIndex: _currentProviderIndex,
-                          ),
-                        ],
-                      ),
+
+                // Episode / Year Info
+                if (widget.tvShow != null || widget.movie?.releaseDate != null) ...[
+                  SizedBox(height: s(8)),
+                  Text(
+                    widget.tvShow != null 
+                        ? 'Season ${widget.season}  •  Episode ${widget.episode}${widget.episodeName != null ? "  •  ${widget.episodeName}" : ""}'
+                        : (widget.movie?.releaseDate?.split('-').first ?? ''),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      fontSize: s(24),
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusIndicator(ProviderLoadState state) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                state.status == ProviderStatus.failed ? Colors.redAccent : Colors.white70,
               ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            state.status == ProviderStatus.loading 
+                ? 'Searching ${state.fullName}…'
+                : 'Connecting to ${state.fullName}…',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
