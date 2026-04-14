@@ -234,8 +234,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
             bufferingConfiguration: const BetterPlayerBufferingConfiguration(
               minBufferMs: 30000,
               maxBufferMs: 60000,
-              bufferForPlaybackMs: 5000,
-              bufferForPlaybackAfterRebufferMs: 8000,
+              bufferForPlaybackMs: 3000,
+              bufferForPlaybackAfterRebufferMs: 12000,
             ),
           ),
         );
@@ -1103,8 +1103,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
             bufferingConfiguration: const BetterPlayerBufferingConfiguration(
               minBufferMs: 30000,
               maxBufferMs: 60000,
-              bufferForPlaybackMs: 2500,
-              bufferForPlaybackAfterRebufferMs: 5000,
+              bufferForPlaybackMs: 3000,
+              bufferForPlaybackAfterRebufferMs: 12000,
             ),
           ),
         );
@@ -1465,10 +1465,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
     }
     return const BetterPlayerBufferingConfiguration(
-      minBufferMs: 45000, // Target 45s of buffered data ahead (buffers WHILE playing)
-      maxBufferMs: 90000, // Allow up to 90s buffer ceiling
-      bufferForPlaybackMs: 2500, // Start playing after just 2.5s (don't wait 12s)
-      bufferForPlaybackAfterRebufferMs: 5000, // Resume after 5s on rebuffer (was 18s!)
+      minBufferMs: 30000, // Target 30s of buffered data ahead
+      maxBufferMs: 60000, // Allow up to 60s buffer ceiling (reduced from 90s to save memory)
+      bufferForPlaybackMs: 3000, // Start playing after 3s
+      bufferForPlaybackAfterRebufferMs: 12000, // Resume after 12s on rebuffer (was 5s!)
     );
   }
 

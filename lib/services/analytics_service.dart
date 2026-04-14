@@ -14,6 +14,7 @@ class AnalyticsService {
   bool _initialized = false;
   final _supabase = Supabase.instance.client;
   String? _appVersion;
+  final Map<String, DateTime> _lastLogTime = {};
 
   Future<void> initialize(String token) async {
     if (token.isEmpty) {
@@ -59,6 +60,17 @@ class AnalyticsService {
   Future<void> _logToSupabase(String eventName, Map<String, dynamic>? properties,
       {bool isQoS = false}) async {
     try {
+      // Throttle QoS events to avoid spamming during unstable playback
+      // (Wait at least 5 seconds between identical QoS event names)
+      if (isQoS) {
+        final lastTime = _lastLogTime[eventName];
+        final now = DateTime.now();
+        if (lastTime != null && now.difference(lastTime).inSeconds < 5) {
+          return;
+        }
+        _lastLogTime[eventName] = now;
+      }
+
       final session = _supabase.auth.currentSession;
       final userId = session?.user.id;
 
