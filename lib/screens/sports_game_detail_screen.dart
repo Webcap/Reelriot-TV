@@ -120,6 +120,9 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
         final data = jsonDecode(response.body);
         setState(() {
           _summary = data;
+          if (_summary != null) {
+            _summary!['media_type'] = 'live';
+          }
           _isLoading = false;
         });
         debugPrint('[SportsGameDetailScreen] Successfully loaded summary.');

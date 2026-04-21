@@ -152,8 +152,9 @@ class WatchHistoryService {
         }
       }
       
-      if (mType == 'live' || mediaId == -100) {
-        debugPrint('[WatchHistory] ℹ️ Skipping watch history for live content.');
+      final bool isSportsTitle = title != null && (title.contains(' at ') || title.contains(' vs '));
+      if (mType == 'live' || mediaId == -100 || isSportsTitle) {
+        debugPrint('[WatchHistory] ℹ️ Skipping watch history for live/sports content: $title');
         return;
       }
       

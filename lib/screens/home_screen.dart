@@ -467,7 +467,12 @@ class _MainHomeViewState extends State<_MainHomeView> {
  
         if (history.isNotEmpty) {
           // Try up to 3 items from history to get recommendations
-          final historyItems = history.where((h) => h['media_id'] != null).take(3);
+          final historyItems = history.where((h) {
+            final isLive = h['type'] == 'live' || h['media_type'] == 'live';
+            final title = (h['title'] ?? '').toString();
+            final isSports = title.contains(' at ') || title.contains(' vs ');
+            return h['media_id'] != null && !isLive && !isSports;
+          }).take(3);
           for (final item in historyItems) {
             try {
               final recs = await _api.fetchTvRecommendations(item['media_id']);
