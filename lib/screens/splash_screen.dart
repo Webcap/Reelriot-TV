@@ -122,7 +122,6 @@ class _SplashScreenState extends State<SplashScreen>
       final config = results[1] as Map<String, dynamic>?;
       if (config != null) {
         SettingsService().updateFromConfig(config);
-        AdService.instance.updateEnabledStatus(SettingsService().adsEnabled);
       }
 
       // Handle update result

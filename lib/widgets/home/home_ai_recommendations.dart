@@ -39,36 +39,43 @@ class HomeAiRecommendationsRow extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        title ?? 'AI Recommendations',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: s(48),
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      SizedBox(width: s(24)),
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFE60000), Color(0xFFFF4D4D)],
-                          ),
-                          borderRadius: BorderRadius.circular(s(8)),
-                        ),
-                        child: Text(
-                          'BETA',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: s(14),
-                            fontWeight: FontWeight.bold,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title ?? 'AI Recommendations',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: s(48),
+                              fontWeight: FontWeight.w800,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      ),
-                    ],
+                        SizedBox(width: s(24)),
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFE60000), Color(0xFFFF4D4D)],
+                            ),
+                            borderRadius: BorderRadius.circular(s(8)),
+                          ),
+                          child: Text(
+                            'BETA',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: s(14),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                  SizedBox(width: s(24)),
                   HomeHeroButton(
                     label: 'Refresh',
                     icon: Icons.auto_awesome_outlined,

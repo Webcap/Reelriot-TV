@@ -194,13 +194,17 @@ class ApiService {
 
   Future<core.MovieListResponse> _fetchMovieList(String url) async {
     final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
-    if (res.statusCode != 200) throw Exception('Failed to load movies');
+    if (res.statusCode != 200) {
+      throw Exception('Failed to load movies (Status: ${res.statusCode}, URL: $url)');
+    }
     return core.MovieListResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
   Future<core.TvListResponse> _fetchTvList(String url) async {
     final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
-    if (res.statusCode != 200) throw Exception('Failed to load TV');
+    if (res.statusCode != 200) {
+      throw Exception('Failed to load TV (Status: ${res.statusCode}, URL: $url)');
+    }
     return core.TvListResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 }

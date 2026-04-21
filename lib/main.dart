@@ -66,8 +66,8 @@ Future<void> bootstrap(String envFile) async {
 Future<void> _initializeBgServices() async {
   try {
     // Initialize AdService
-    debugPrint('[Main] 📺 Background initializing AdService...');
-    await AdService.instance.initialize();
+    // Initialize AdService with the current settings flag
+    await AdService.instance.initialize(enabled: SettingsService().adsEnabled);
     debugPrint('[Main] ✅ AdService initialized');
   } catch (e) {
     debugPrint('[Main] ❌ Background initialization failed: $e');

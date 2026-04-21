@@ -31,7 +31,7 @@ class AdService extends ChangeNotifier {
   bool get isBannerLoaded => _bannerAd != null;
 
   Widget getBannerAd() {
-    if (_bannerAd == null) return const SizedBox.shrink();
+    if (!_isEnabled || _bannerAd == null) return const SizedBox.shrink();
     return StartAppBanner(_bannerAd!);
   }
 

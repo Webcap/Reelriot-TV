@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../env.dart';
 import 'dart:ui' as ui;
 import 'analytics_service.dart';
+import 'ad_service.dart';
+
 
 class SettingsService extends ChangeNotifier {
   static final SettingsService _instance = SettingsService._internal();
@@ -108,6 +110,7 @@ class SettingsService extends ChangeNotifier {
       AnalyticsService.instance.initialize(config['mixpanel_token'].toString());
     }
 
+    AdService.instance.updateEnabledStatus(_adsEnabled);
     notifyListeners();
   }
 }

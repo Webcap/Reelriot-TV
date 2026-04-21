@@ -464,22 +464,26 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
          List<MovieListItem>? tvRecommendations;
         String? tvRecommendationsTitle;
-
+ 
         if (history.isNotEmpty) {
-          final lastTv = history.firstWhere((h) => h['media_id'] != null, orElse: () => {});
-          if (lastTv.isNotEmpty) {
+          // Try up to 3 items from history to get recommendations
+          final historyItems = history.where((h) => h['media_id'] != null).take(3);
+          for (final item in historyItems) {
             try {
-              final recs = await _api.fetchTvRecommendations(lastTv['media_id']);
-              tvRecommendations = recs.results.map((t) => MovieListItem(
-                id: t.id,
-                title: t.name,
-                posterPath: t.posterPath,
-                backdropPath: t.backdropPath,
-                overview: t.overview,
-              )).toList();
-              tvRecommendationsTitle = 'Because you watched ${lastTv['title']}';
+              final recs = await _api.fetchTvRecommendations(item['media_id']);
+              if (recs.results.isNotEmpty) {
+                tvRecommendations = recs.results.map((t) => MovieListItem(
+                  id: t.id,
+                  title: t.name,
+                  posterPath: t.posterPath,
+                  backdropPath: t.backdropPath,
+                  overview: t.overview,
+                )).toList();
+                tvRecommendationsTitle = 'Because you watched ${item['title']}';
+                break; // Success!
+              }
             } catch (e) {
-              debugPrint('[HomeScreen] ❌ Error loading TV recommendations: $e');
+              debugPrint('[HomeScreen] ⚠️ Recommendation attempt failed for "${item['title']}" (ID: ${item['media_id']}): $e');
             }
           }
         }
@@ -879,6 +883,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     return Stack(
       children: [
         HomeHeroSection(
+          backgroundOnly: true,
           focusedMovie: _focusedMovie,
           trending: _trending,
           trendingIndex: _trendingIndex,
@@ -931,7 +936,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
         SingleChildScrollView(
           controller: _scrollController,
           primary: false,
-          padding: EdgeInsets.symmetric(horizontal: s(96), vertical: s(60)),
+          padding: EdgeInsets.symmetric(horizontal: s(96)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -943,7 +948,56 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 },
               ),
               if (_updateInfo != null) HomeUpdateCard(updateInfo: _updateInfo!),
-              SizedBox(height: s(150 + 620)), // Gap for hero content
+              HomeHeroSection(
+                contentOnly: true,
+                focusedMovie: _focusedMovie,
+                trending: _trending,
+                trendingIndex: _trendingIndex,
+                liveStreamUrls: _liveStreamUrls,
+                onWatchNow: () async {
+                  if (_isProcessing) return;
+                  _isProcessing = true;
+                  try {
+                    if (_focusedMovie!.mediaType == 'live') {
+                      final url = _liveStreamUrls[_focusedMovie!.id];
+                      if (url == null || url.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Stream link not found yet. Try again later!'))
+                        );
+                        return;
+                      }
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => PlayerScreen(
+                            url: url,
+                            title: _focusedMovie!.title ?? 'Live Event',
+                            item: null,
+                            isMovie: false,
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (_selectedCategory == 'TV Shows') {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: _focusedMovie!.id)),
+                      );
+                    } else {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: _focusedMovie!.id)),
+                      );
+                    }
+                    await _historyService.waitForPendingSaves();
+                    await Future.delayed(const Duration(seconds: 2));
+                    _reloadHistory(forceRefresh: true);
+                  } finally {
+                    _isProcessing = false;
+                    if (mounted) setState(() {});
+                  }
+                },
+                onFavorite: () {},
+              ),
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 500),
                 transitionBuilder: (Widget child, Animation<double> animation) {

@@ -197,6 +197,20 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     }
   }
 
+  String _formatDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return '';
+    try {
+      final date = DateTime.parse(dateStr);
+      final months = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
@@ -398,7 +412,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                                ],
                                               SizedBox(width: s(24)),
                                               Text(
-                                                m.releaseDate?.split('-').first ?? '',
+                                                _formatDate(m.releaseDate),
                                                 style: TextStyle(color: Colors.white70, fontSize: s(20)),
                                               ),
                                               if (m.runtime != null) ...[

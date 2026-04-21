@@ -399,6 +399,20 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
 
   }
 
+  String _formatDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return '';
+    try {
+      final date = DateTime.parse(dateStr);
+      final months = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
@@ -563,7 +577,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                       ),
                                       SizedBox(width: s(24)),
                                       Text(
-                                        show.firstAirDate?.split('-').first ?? '',
+                                        _formatDate(show.firstAirDate),
                                         style: TextStyle(color: Colors.white70, fontSize: s(20)),
                                       ),
                                       SizedBox(width: s(24)),

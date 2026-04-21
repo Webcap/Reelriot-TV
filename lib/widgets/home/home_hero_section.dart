@@ -10,6 +10,8 @@ class HomeHeroSection extends StatelessWidget {
   final Map<int, String> liveStreamUrls;
   final VoidCallback onWatchNow;
   final VoidCallback onFavorite;
+  final bool backgroundOnly;
+  final bool contentOnly;
 
   const HomeHeroSection({
     super.key,
@@ -19,11 +21,27 @@ class HomeHeroSection extends StatelessWidget {
     required this.liveStreamUrls,
     required this.onWatchNow,
     required this.onFavorite,
+    this.backgroundOnly = false,
+    this.contentOnly = false,
   });
 
   @override
   Widget build(BuildContext context) {
     double s(double v) => ResponsiveUtils.scale(context, v);
+
+    if (contentOnly) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(height: s(150)),
+          SizedBox(
+            height: s(620),
+            child: _buildContentSwitcher(context, s),
+          ),
+        ],
+      );
+    }
 
     return Stack(
       children: [
@@ -77,112 +95,117 @@ class HomeHeroSection extends StatelessWidget {
           ),
         ),
         // Content
-        Positioned.fill(
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: s(96)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(height: s(150)),
-                SizedBox(
-                  height: s(620),
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 600),
-                    transitionBuilder: (Widget child, Animation<double> animation) {
-                      return FadeTransition(
-                        opacity: animation,
-                        child: SlideTransition(
-                          position: Tween<Offset>(
-                            begin: const Offset(0.0, 0.05),
-                            end: Offset.zero,
-                          ).animate(CurvedAnimation(
-                            parent: animation,
-                            curve: Curves.easeOutCubic,
-                          )),
-                          child: child,
-                        ),
-                      );
-                    },
-                    child: focusedMovie == null 
-                      ? const SizedBox.shrink()
-                      : Column(
-                          key: ValueKey('hero_content_${focusedMovie!.id}'),
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Brand Label
-                            Container(
-                              padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEC1D24),
-                                borderRadius: BorderRadius.circular(s(4)),
-                              ),
-                              child: Text(
-                                focusedMovie?.mediaType == 'live' ? 'LIVE NOW' : 'TRENDING', 
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: s(15),
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: s(18)),
-                            Text(
-                              focusedMovie?.title?.toUpperCase() ?? '',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: s(130),
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: s(-4),
-                                height: 0.9,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            SizedBox(height: s(24)),
-                            SizedBox(
-                              width: s(780),
-                              child: Text(
-                                focusedMovie?.overview ?? '',
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.8),
-                                  fontSize: s(22),
-                                  fontWeight: FontWeight.w400,
-                                  height: 1.4,
-                                ),
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            SizedBox(height: s(72)),
-                            Row(
-                              children: [
-                                HomeHeroButton(
-                                  label: 'Watch Now',
-                                  icon: Icons.play_arrow_outlined,
-                                  style: HeroButtonStyle.primary,
-                                  onTap: onWatchNow,
-                                ),
-                                SizedBox(width: s(36)),
-                                HomeHeroButton(
-                                  label: 'Favourite',
-                                  icon: Icons.favorite_border,
-                                  style: HeroButtonStyle.secondaryRed,
-                                  onTap: onFavorite,
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: s(48)),
-                            _buildSliderIndicators(context),
-                          ],
-                        ),
+        if (!backgroundOnly)
+          Positioned.fill(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: s(96)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(height: s(150)),
+                  SizedBox(
+                    height: s(620),
+                    child: _buildContentSwitcher(context, s),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
       ],
+    );
+  }
+
+  Widget _buildContentSwitcher(BuildContext context, double Function(double) s) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 600),
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0.0, 0.05),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            )),
+            child: child,
+          ),
+        );
+      },
+      child: focusedMovie == null 
+        ? const SizedBox.shrink()
+        : Column(
+            key: ValueKey('hero_content_${focusedMovie!.id}'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Brand Label
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEC1D24),
+                  borderRadius: BorderRadius.circular(s(4)),
+                ),
+                child: Text(
+                  focusedMovie?.mediaType == 'live' ? 'LIVE NOW' : 'TRENDING', 
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: s(15),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              SizedBox(height: s(18)),
+              Text(
+                focusedMovie?.title?.toUpperCase() ?? '',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: s(130),
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: s(-4),
+                  height: 0.9,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: s(24)),
+              SizedBox(
+                width: s(780),
+                child: Text(
+                  focusedMovie?.overview ?? '',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    fontSize: s(22),
+                    fontWeight: FontWeight.w400,
+                    height: 1.4,
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              SizedBox(height: s(72)),
+              Row(
+                children: [
+                  HomeHeroButton(
+                    label: 'Watch Now',
+                    icon: Icons.play_arrow_outlined,
+                    style: HeroButtonStyle.primary,
+                    onTap: onWatchNow,
+                  ),
+                  SizedBox(width: s(36)),
+                  HomeHeroButton(
+                    label: 'Favourite',
+                    icon: Icons.favorite_border,
+                    style: HeroButtonStyle.secondaryRed,
+                    onTap: onFavorite,
+                  ),
+                ],
+              ),
+              SizedBox(height: s(48)),
+              _buildSliderIndicators(context),
+            ],
+          ),
     );
   }
 
