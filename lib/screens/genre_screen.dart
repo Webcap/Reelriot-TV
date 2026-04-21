@@ -4,7 +4,6 @@ import 'package:caffeine_tv/widgets/poster_card.dart';
 import 'package:caffeine_tv/screens/movie_detail_screen.dart';
 import 'package:caffeine_tv/screens/tv_detail_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'dart:ui';
 
 class GenreScreen extends StatefulWidget {
@@ -130,7 +129,7 @@ class _GenreScreenState extends State<GenreScreen> {
               height: s(800),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFFEC1D24).withOpacity(0.08),
+                color: const Color(0xFFEC1D24).withValues(alpha: 0.08),
               ),
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 100, sigmaY: 100),
@@ -204,10 +203,10 @@ class _GenreScreenState extends State<GenreScreen> {
           width: double.infinity,
           padding: EdgeInsets.fromLTRB(s(96), s(80), s(96), s(40)),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.35),
+            color: Colors.black.withValues(alpha: 0.35),
             border: Border(
               bottom: BorderSide(
-                color: Colors.white.withOpacity(0.08),
+                color: Colors.white.withValues(alpha: 0.08),
                 width: s(1.5),
               ),
             ),
@@ -231,7 +230,7 @@ class _GenreScreenState extends State<GenreScreen> {
                   Text(
                     widget.isMovie ? 'MOVIES' : 'TV SHOWS',
                     style: TextStyle(
-                      color: const Color(0xFFEC1D24).withOpacity(0.9),
+                      color: const Color(0xFFEC1D24).withValues(alpha: 0.9),
                       fontSize: s(20),
                       fontWeight: FontWeight.bold,
                       letterSpacing: s(4),
@@ -280,17 +279,17 @@ class _GenreScreenState extends State<GenreScreen> {
               decoration: BoxDecoration(
                 color: isFocused 
                   ? Colors.white 
-                  : (isSelected ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.04)),
+                  : (isSelected ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.04)),
                 borderRadius: BorderRadius.circular(s(16)),
                 border: Border.all(
                   color: isFocused 
                     ? Colors.white 
-                    : (isSelected ? Colors.white.withOpacity(0.3) : Colors.white10),
+                    : (isSelected ? Colors.white.withValues(alpha: 0.3) : Colors.white10),
                   width: s(2),
                 ),
                 boxShadow: isFocused ? [
                   BoxShadow(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     blurRadius: s(20),
                     spreadRadius: s(2),
                   )
@@ -322,7 +321,7 @@ class _GenreScreenState extends State<GenreScreen> {
               duration: const Duration(milliseconds: 200),
               padding: EdgeInsets.all(s(24)),
               decoration: BoxDecoration(
-                color: focused ? Colors.white : Colors.white.withOpacity(0.05),
+                color: focused ? Colors.white : Colors.white.withValues(alpha: 0.05),
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: focused ? Colors.white : Colors.white24,
@@ -344,7 +343,7 @@ class _GenreScreenState extends State<GenreScreen> {
   Widget _buildSkeletonCard(double Function(double) s) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
+        color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(s(20)),
       ),
     );

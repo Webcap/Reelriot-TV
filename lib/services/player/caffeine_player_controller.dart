@@ -26,35 +26,25 @@ class CaffeinePlayerEvent {
   CaffeinePlayerEvent(this.type, {this.position, this.message});
 }
 
-enum CaffeinePlayerSubtitlesSourceType {
-  network,
-  file,
-}
-
 class CaffeinePlayerSubtitlesSource {
   final String? name;
-  final List<String>? urls;
+  final String? url;
   final String? data;
-  final CaffeinePlayerSubtitlesSourceType type;
 
-  CaffeinePlayerSubtitlesSource({
-    this.name,
-    this.urls,
-    this.data,
-    this.type = CaffeinePlayerSubtitlesSourceType.network,
-  });
+  CaffeinePlayerSubtitlesSource({this.name, this.url, this.data});
 }
 
 class CaffeinePlayerController extends ChangeNotifier {
   late final Player player;
   late final VideoController videoController;
-  
+
   String name = '';
   String? watchingText;
-  
+
   final List<void Function(CaffeinePlayerEvent)> _listeners = [];
-  final StreamController<bool> _controlsVisibilityStreamController = StreamController<bool>.broadcast();
-  
+  final StreamController<bool> _controlsVisibilityStreamController =
+      StreamController<bool>.broadcast();
+
   bool _isBuffering = false;
   bool _controlsVisible = false;
 
@@ -64,14 +54,19 @@ class CaffeinePlayerController extends ChangeNotifier {
     _setupListeners();
   }
 
-  Stream<bool> get controlsVisibilityStream => _controlsVisibilityStreamController.stream;
+  Stream<bool> get controlsVisibilityStream =>
+      _controlsVisibilityStreamController.stream;
 
   void _setupListeners() {
     player.stream.buffering.listen((isBuffering) {
       _isBuffering = isBuffering;
-      _emit(isBuffering ? CaffeinePlayerEventType.bufferingStart : CaffeinePlayerEventType.bufferingEnd);
+      _emit(
+        isBuffering
+            ? CaffeinePlayerEventType.bufferingStart
+            : CaffeinePlayerEventType.bufferingEnd,
+      );
     });
-    
+
     player.stream.completed.listen((completed) {
       if (completed) _emit(CaffeinePlayerEventType.finished);
     });
@@ -81,7 +76,9 @@ class CaffeinePlayerController extends ChangeNotifier {
     });
 
     player.stream.playing.listen((playing) {
-      _emit(playing ? CaffeinePlayerEventType.play : CaffeinePlayerEventType.pause);
+      _emit(
+        playing ? CaffeinePlayerEventType.play : CaffeinePlayerEventType.pause,
+      );
     });
 
     player.stream.position.listen((position) {
@@ -89,8 +86,16 @@ class CaffeinePlayerController extends ChangeNotifier {
     });
   }
 
-  void _emit(CaffeinePlayerEventType type, {Duration? position, String? message}) {
-    final event = CaffeinePlayerEvent(type, position: position, message: message);
+  void _emit(
+    CaffeinePlayerEventType type, {
+    Duration? position,
+    String? message,
+  }) {
+    final event = CaffeinePlayerEvent(
+      type,
+      position: position,
+      message: message,
+    );
     for (var listener in _listeners.toList()) {
       listener(event);
     }
@@ -108,67 +113,88 @@ class CaffeinePlayerController extends ChangeNotifier {
   void toggleControlsVisibility(bool visible) {
     _controlsVisible = visible;
     _controlsVisibilityStreamController.add(visible);
-    _emit(visible ? CaffeinePlayerEventType.controlsVisible : CaffeinePlayerEventType.controlsHiddenEnd);
+    _emit(
+      visible
+          ? CaffeinePlayerEventType.controlsVisible
+          : CaffeinePlayerEventType.controlsHiddenEnd,
+    );
   }
 
-  /// Compatibility method for BetterPlayer migration
-  Future<void> setupDataSource(dynamic dataSource) async {
-    // This is a bridge for code that hasn't been fully refactored yet
-    // In a real scenario, we'd map BetterPlayerDataSource to setDataSource parameters
-    // For now, we just emit initialized to satisfy some logic
-    _emit(CaffeinePlayerEventType.initialized);
-  }
-
-  Future<void> setDataSource(String url, {
-    Map<String, String>? headers, 
+  Future<void> setDataSource(
+    String url, {
+    Map<String, String>? headers,
     bool liveStream = false,
     Duration startAt = Duration.zero,
     List<CaffeinePlayerSubtitlesSource>? subtitles,
   }) async {
     if (headers != null && headers.isNotEmpty) {
-      final headerString = headers.entries.map((e) => "${e.key}: ${e.value}").join("\r\n");
-      player.setProperty('http-header-fields', headerString);
+      final headerString = headers.entries
+          .map((e) => "${e.key}: ${e.value}")
+          .join("\r\n");
+      (player.platform as dynamic).setProperty('http-header-fields', headerString);
     }
 
     if (liveStream) {
-      // Stability optimizations for live streams (Stability Over Latency)
-      player.setProperty('demuxer-readahead-secs', '10');
-      player.setProperty('cache-secs', '15');
-      // Force hardware decoding
-      player.setProperty('hwdec', 'mediacodec');
+      // Stability optimizations for live streams
+      (player.platform as dynamic).setProperty('demuxer-readahead-secs', '10');
+      (player.platform as dynamic).setProperty('cache-secs', '15');
+      (player.platform as dynamic).setProperty('hwdec', 'mediacodec');
     }
 
-    // In media_kit, we can't easily pass multiple external subtitles in the Media constructor
-    // but we can load them after opening or use mpv properties.
-    // For now, we just open the media.
-    await player.open(Media(url, extras: {'start': startAt.inSeconds.toString()}), play: true);
-    
-    if (startAt > Duration.zero) {
-      await player.seek(startAt);
-    }
-
-    // Load external subtitles if any
+    // Handle subtitles
     if (subtitles != null && subtitles.isNotEmpty) {
       for (var sub in subtitles) {
-        if (sub.data != null) {
-          player.setSubtitleTrack(SubtitleTrack.data(sub.data!, title: sub.name));
-        } else if (sub.urls != null && sub.urls!.isNotEmpty) {
-           // We use the first URL for each source
-           player.setSubtitleTrack(SubtitleTrack.uri(sub.urls!.first, title: sub.name));
+        if (sub.url != null) {
+          player.setSubtitleTrack(SubtitleTrack.uri(
+            sub.url!,
+            title: sub.name,
+          ));
+        } else if (sub.data != null) {
+          player.setSubtitleTrack(SubtitleTrack.data(
+            sub.data!,
+            title: sub.name,
+          ));
         }
       }
     }
-    
+
+    await player.open(
+      Media(url),
+      play: true,
+    );
+    if (startAt > Duration.zero) {
+      await player.seek(startAt);
+      
+      StreamSubscription<Duration>? sub;
+      sub = player.stream.duration.listen((d) {
+        if (d > Duration.zero) {
+          player.seek(startAt);
+          sub?.cancel();
+        }
+      });
+    }
+
     _emit(CaffeinePlayerEventType.initialized);
+  }
+
+  // Bridge for legacy code
+  Future<void> setupDataSource(dynamic dataSource) async {
+    // Legacy bridge: try to extract URL if it's a BetterPlayerDataSource (even if type is missing)
+    try {
+      final url = (dataSource as dynamic).url as String;
+      return setDataSource(url);
+    } catch (e) {
+      debugPrint('[CaffeinePlayerController] ⚠️ setupDataSource failed: $e');
+    }
   }
 
   void play() => player.play();
   void pause() => player.pause();
   void seekTo(Duration position) => player.seek(position);
-  
+
   bool isPlaying() => player.state.playing;
   bool isBuffering() => _isBuffering;
-  
+
   Duration get position => player.state.position;
   Duration get duration => player.state.duration;
 

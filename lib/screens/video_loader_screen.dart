@@ -1,4 +1,5 @@
 import 'package:caffeine_core/caffeine_core.dart' as core;
+import 'package:caffeine_tv/services/player/caffeine_player_controller.dart';
 import 'package:caffeine_tv/constants.dart';
 import 'package:caffeine_tv/models/provider_load_state.dart';
 import 'package:caffeine_tv/screens/player_screen.dart';
@@ -13,7 +14,6 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:caffeine_tv/utils/wakelock_manager.dart';
-import 'package:caffeine_tv/services/player/caffeine_player_controller.dart';
 
 class VideoLoaderScreen extends StatefulWidget {
   final core.MovieDetail? movie;
@@ -46,7 +46,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   final WatchHistoryService _historyService = WatchHistoryService();
   final SubtitleService _subtitleService = SubtitleService();
   final SettingsService _settings = SettingsService();
-  
+
   final List<Map<String, String>> _providers = [
     {'code': 'vidlink', 'name': 'VidLink'},
     {'code': 'vixsrc', 'name': 'Vixsrc'},
@@ -62,21 +62,27 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   void initState() {
     super.initState();
     WakelockManager.enable();
-    
+
     // Prioritize preferred provider if specified
     if (widget.preferredProvider != null) {
-      final prefIndex = _providers.indexWhere((p) => p['code'] == widget.preferredProvider);
+      final prefIndex = _providers.indexWhere(
+        (p) => p['code'] == widget.preferredProvider,
+      );
       if (prefIndex != -1) {
         final pref = _providers.removeAt(prefIndex);
         _providers.insert(0, pref);
       }
     }
 
-    _providerStates = _providers.map((p) => ProviderLoadState(
-      codeName: p['code']!,
-      fullName: p['name']!,
-      status: ProviderStatus.pending,
-    )).toList();
+    _providerStates = _providers
+        .map(
+          (p) => ProviderLoadState(
+            codeName: p['code']!,
+            fullName: p['name']!,
+            status: ProviderStatus.pending,
+          ),
+        )
+        .toList();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -90,12 +96,18 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     final mediaName = widget.movie?.title ?? widget.tvShow?.name;
     debugPrint('[VideoLoader] 🎬 Loading media: $mediaName (ID: $mediaId)');
     if (widget.tvShow != null) {
-      debugPrint('[VideoLoader] 📺 TV Show: S${widget.season}E${widget.episode}');
+      debugPrint(
+        '[VideoLoader] 📺 TV Show: S${widget.season}E${widget.episode}',
+      );
       if (widget.season == null || widget.episode == null) {
-        debugPrint('[VideoLoader] ❌ Cannot load TV stream: season or episode missing');
+        debugPrint(
+          '[VideoLoader] ❌ Cannot load TV stream: season or episode missing',
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not determine which episode to play')),
+            const SnackBar(
+              content: Text('Could not determine which episode to play'),
+            ),
           );
           Navigator.of(context).pop();
         }
@@ -128,39 +140,55 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
         _providerStates[i].status = ProviderStatus.loading;
       });
 
-      debugPrint('[VideoLoader] 🔍 Trying provider: $providerName ($providerCode) [${i + 1}/${_providers.length}]');
+      debugPrint(
+        '[VideoLoader] 🔍 Trying provider: $providerName ($providerCode) [${i + 1}/${_providers.length}]',
+      );
 
       try {
         core.ProviderStreamResponse response;
         if (widget.movie != null) {
-          response = await _api.fetchMovieStream(widget.movie!.id, provider: providerCode);
+          response = await _api.fetchMovieStream(
+            widget.movie!.id,
+            provider: providerCode,
+          );
         } else {
           response = await _api.fetchTvStream(
-            widget.tvShow!.id, 
-            widget.season!, 
-            widget.episode!, 
-            provider: providerCode
+            widget.tvShow!.id,
+            widget.season!,
+            widget.episode!,
+            provider: providerCode,
           );
         }
 
-        if (response.success && response.links != null && response.links!.isNotEmpty) {
-          debugPrint('[VideoLoader] ✅ Found ${response.links!.length} stream(s) from $providerName');
+        if (response.success &&
+            response.links != null &&
+            response.links!.isNotEmpty) {
+          debugPrint(
+            '[VideoLoader] ✅ Found ${response.links!.length} stream(s) from $providerName',
+          );
           if (!mounted) return;
 
           // 1. Collect all potential subtitle links
           List<core.SubtitleLink> allSubtitleLinks = [];
 
-          debugPrint('[VideoLoader] ℹ️ Subtitle Settings: useExternal=${_settings.useExternalSubtitles}, hasKey=${_settings.opensubtitlesKey.isNotEmpty}');
+          debugPrint(
+            '[VideoLoader] ℹ️ Subtitle Settings: useExternal=${_settings.useExternalSubtitles}, hasKey=${_settings.opensubtitlesKey.isNotEmpty}',
+          );
 
           // External Subtitles (Prioritized)
           if (_settings.useExternalSubtitles &&
               _settings.opensubtitlesKey.isNotEmpty) {
             debugPrint(
-                '[VideoLoader] 🔍 External subtitles enabled. Checking Open Subtitles...');
+              '[VideoLoader] 🔍 External subtitles enabled. Checking Open Subtitles...',
+            );
             try {
               final int tmdbId = widget.movie?.id ?? widget.tvShow!.id;
               // Search for English, Spanish, and the user's default language
-              final validLangs = {'en', 'es', _settings.language}.where((l) => l.isNotEmpty).toSet();
+              final validLangs = {
+                'en',
+                'es',
+                _settings.language,
+              }.where((l) => l.isNotEmpty).toSet();
               final searchLangs = validLangs.join(',');
 
               final extSubs = await _subtitleService.searchSubtitles(
@@ -173,7 +201,8 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
 
               if (extSubs.isNotEmpty) {
                 debugPrint(
-                    '[VideoLoader] ✅ Found ${extSubs.length} Open Subtitles. Adding top tracks...');
+                  '[VideoLoader] ✅ Found ${extSubs.length} Open Subtitles. Adding top tracks...',
+                );
 
                 // Track added languages to ensure diversity (one best per lang)
                 final addedLangs = <String>{};
@@ -187,35 +216,46 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
 
                   if (fileId != null && !addedLangs.contains(lang)) {
                     final downloadUrl = await _subtitleService.downloadSubtitle(
-                        fileId, _settings.opensubtitlesKey);
+                      fileId,
+                      _settings.opensubtitlesKey,
+                    );
 
                     if (downloadUrl != null) {
                       addedLangs.add(lang);
                       addedCount++;
-                      allSubtitleLinks.add(core.SubtitleLink(
-                        file: downloadUrl,
-                        label:
-                            '${sub.attr?.languageName ?? lang} (OpenSubtitles)',
-                      ));
+                      allSubtitleLinks.add(
+                        core.SubtitleLink(
+                          file: downloadUrl,
+                          label:
+                              '${sub.attr?.languageName ?? lang} (OpenSubtitles)',
+                        ),
+                      );
                     }
                   }
                 }
               }
             } catch (e) {
-              debugPrint('[VideoLoader] ⚠️ External subtitle search failed: $e');
+              debugPrint(
+                '[VideoLoader] ⚠️ External subtitle search failed: $e',
+              );
             }
           }
 
           // Internal subtitles from provider (Fallback/Secondary)
           if (response.links!.first.subtitles.isNotEmpty) {
             debugPrint(
-                '[VideoLoader] 📝 Found ${response.links!.first.subtitles.length} internal subtitles');
+              '[VideoLoader] 📝 Found ${response.links!.first.subtitles.length} internal subtitles',
+            );
             allSubtitleLinks.addAll(response.links!.first.subtitles);
           }
 
           // 2. Parse and process all collected subtitles
-          final langIndex = supportedLanguages.indexWhere((l) => l.languageCode == _settings.language);
-          final defaultLanguage = langIndex != -1 ? supportedLanguages[langIndex].englishName : 'English';
+          final langIndex = supportedLanguages.indexWhere(
+            (l) => l.languageCode == _settings.language,
+          );
+          final defaultLanguage = langIndex != -1
+              ? supportedLanguages[langIndex].englishName
+              : 'English';
 
           final List<CaffeinePlayerSubtitlesSource> subs = await VideoUtils.parseSubtitles(
             subtitles: allSubtitleLinks,
@@ -224,14 +264,18 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
             getSubtitleContent: _subtitleService.getSubtitleContent,
           );
 
-          debugPrint('[VideoLoader] 🏁 Total processed subtitles: ${subs.length}');
+          debugPrint(
+            '[VideoLoader] 🏁 Total processed subtitles: ${subs.length}',
+          );
 
           setState(() {
             _providerStates[i].status = ProviderStatus.success;
             _isDone = true;
           });
 
-          debugPrint('[VideoLoader] 🚀 Launching PlayerScreen with URL: ${response.links!.first.url}');
+          debugPrint(
+            '[VideoLoader] 🚀 Launching PlayerScreen with URL: ${response.links!.first.url}',
+          );
           if (!mounted) return;
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
@@ -254,7 +298,9 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
           );
           return;
         } else {
-          debugPrint('[VideoLoader] ❌ Provider $providerName returned no links or success=false');
+          debugPrint(
+            '[VideoLoader] ❌ Provider $providerName returned no links or success=false',
+          );
           setState(() {
             _providerStates[i].status = ProviderStatus.failed;
           });
@@ -270,7 +316,9 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     }
 
     if (mounted && !_isDone) {
-      debugPrint('[VideoLoader] 🚫 All providers failed to return a stream for $mediaName');
+      debugPrint(
+        '[VideoLoader] 🚫 All providers failed to return a stream for $mediaName',
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No stream available from any provider')),
@@ -293,9 +341,10 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   @override
   Widget build(BuildContext context) {
     final s = (double v) => _scale(context, v);
-    final backdropPath = widget.movie?.backdropPath ?? widget.tvShow?.backdropPath;
+    final backdropPath =
+        widget.movie?.backdropPath ?? widget.tvShow?.backdropPath;
     final title = widget.movie?.title ?? widget.tvShow?.name ?? 'Loading...';
-    
+
     final currentProvider = _providerStates[_currentProviderIndex];
 
     return Scaffold(
@@ -311,7 +360,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
               errorWidget: (_, __, ___) => const SizedBox.shrink(),
               placeholder: (_, __) => Container(color: Colors.black),
             ),
-          
+
           // 2. Premium Linear Gradient (Matches PlayerScreen)
           Container(
             decoration: BoxDecoration(
@@ -339,9 +388,9 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
               children: [
                 // Minimalist Provider Status
                 _buildStatusIndicator(currentProvider),
-                
+
                 SizedBox(height: s(24)),
-                
+
                 // Title
                 Text(
                   title,
@@ -358,10 +407,11 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
                 ),
 
                 // Episode / Year Info
-                if (widget.tvShow != null || widget.movie?.releaseDate != null) ...[
+                if (widget.tvShow != null ||
+                    widget.movie?.releaseDate != null) ...[
                   SizedBox(height: s(8)),
                   Text(
-                    widget.tvShow != null 
+                    widget.tvShow != null
                         ? 'Season ${widget.season}  •  Episode ${widget.episode}${widget.episodeName != null ? "  •  ${widget.episodeName}" : ""}'
                         : (widget.movie?.releaseDate?.split('-').first ?? ''),
                     style: TextStyle(
@@ -399,13 +449,15 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
             child: CircularProgressIndicator(
               strokeWidth: 2,
               valueColor: AlwaysStoppedAnimation<Color>(
-                state.status == ProviderStatus.failed ? Colors.redAccent : Colors.white70,
+                state.status == ProviderStatus.failed
+                    ? Colors.redAccent
+                    : Colors.white70,
               ),
             ),
           ),
           const SizedBox(width: 12),
           Text(
-            state.status == ProviderStatus.loading 
+            state.status == ProviderStatus.loading
                 ? 'Searching ${state.fullName}…'
                 : 'Connecting to ${state.fullName}…',
             style: const TextStyle(

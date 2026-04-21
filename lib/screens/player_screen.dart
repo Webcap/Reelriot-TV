@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:media_kit_video/media_kit_video.dart';
+import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'package:caffeine_tv/services/player/caffeine_player_controller.dart';
 import 'package:caffeine_tv/services/settings_service.dart';
 import 'package:caffeine_tv/services/watch_history_service.dart';
@@ -74,7 +74,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _isRefreshing = false;
   bool _isDisposed = false;
   bool _isHandlingException = false;
-  bool _hasInitialized = false; // Tracks if BetterPlayerEventType.initialized has fired
+  bool _hasInitialized =
+      false; // Tracks if BetterPlayerEventType.initialized has fired
   Duration? _lastKnownPosition;
   DateTime? _loadStartTime;
   DateTime? _bufferingStartTime;
@@ -119,8 +120,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       // Watchdog: The Chromecast Amlogic AVC decoder can stall during initialization.
       _initWatchdogTimer = Timer(const Duration(seconds: 6), () {
-        if (!mounted || _isDisposed || _hasInitialized || _isHandlingException) return;
-        debugPrint('[PlayerScreen] ⚠️ Init watchdog fired — player not initialized after 6s, forcing reset');
+        if (!mounted || _isDisposed || _hasInitialized || _isHandlingException)
+          return;
+        debugPrint(
+          '[PlayerScreen] ⚠️ Init watchdog fired — player not initialized after 6s, forcing reset',
+        );
         _forcePlayerReset();
       });
     });
@@ -131,7 +135,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final langCode = SettingsService().language;
     final apiKey = SettingsService().opensubtitlesKey;
 
-    debugPrint('[PlayerScreen] 🔍 Auto-discovery started (useExternal: $useExternal, language: $langCode, key: ${apiKey.isNotEmpty ? "YES" : "NO"})');
+    debugPrint(
+      '[PlayerScreen] 🔍 Auto-discovery started (useExternal: $useExternal, language: $langCode, key: ${apiKey.isNotEmpty ? "YES" : "NO"})',
+    );
 
     if (!useExternal) return;
     if (_isSports || _isRefreshing || _isDisposed) return;
@@ -139,36 +145,50 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     final lang = supportedLanguages.firstWhere(
       (l) => l.languageCode == langCode,
-      orElse: () => SubLanguages(languageName: '', languageCode: '', englishName: 'Unknown'),
+      orElse: () => SubLanguages(
+        languageName: '',
+        languageCode: '',
+        englishName: 'Unknown',
+      ),
     );
 
     final langName = lang.englishName;
 
     // 1. Check if we already have this language in externalSubtitles
-    final existing = widget.externalSubtitles?.any((s) => s.name?.contains(langName) ?? false) ?? false;
+    final existing =
+        widget.externalSubtitles?.any(
+          (s) => s.name?.contains(langName) ?? false,
+        ) ??
+        false;
     if (existing) {
-       debugPrint('[PlayerScreen] ℹ️ Subtitles for $langName already present, skipping auto-discovery.');
-       return;
+      debugPrint(
+        '[PlayerScreen] ℹ️ Subtitles for $langName already present, skipping auto-discovery.',
+      );
+      return;
     }
 
     // Robust ID extraction for Map and model types
-    final dynamic rawId = widget.item is Map 
+    final dynamic rawId = widget.item is Map
         ? (widget.item['id'] ?? widget.item['media_id'])
         : widget.item?.id;
 
-    final int? tmdbId = rawId is int 
-        ? rawId 
+    final int? tmdbId = rawId is int
+        ? rawId
         : int.tryParse(rawId?.toString() ?? '');
 
     debugPrint('[PlayerScreen] 🔍 Extracted ID: $tmdbId (from raw: $rawId)');
 
     if (tmdbId == null || tmdbId == 0) {
-      debugPrint('[PlayerScreen] ❌ Could not extract a valid TMDb ID, aborting auto-discovery.');
+      debugPrint(
+        '[PlayerScreen] ❌ Could not extract a valid TMDb ID, aborting auto-discovery.',
+      );
       return;
     }
 
     try {
-      debugPrint('[PlayerScreen] 📡 Searching OpenSubtitles for $langName ($langCode)...');
+      debugPrint(
+        '[PlayerScreen] 📡 Searching OpenSubtitles for $langName ($langCode)...',
+      );
       final downloadUrl = await _subtitleService.discoverBestSubtitle(
         tmdbId: tmdbId,
         languageCode: langCode,
@@ -179,11 +199,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       if (downloadUrl != null && !_isDisposed && mounted) {
         debugPrint('[PlayerScreen] ✅ Subtitle URL found: $downloadUrl');
-        
+
         final newSource = CaffeinePlayerSubtitlesSource(
           name: '$langName (Auto)',
-          urls: [downloadUrl],
-          type: CaffeinePlayerSubtitlesSourceType.network,
+          url: downloadUrl,
         );
 
         // Merge with existing external subtitles
@@ -195,39 +214,45 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // Ensure uniqueness by name
         final Map<String, CaffeinePlayerSubtitlesSource> uniqueSubs = {};
         for (var sub in updatedExternalSubs) {
-           if (sub.name != null) uniqueSubs[sub.name!] = sub;
+          if (sub.name != null) uniqueSubs[sub.name!] = sub;
         }
         final finalSubs = uniqueSubs.values.toList();
 
         final currentPosition = _controller?.position ?? Duration.zero;
         final currentUrl = widget.url;
 
-        debugPrint('[PlayerScreen] 🔄 Updating data source with ${finalSubs.length} subtitles...');
+        debugPrint(
+          '[PlayerScreen] 🔄 Updating data source with ${finalSubs.length} subtitles...',
+        );
 
         // Only auto-setup if we are within the first 60 seconds of playback
-        // Otherwise, it's too disruptive to restart the player.
         if (currentPosition.inSeconds > 60) {
-          debugPrint('[PlayerScreen] ℹ️ Subtitles found too late in playback (>60s), skipping disruptive data source reset.');
+          debugPrint(
+            '[PlayerScreen] ℹ️ Subtitles found too late in playback (>60s), skipping disruptive data source reset.',
+          );
           return;
         }
 
-        // Re-setup data source with new subtitles but don't auto-activate
+        // Re-setup data source with new subtitles
         await _controller?.setDataSource(
           currentUrl,
-          headers: _getMergedHeaders(currentUrl, widget.referrer, widget.headers),
-          liveStream: _isSports,
-          startAt: currentPosition,
+          headers: widget.headers,
           subtitles: finalSubs,
+          startAt: currentPosition,
         );
 
         if (!_isDisposed && mounted) {
           _controller?.seekTo(currentPosition);
           _controller?.play();
-          
-          debugPrint('[PlayerScreen] ✅ Auto-subtitle "$langName (Auto)" added to menu.');
+
+          debugPrint(
+            '[PlayerScreen] ✅ Auto-subtitle "$langName (Auto)" added to menu.',
+          );
         }
       } else {
-        debugPrint('[PlayerScreen] ℹ️ No suitable auto-subtitles found for TMDB ID $tmdbId, language: $langCode');
+        debugPrint(
+          '[PlayerScreen] ℹ️ No suitable auto-subtitles found for TMDB ID $tmdbId, language: $langCode',
+        );
       }
     } catch (e) {
       debugPrint('[PlayerScreen] ❌ Auto-discovery error: $e');
@@ -246,7 +271,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (duration > 0) {
         AnalyticsService.instance.trackEvent('Playback Session', {
           'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
-          'id': widget.item is Map ? widget.item['id']?.toString() : widget.item?.id?.toString(),
+          'id': widget.item is Map
+              ? widget.item['id']?.toString()
+              : widget.item?.id?.toString(),
           'name': widget.title,
           'duration_seconds': duration,
           'provider': widget.providerCode,
@@ -271,8 +298,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       position = duration;
     } else {
       final ctrlPos = _controller!.position;
-      position = (ctrlPos > Duration.zero) 
-          ? ctrlPos 
+      position = (ctrlPos > Duration.zero)
+          ? ctrlPos
           : (_lastKnownPosition ?? Duration.zero);
     }
 
@@ -310,11 +337,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (_) {}
 
     _controller = CaffeinePlayerController();
-    
+
     _loadStartTime = DateTime.now();
     AnalyticsService.instance.trackQoSEvent('Playback Attempt', {
       'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
-      'id': widget.item is Map ? widget.item['id']?.toString() : widget.item?.id?.toString(),
+      'id': widget.item is Map
+          ? widget.item['id']?.toString()
+          : widget.item?.id?.toString(),
       'name': widget.title,
       'url_host': Uri.tryParse(safeUrl)?.host,
     });
@@ -336,10 +365,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _sessionStartTime = DateTime.now();
 
         if (_loadStartTime != null) {
-          final loadTime = DateTime.now().difference(_loadStartTime!).inMilliseconds;
+          final loadTime = DateTime.now()
+              .difference(_loadStartTime!)
+              .inMilliseconds;
           AnalyticsService.instance.trackQoSEvent('Playback Loaded', {
-            'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
-            'id': widget.item is Map ? widget.item['id']?.toString() : widget.item?.id?.toString(),
+            'type': widget.isMovie
+                ? 'movie'
+                : (_isSports ? 'sports' : 'tv_show'),
+            'id': widget.item is Map
+                ? widget.item['id']?.toString()
+                : widget.item?.id?.toString(),
             'load_time_ms': loadTime,
           });
           _loadStartTime = null;
@@ -355,14 +390,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _bufferingStartTime = DateTime.now();
         AnalyticsService.instance.trackQoSEvent('Buffering Start', {
           'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
-          'id': widget.item is Map ? widget.item['id']?.toString() : widget.item?.id?.toString(),
+          'id': widget.item is Map
+              ? widget.item['id']?.toString()
+              : widget.item?.id?.toString(),
         });
       } else if (event.type == CaffeinePlayerEventType.bufferingEnd) {
         if (_bufferingStartTime != null) {
-          final bufferTime = DateTime.now().difference(_bufferingStartTime!).inMilliseconds;
+          final bufferTime = DateTime.now()
+              .difference(_bufferingStartTime!)
+              .inMilliseconds;
           AnalyticsService.instance.trackQoSEvent('Buffering End', {
-            'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
-            'id': widget.item is Map ? widget.item['id']?.toString() : widget.item?.id?.toString(),
+            'type': widget.isMovie
+                ? 'movie'
+                : (_isSports ? 'sports' : 'tv_show'),
+            'id': widget.item is Map
+                ? widget.item['id']?.toString()
+                : widget.item?.id?.toString(),
             'buffer_time_ms': bufferTime,
           });
           _bufferingStartTime = null;
@@ -370,16 +413,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
       } else if (event.type == CaffeinePlayerEventType.error) {
         AnalyticsService.instance.trackQoSEvent('Playback Error', {
           'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
-          'id': widget.item is Map ? widget.item['id']?.toString() : widget.item?.id?.toString(),
+          'id': widget.item is Map
+              ? widget.item['id']?.toString()
+              : widget.item?.id?.toString(),
           'error': event.message,
         });
         _handleException(event.message ?? 'Unknown error');
       } else if (event.type == CaffeinePlayerEventType.progress) {
         if (!_isDisposed) {
           final progress = event.position;
-          if (progress != null && 
-              (_lastKnownPosition == null || (progress.inSeconds != _lastKnownPosition!.inSeconds))) {
-              _lastKnownPosition = progress;
+          if (progress != null &&
+              (_lastKnownPosition == null ||
+                  (progress.inSeconds != _lastKnownPosition!.inSeconds))) {
+            _lastKnownPosition = progress;
           }
         }
       }
@@ -401,10 +447,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _isHandlingException = true;
 
     final errorStr = message.toLowerCase();
-    
+
     // Specific HLS Live errors
-    final isBehindLiveWindow = errorStr.contains('behindlivewindowexception') || errorStr.contains('behind live window');
-    final isPlaylistStuck = errorStr.contains('playliststuckexception') || errorStr.contains('stuck');
+    final isBehindLiveWindow =
+        errorStr.contains('behindlivewindowexception') ||
+        errorStr.contains('behind live window');
+    final isPlaylistStuck =
+        errorStr.contains('playliststuckexception') ||
+        errorStr.contains('stuck');
 
     final isSourceError =
         isBehindLiveWindow ||
@@ -414,16 +464,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
         errorStr.contains('socket') ||
         errorStr.contains('unexpected end');
 
-    final is403 =
-        errorStr.contains('403') ||
-        errorStr.contains('forbidden');
+    final is403 = errorStr.contains('403') || errorStr.contains('forbidden');
 
     if (isBehindLiveWindow || isPlaylistStuck) {
       AnalyticsService.instance.trackQoSEvent('HLS Recovery Attempt', {
         'error_type': isBehindLiveWindow ? 'BehindLiveWindow' : 'PlaylistStuck',
         'url': widget.url,
       });
-      debugPrint('[PlayerScreen] 🔄 Recovering from HLS specific error: $errorStr');
+      debugPrint(
+        '[PlayerScreen] 🔄 Recovering from HLS specific error: $errorStr',
+      );
     }
 
     if (is403) {
@@ -449,7 +499,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
 
       try {
-        final currentPosition = _lastKnownPosition ?? _controller?.position ?? Duration.zero;
+        final currentPosition =
+            _lastKnownPosition ?? _controller?.position ?? Duration.zero;
 
         String? newUrl;
         Map<String, String>? newHeaders;
@@ -476,12 +527,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
           final core.ProviderStreamResponse response;
           if (widget.isMovie) {
-            response = await _api.fetchMovieStream(mediaId, provider: widget.providerCode ?? 'vidlink');
+            response = await _api.fetchMovieStream(
+              mediaId,
+              provider: widget.providerCode ?? 'vidlink',
+            );
           } else {
-            response = await _api.fetchTvStream(mediaId, widget.season!, widget.episode!, provider: widget.providerCode ?? 'vidlink');
+            response = await _api.fetchTvStream(
+              mediaId,
+              widget.season!,
+              widget.episode!,
+              provider: widget.providerCode ?? 'vidlink',
+            );
           }
 
-          if (response.success && response.links != null && response.links!.isNotEmpty) {
+          if (response.success &&
+              response.links != null &&
+              response.links!.isNotEmpty) {
             newUrl = response.links!.first.url;
             newHeaders = response.links!.first.headers;
           }
@@ -564,7 +625,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_controller == null) return;
     final preferred = SettingsService().defaultAudioLanguage.toLowerCase();
     final tracks = _controller!.audioTracks;
-    
+
     for (final track in tracks) {
       final lang = track.language?.toLowerCase() ?? '';
       final title = track.title?.toLowerCase() ?? '';
@@ -704,8 +765,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     // Log final resolved headers for debugging proxy issues
-    debugPrint('[PlayerScreen] 🔑 Final headers for ${Uri.tryParse(url)?.host}: '
-        'Referer=${headers['Referer']}, Origin=${headers['Origin']}');
+    debugPrint(
+      '[PlayerScreen] 🔑 Final headers for ${Uri.tryParse(url)?.host}: '
+      'Referer=${headers['Referer']}, Origin=${headers['Origin']}',
+    );
 
     return headers;
   }
@@ -717,7 +780,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     // Capture current position and save it to history before switching
     await _saveCurrentProgress();
-    final currentPos = _controller?.position ?? _lastKnownPosition;
+    final currentPos =
+        _controller?.position ??
+        _lastKnownPosition;
 
     if (widget.allProviders == null || widget.allProviders!.isEmpty) {
       debugPrint('[PlayerScreen] ❌ No provider list for auto-fallback');
@@ -741,7 +806,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (mounted && !_isDisposed) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (context) => _buildVideoLoader(nextProviderCode, currentPos),
+            builder: (context) =>
+                _buildVideoLoader(nextProviderCode, currentPos),
           ),
         );
       }
@@ -771,8 +837,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
           // Save current position before switching
           await _saveCurrentProgress();
           if (!mounted || _isDisposed) return;
-          
-          final currentPos = _controller?.position ?? _lastKnownPosition;
+
+          final currentPos =
+              _controller?.position ??
+              _lastKnownPosition;
 
           debugPrint(
             '[PlayerScreen] 🔄 Changing provider to: $newProviderCode',
@@ -833,7 +901,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _searchMoreSubtitles(String langCode) async {
-    final int? tmdbId = widget.item is Map 
+    final int? tmdbId = widget.item is Map
         ? (widget.item['id'] ?? widget.item['media_id'])
         : widget.item?.id;
 
@@ -856,12 +924,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
 
       if (searchResults.isNotEmpty) {
-        debugPrint('[PlayerScreen] ✅ Found ${searchResults.length} new subtitles');
-        
+        debugPrint(
+          '[PlayerScreen] ✅ Found ${searchResults.length} new subtitles',
+        );
+
         final List<CaffeinePlayerSubtitlesSource> newSubs = [];
         final langName = supportedLanguages
-            .firstWhere((l) => l.languageCode == langCode,
-                orElse: () => SubLanguages(languageName: '', languageCode: '', englishName: 'Unknown'))
+            .firstWhere(
+              (l) => l.languageCode == langCode,
+              orElse: () => SubLanguages(
+                languageName: '',
+                languageCode: '',
+                englishName: 'Unknown',
+              ),
+            )
             .englishName;
 
         for (var data in searchResults) {
@@ -875,8 +951,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               newSubs.add(
                 CaffeinePlayerSubtitlesSource(
                   name: '$langName (OS)',
-                  urls: [downloadUrl],
-                  type: CaffeinePlayerSubtitlesSourceType.network,
+                  url: downloadUrl,
                 ),
               );
             }
@@ -888,7 +963,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
           return;
         }
 
-        // Merge with existing external subtitles if any
         final List<CaffeinePlayerSubtitlesSource> updatedExternalSubs = [
           ...widget.externalSubtitles ?? [],
           ...newSubs,
@@ -897,28 +971,33 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // Unique filter to avoid duplicates
         final Map<String, CaffeinePlayerSubtitlesSource> uniqueSubs = {};
         for (var sub in updatedExternalSubs) {
-           // Use name as key, might want to be more specific if possible
-           uniqueSubs[sub.name!] = sub;
+          uniqueSubs[sub.name!] = sub;
         }
 
         final finalSubs = uniqueSubs.values.toList();
 
-        final currentPosition = _controller?.position ?? Duration.zero;
+        final currentPosition =
+            _controller?.position ?? Duration.zero;
         final currentUrl = widget.url;
 
         // Re-setup data source with new subtitles
         await _controller?.setDataSource(
           currentUrl,
-          headers: _getMergedHeaders(currentUrl, widget.referrer, widget.headers),
-          liveStream: _isSports,
-          startAt: currentPosition,
+          headers: _getMergedHeaders(
+            currentUrl,
+            widget.referrer,
+            widget.headers,
+          ),
           subtitles: finalSubs,
+          startAt: currentPosition,
         );
 
         _controller?.seekTo(currentPosition);
         _controller?.play();
       } else {
-         debugPrint('[PlayerScreen] ℹ️ No subtitles found for language: $langCode');
+        debugPrint(
+          '[PlayerScreen] ℹ️ No subtitles found for language: $langCode',
+        );
       }
     } catch (e) {
       debugPrint('[PlayerScreen] ❌ Error searching more subtitles: $e');
@@ -934,12 +1013,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// firing BetterPlayerEventType.initialized.
   Future<void> _forcePlayerReset() async {
     if (_controller == null || _isDisposed || !mounted) return;
-    
+
     await _saveCurrentProgress();
     final currentPosition = _controller?.position ?? _lastKnownPosition;
 
-    debugPrint('[PlayerScreen] 🔄 Forcing player reset (media_kit)... '
-        '(saving position: ${currentPosition?.inSeconds}s)');
+    debugPrint(
+      '[PlayerScreen] 🔄 Forcing player reset (media_kit)... '
+      '(saving position: ${currentPosition?.inSeconds}s)',
+    );
     try {
       var safeUrl = widget.url;
       try {
@@ -1016,8 +1097,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           } else {
             _controller?.play();
           }
-          if (!_controlsVisible && !_isDisposed)
-            _setControlsVisibility(true);
+          if (!_controlsVisible && !_isDisposed) _setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 
@@ -1027,8 +1107,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (pos != null) {
             _controller?.seekTo(pos + const Duration(seconds: 10));
           }
-          if (!_controlsVisible && !_isDisposed)
-            _setControlsVisibility(true);
+          if (!_controlsVisible && !_isDisposed) _setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 
@@ -1041,8 +1120,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               target < Duration.zero ? Duration.zero : target,
             );
           }
-          if (!_controlsVisible && !_isDisposed)
-            _setControlsVisibility(true);
+          if (!_controlsVisible && !_isDisposed) _setControlsVisibility(true);
           return KeyEventResult.handled;
         }
 
@@ -1114,7 +1192,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   children: [
                     _controller == null
                         ? const SizedBox.shrink()
-                        : Video(controller: _controller!.videoController),
+                        : mkv.Video(controller: _controller!.videoController),
                     // Loading overlay: stays in the tree to allow for the fade-out
                     // animation when _hasInitialized becomes true.
                     _buildLoadingOverlay(),
@@ -1151,90 +1229,91 @@ class _PlayerScreenState extends State<PlayerScreen> {
         curve: Curves.easeOut,
         child: Container(
           color: Colors.black,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Backdrop / poster image
-            if (imageUrl != null)
-              Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Backdrop / poster image
+              if (imageUrl != null)
+                Image.network(
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              // Dark gradient overlay so the spinner is readable
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.3),
+                      Colors.black.withValues(alpha: 0.85),
+                    ],
+                  ),
+                ),
               ),
-            // Dark gradient overlay so the spinner is readable
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.3),
-                    Colors.black.withValues(alpha: 0.85),
+              // Title + spinner at the bottom
+              Positioned(
+                left: 48,
+                right: 48,
+                bottom: 56,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (!widget.isMovie && widget.season != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          'Season ${widget.season}  •  Episode ${widget.episode}'
+                          '${widget.episodeName != null ? "  •  ${widget.episodeName}" : ""}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 20),
+                    const Row(
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white70,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Text(
+                          'Loading…',
+                          style: TextStyle(color: Colors.white70, fontSize: 15),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-            ),
-            // Title + spinner at the bottom
-            Positioned(
-              left: 48,
-              right: 48,
-              bottom: 56,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    widget.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      shadows: [
-                        Shadow(color: Colors.black54, blurRadius: 8),
-                      ],
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (!widget.isMovie && widget.season != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        'Season ${widget.season}  •  Episode ${widget.episode}'
-                        '${widget.episodeName != null ? "  •  ${widget.episodeName}" : ""}',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 20),
-                  const Row(
-                    children: [
-                      SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
-                        ),
-                      ),
-                      SizedBox(width: 12),
-                      Text(
-                        'Loading…',
-                        style: TextStyle(color: Colors.white70, fontSize: 15),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
+
 
   void _setControlsVisibility(bool visible) {
     if (_isDisposed || !mounted || _controller == null) return;

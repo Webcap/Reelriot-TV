@@ -25,10 +25,10 @@ Future<void> bootstrap(String envFile) async {
   debugPrint('[Main] 🚀 Bootstrapping with $envFile');
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
-  
+
   // Load env first as it's required by subsequent service initializations
   await dotenv.load(fileName: envFile);
-  
+
   // Initialize settings
   await SettingsService().init();
   debugPrint('[Main] ✅ Minimal requirements (env, settings) loaded');
@@ -39,15 +39,13 @@ Future<void> bootstrap(String envFile) async {
   if (url.isNotEmpty && anonKey.isNotEmpty) {
     debugPrint('[Main] 🛠️ Initializing Supabase...');
     try {
-      await Supabase.initialize(
-        url: url,
-        anonKey: anonKey,
-        debug: false,
-      );
+      await Supabase.initialize(url: url, anonKey: anonKey, debug: false);
       // Verify session recovery
       final session = Supabase.instance.client.auth.currentSession;
       if (session != null) {
-        debugPrint('[Main] 👤 Session recovered on startup for: ${session.user.email}');
+        debugPrint(
+          '[Main] 👤 Session recovered on startup for: ${session.user.email}',
+        );
       } else {
         debugPrint('[Main] 👤 No session found on startup');
       }
@@ -85,7 +83,10 @@ class CaffeineTvApp extends StatelessWidget {
       title: 'Caffeine TV',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(useMaterial3: true).copyWith(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFDC2626), brightness: Brightness.dark),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFFDC2626),
+          brightness: Brightness.dark,
+        ),
       ),
       initialRoute: '/',
       routes: {
@@ -114,14 +115,18 @@ class _AuthGate extends StatelessWidget {
           final showHomeOnWait =
               Supabase.instance.client.auth.currentSession != null;
           return SplashScreen(
-            destination: showHomeOnWait ? const HomeScreen() : const PairingScreen(),
+            destination: showHomeOnWait
+                ? const HomeScreen()
+                : const PairingScreen(),
           );
         }
 
-        final session = snapshot.data?.session ??
+        final session =
+            snapshot.data?.session ??
             Supabase.instance.client.auth.currentSession;
-        final destination =
-            session != null ? const HomeScreen() : const PairingScreen();
+        final destination = session != null
+            ? const HomeScreen()
+            : const PairingScreen();
 
         return SplashScreen(destination: destination);
       },

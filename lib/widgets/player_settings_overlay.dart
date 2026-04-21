@@ -14,7 +14,7 @@ class PlayerSettingsOverlay extends StatefulWidget {
   final String providerLabel;
 
   const PlayerSettingsOverlay({
-    super.key, 
+    super.key,
     required this.controller,
     this.currentProvider,
     this.allProviders,
@@ -50,7 +50,7 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
               color: Colors.white.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(28),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.12), 
+                color: Colors.white.withValues(alpha: 0.12),
                 width: 1.5,
               ),
               gradient: LinearGradient(
@@ -79,7 +79,8 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
                     children: [
                       Text(
                         'Player Options',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.w900,
                               letterSpacing: -0.5,
@@ -150,7 +151,9 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
                       ),
                     ],
                   ],
-                  if (widget.onChangeProvider != null && widget.allProviders != null && widget.allProviders!.isNotEmpty) ...[
+                  if (widget.onChangeProvider != null &&
+                      widget.allProviders != null &&
+                      widget.allProviders!.isNotEmpty) ...[
                     const SizedBox(height: 48),
                     _CategoryHeader(title: widget.providerLabel),
                     const SizedBox(height: 16),
@@ -158,7 +161,8 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
                       spacing: 16,
                       runSpacing: 16,
                       children: widget.allProviders!.map((provider) {
-                        final isSelected = widget.currentProvider == provider['code'];
+                        final isSelected =
+                            widget.currentProvider == provider['code'];
                         return _TrackChip(
                           label: provider['name'] ?? 'Unknown',
                           isSelected: isSelected,
@@ -224,7 +228,7 @@ class _TrackChipState extends State<_TrackChip> {
   @override
   Widget build(BuildContext context) {
     final s = (double v) => (v * MediaQuery.of(context).size.width) / 1920;
-    
+
     // Background color logic
     Color bgColor;
     if (widget.isSelected) {
@@ -234,7 +238,7 @@ class _TrackChipState extends State<_TrackChip> {
     } else {
       bgColor = Colors.white.withValues(alpha: 0.05);
     }
-    
+
     // Text color logic
     Color textColor;
     if (widget.isSelected) {
@@ -266,22 +270,28 @@ class _TrackChipState extends State<_TrackChip> {
             color: bgColor,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: _focused ? Colors.white : Colors.white.withValues(alpha: 0.1),
+              color: _focused
+                  ? Colors.white
+                  : Colors.white.withValues(alpha: 0.1),
               width: _focused ? 2 : 1,
             ),
-            boxShadow: _focused ? [
-              BoxShadow(
-                color: Colors.white.withValues(alpha: 0.25),
-                blurRadius: 20,
-                spreadRadius: 2,
-              )
-            ] : [],
+            boxShadow: _focused
+                ? [
+                    BoxShadow(
+                      color: Colors.white.withValues(alpha: 0.25),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                    ),
+                  ]
+                : [],
           ),
           child: Text(
             widget.label,
             style: TextStyle(
               color: textColor,
-              fontWeight: widget.isSelected || _focused ? FontWeight.w900 : FontWeight.w600,
+              fontWeight: widget.isSelected || _focused
+                  ? FontWeight.w900
+                  : FontWeight.w600,
               fontSize: 17,
               letterSpacing: 0.2,
             ),
