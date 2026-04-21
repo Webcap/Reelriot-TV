@@ -337,6 +337,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (_) {}
 
     _controller = CaffeinePlayerController();
+    
+    // Set metadata for controls
+    _controller!.name = widget.title;
+    if (!widget.isMovie && widget.season != null) {
+      _controller!.watchingText = 'Season ${widget.season} • Episode ${widget.episode}'
+          '${widget.episodeName != null ? " • ${widget.episodeName}" : ""}';
+    } else if (widget.item is Map) {
+      _controller!.watchingText = widget.item['release_date']?.split('-')[0] ?? '';
+    }
 
     _loadStartTime = DateTime.now();
     AnalyticsService.instance.trackQoSEvent('Playback Attempt', {
@@ -1193,6 +1202,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     _controller == null
                         ? const SizedBox.shrink()
                         : mkv.Video(controller: _controller!.videoController),
+
+                    // TV Controls overlay
+                    if (_controller != null)
+                      TvPlayerControls(
+                        controller: _controller!,
+                        onVisibilityChanged: (visible) {
+                          _safeSetState(() {
+                            _controlsVisible = visible;
+                          });
+                        },
+                        onShowSettings: _showSettings,
+                      ),
+
                     // Loading overlay: stays in the tree to allow for the fade-out
                     // animation when _hasInitialized becomes true.
                     _buildLoadingOverlay(),

@@ -146,6 +146,17 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     }
   }
 
+  bool get _isReleased {
+    if (_movie?.releaseDate == null || _movie!.releaseDate!.isEmpty) return false;
+    try {
+      final releaseDate = DateTime.parse(_movie!.releaseDate!);
+      // Allow if released today or earlier
+      return releaseDate.isBefore(DateTime.now().add(const Duration(days: 1)));
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _checkFavorite() async {
     final isFav = await _bookmarkService.isBookmarked(widget.movieId, true);
     if (mounted) setState(() => _isFavorite = isFav);
@@ -443,7 +454,8 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                     SizedBox(height: s(48)),
                                     Row(
                                       children: [
-                                        _ActionBtn(
+                                        if (_isReleased) ...[
+                                          _ActionBtn(
                                             label: _movieHistory != null && _movieHistory! > Duration.zero ? 'CONTINUE' : 'WATCH NOW',
                                             icon: Icons.play_arrow,
                                             isPrimary: true,
@@ -454,13 +466,15 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                                 ? (_movieHistory!.inSeconds / 7200).clamp(0.0, 1.0) 
                                                 : null,
                                           ),
-                                        SizedBox(width: s(24)),
+                                          SizedBox(width: s(24)),
+                                        ],
                                         _ActionBtn(
                                           label: _isFavorite ? 'FAVORITED' : 'FAVORITE',
                                           icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
                                           isPrimary: false,
                                           onTap: _toggleFavorite,
                                           s: s,
+                                          autofocus: !_isReleased,
                                         ),
                                         SizedBox(width: s(24)),
                                         _ActionBtn(

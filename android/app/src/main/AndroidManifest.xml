@@ -40,6 +40,9 @@
         <meta-data
             android:name="com.startapp.sdk.APPLICATION_ID"
             android:value="207904245" />
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

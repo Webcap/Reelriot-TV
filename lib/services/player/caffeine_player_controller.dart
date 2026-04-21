@@ -42,15 +42,22 @@ class CaffeinePlayerController extends ChangeNotifier {
   String? watchingText;
 
   final List<void Function(CaffeinePlayerEvent)> _listeners = [];
+  final List<StreamSubscription> _subscriptions = [];
   final StreamController<bool> _controlsVisibilityStreamController =
       StreamController<bool>.broadcast();
 
   bool _isBuffering = false;
   bool _controlsVisible = false;
+  bool _isDisposed = false;
 
   CaffeinePlayerController() {
     player = Player();
-    videoController = VideoController(player);
+    videoController = VideoController(
+      player,
+      configuration: const VideoControllerConfiguration(
+        hwdec: 'mediacodec',
+      ),
+    );
     _setupListeners();
   }
 
@@ -58,32 +65,37 @@ class CaffeinePlayerController extends ChangeNotifier {
       _controlsVisibilityStreamController.stream;
 
   void _setupListeners() {
-    player.stream.buffering.listen((isBuffering) {
+    _subscriptions.add(player.stream.buffering.listen((isBuffering) {
+      if (_isDisposed) return;
       _isBuffering = isBuffering;
       _emit(
         isBuffering
             ? CaffeinePlayerEventType.bufferingStart
             : CaffeinePlayerEventType.bufferingEnd,
       );
-    });
+    }));
 
-    player.stream.completed.listen((completed) {
+    _subscriptions.add(player.stream.completed.listen((completed) {
+      if (_isDisposed) return;
       if (completed) _emit(CaffeinePlayerEventType.finished);
-    });
+    }));
 
-    player.stream.error.listen((error) {
+    _subscriptions.add(player.stream.error.listen((error) {
+      if (_isDisposed) return;
       _emit(CaffeinePlayerEventType.error, message: error);
-    });
+    }));
 
-    player.stream.playing.listen((playing) {
+    _subscriptions.add(player.stream.playing.listen((playing) {
+      if (_isDisposed) return;
       _emit(
         playing ? CaffeinePlayerEventType.play : CaffeinePlayerEventType.pause,
       );
-    });
+    }));
 
-    player.stream.position.listen((position) {
+    _subscriptions.add(player.stream.position.listen((position) {
+      if (_isDisposed) return;
       _emit(CaffeinePlayerEventType.progress, position: position);
-    });
+    }));
   }
 
   void _emit(
@@ -91,6 +103,8 @@ class CaffeinePlayerController extends ChangeNotifier {
     Duration? position,
     String? message,
   }) {
+    if (_isDisposed) return;
+    
     final event = CaffeinePlayerEvent(
       type,
       position: position,
@@ -99,7 +113,11 @@ class CaffeinePlayerController extends ChangeNotifier {
     for (var listener in _listeners.toList()) {
       listener(event);
     }
-    notifyListeners();
+    
+    // Safety check again before notifyListeners
+    if (!_isDisposed) {
+      notifyListeners();
+    }
   }
 
   void addEventsListener(void Function(CaffeinePlayerEvent) listener) {
@@ -111,6 +129,7 @@ class CaffeinePlayerController extends ChangeNotifier {
   }
 
   void toggleControlsVisibility(bool visible) {
+    if (_isDisposed) return;
     _controlsVisible = visible;
     _controlsVisibilityStreamController.add(visible);
     _emit(
@@ -127,6 +146,8 @@ class CaffeinePlayerController extends ChangeNotifier {
     Duration startAt = Duration.zero,
     List<CaffeinePlayerSubtitlesSource>? subtitles,
   }) async {
+    if (_isDisposed) return;
+
     if (headers != null && headers.isNotEmpty) {
       final headerString = headers.entries
           .map((e) => "${e.key}: ${e.value}")
@@ -134,11 +155,29 @@ class CaffeinePlayerController extends ChangeNotifier {
       (player.platform as dynamic).setProperty('http-header-fields', headerString);
     }
 
+    // Performance optimizations for TV boxes (Amlogic/Mali)
+    (player.platform as dynamic).setProperty('hwdec', 'mediacodec');
+    (player.platform as dynamic).setProperty('vd-lavc-fast', 'yes');
+    (player.platform as dynamic).setProperty('vd-lavc-skiploopfilter', 'all');
+    (player.platform as dynamic).setProperty('vd-lavc-threads', '1'); // Reduce sync issues
+    (player.platform as dynamic).setProperty('cache', 'yes');
+    
+    // Low-latency and sync optimizations for Chromecast/Mali
+    (player.platform as dynamic).setProperty('video-sync', 'display-resample');
+    (player.platform as dynamic).setProperty('framedrop', 'vo');
+    (player.platform as dynamic).setProperty('opengl-swapinterval', '0');
+    
+    // Try to force a more compatible format for Mali
+    (player.platform as dynamic).setProperty('fbo-format', 'rgba8');
+
     if (liveStream) {
       // Stability optimizations for live streams
       (player.platform as dynamic).setProperty('demuxer-readahead-secs', '10');
       (player.platform as dynamic).setProperty('cache-secs', '15');
-      (player.platform as dynamic).setProperty('hwdec', 'mediacodec');
+    } else {
+      // Buffer settings for regular media
+      (player.platform as dynamic).setProperty('demuxer-max-bytes', '64M');
+      (player.platform as dynamic).setProperty('demuxer-max-back-bytes', '32M');
     }
 
     // Handle subtitles
@@ -162,6 +201,7 @@ class CaffeinePlayerController extends ChangeNotifier {
       Media(url),
       play: true,
     );
+    
     if (startAt > Duration.zero) {
       await player.seek(startAt);
       
@@ -172,6 +212,7 @@ class CaffeinePlayerController extends ChangeNotifier {
           sub?.cancel();
         }
       });
+      _subscriptions.add(sub);
     }
 
     _emit(CaffeinePlayerEventType.initialized);
@@ -188,26 +229,54 @@ class CaffeinePlayerController extends ChangeNotifier {
     }
   }
 
-  void play() => player.play();
-  void pause() => player.pause();
-  void seekTo(Duration position) => player.seek(position);
+  void play() {
+    if (_isDisposed) return;
+    player.play();
+  }
 
-  bool isPlaying() => player.state.playing;
+  void pause() {
+    if (_isDisposed) return;
+    player.pause();
+  }
+
+  void seekTo(Duration position) {
+    if (_isDisposed) return;
+    player.seek(position);
+  }
+
+  bool isPlaying() => _isDisposed ? false : player.state.playing;
   bool isBuffering() => _isBuffering;
 
-  Duration get position => player.state.position;
-  Duration get duration => player.state.duration;
+  Duration get position => _isDisposed ? Duration.zero : player.state.position;
+  Duration get duration => _isDisposed ? Duration.zero : player.state.duration;
 
-  List<AudioTrack> get audioTracks => player.state.tracks.audio;
-  List<SubtitleTrack> get subtitleTracks => player.state.tracks.subtitle;
+  List<AudioTrack> get audioTracks => _isDisposed ? [] : player.state.tracks.audio;
+  List<SubtitleTrack> get subtitleTracks => _isDisposed ? [] : player.state.tracks.subtitle;
 
-  void setAudioTrack(AudioTrack track) => player.setAudioTrack(track);
-  void setSubtitleTrack(SubtitleTrack track) => player.setSubtitleTrack(track);
+  void setAudioTrack(AudioTrack track) {
+    if (_isDisposed) return;
+    player.setAudioTrack(track);
+  }
+
+  void setSubtitleTrack(SubtitleTrack track) {
+    if (_isDisposed) return;
+    player.setSubtitleTrack(track);
+  }
 
   @override
   void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    
+    for (var sub in _subscriptions) {
+      sub.cancel();
+    }
+    _subscriptions.clear();
+    
+    _listeners.clear();
     _controlsVisibilityStreamController.close();
     player.dispose();
     super.dispose();
   }
 }
+

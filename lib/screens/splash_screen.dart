@@ -98,23 +98,31 @@ class _SplashScreenState extends State<SplashScreen>
 
       final api = ApiService();
 
-      // Parallelize initialization tasks
+      // Parallelize initialization tasks with strict timeouts for low-spec TV hardware
       final results = await Future.wait([
         core.FeatureFlagManager().initialize(
           apiUrl: caffeineApiUrl,
           environment: environment,
           platform: 'tv',
-        ).catchError((e) {
-          debugPrint('[Splash] FeatureFlagManager failed: $e');
-          return null; // Don't block for non-critical flags
+        ).timeout(const Duration(seconds: 3)).catchError((e) {
+          debugPrint('[Splash] FeatureFlagManager failed or timed out: $e');
+          return null; 
         }),
-        api.loadConfig().timeout(const Duration(seconds: 4)),
+        api.loadConfig().timeout(const Duration(seconds: 3)).catchError((e) {
+          debugPrint('[Splash] Config load failed or timed out: $e');
+          return <String, dynamic>{}; // Return empty map instead of null
+        }),
         UpdateService().checkForUpdate(
           caffeineApiUrl,
           env: environment,
-        ).catchError((e) {
-          debugPrint('[Splash] Update check failed: $e');
-          return null as dynamic; 
+        ).timeout(const Duration(seconds: 3)).catchError((e) {
+          debugPrint('[Splash] Update check failed or timed out: $e');
+          return UpdateInfo(
+            isUpdateAvailable: false,
+            latestVersion: '',
+            currentVersion: '',
+            isForced: false,
+          ); 
         }),
       ]);
 
