@@ -1,4 +1,5 @@
 import 'package:caffeine_tv/env.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:caffeine_tv/screens/home_screen.dart';
 import 'package:caffeine_tv/screens/pairing_screen.dart';
 import 'package:caffeine_tv/screens/splash_screen.dart';
@@ -23,6 +24,7 @@ Future<void> bootstrap(String envFile) async {
 
   debugPrint('[Main] 🚀 Bootstrapping with $envFile');
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
   
   // Load env first as it's required by subsequent service initializations
   await dotenv.load(fileName: envFile);

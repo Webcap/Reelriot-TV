@@ -1,11 +1,12 @@
-import 'package:better_player/better_player.dart';
+import 'package:caffeine_tv/services/player/caffeine_player_controller.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'package:caffeine_tv/widgets/language_picker_dialog.dart';
 
 class PlayerSettingsOverlay extends StatefulWidget {
-  final BetterPlayerController controller;
+  final CaffeinePlayerController controller;
   final String? currentProvider;
   final List<Map<String, String>>? allProviders;
   final Function(String)? onChangeProvider;
@@ -29,10 +30,10 @@ class PlayerSettingsOverlay extends StatefulWidget {
 class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
   @override
   Widget build(BuildContext context) {
-    final audioTracks = widget.controller.betterPlayerAsmsAudioTracks ?? [];
-    final subtitleSources = widget.controller.betterPlayerSubtitlesSourceList;
-    final currentAudio = widget.controller.betterPlayerAsmsAudioTrack;
-    final currentSubtitle = widget.controller.betterPlayerSubtitlesSource;
+    final audioTracks = widget.controller.player.state.tracks.audio;
+    final subtitleTracks = widget.controller.player.state.tracks.subtitle;
+    final currentAudio = widget.controller.player.state.track.audio;
+    final currentSubtitle = widget.controller.player.state.track.subtitle;
 
     return Center(
       child: ClipRRect(
@@ -100,10 +101,10 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
                       children: audioTracks.map((track) {
                         final isSelected = currentAudio == track;
                         return _TrackChip(
-                          label: track.label ?? track.language ?? 'Unknown',
+                          label: track.title ?? track.language ?? 'Unknown',
                           isSelected: isSelected,
                           onPressed: () {
-                            widget.controller.setAudioTrack(track);
+                            widget.controller.player.setAudioTrack(track);
                             setState(() {});
                           },
                         );
@@ -111,22 +112,20 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
                     ),
                     const SizedBox(height: 48),
                   ],
-                  if (subtitleSources.isNotEmpty) ...[
+                  if (subtitleTracks.isNotEmpty) ...[
                     const _CategoryHeader(title: 'Subtitles'),
                     const SizedBox(height: 16),
                     Wrap(
                       spacing: 16,
                       runSpacing: 16,
-                      children: subtitleSources.map((source) {
-                        final isSelected = currentSubtitle == source;
-                        final name = source.name ?? 'Unknown';
+                      children: subtitleTracks.map((track) {
+                        final isSelected = currentSubtitle == track;
+                        final name = track.title ?? track.language ?? 'Unknown';
                         return _TrackChip(
-                          label: name == 'Default subtitles' && source.type == BetterPlayerSubtitlesSourceType.none 
-                              ? 'Off' 
-                              : name,
+                          label: track == SubtitleTrack.no() ? 'Off' : name,
                           isSelected: isSelected,
                           onPressed: () {
-                            widget.controller.setupSubtitleSource(source);
+                            widget.controller.player.setSubtitleTrack(track);
                             setState(() {});
                           },
                         );
@@ -173,72 +172,6 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
                     ),
                   ],
                   const SizedBox(height: 48),
-                  const _CategoryHeader(title: 'Subtitle Sync'),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Current Offset: ${(widget.controller.betterPlayerSubtitlesSource?.offset ?? 0) / 1000}s',
-                    style: const TextStyle(
-                      color: Colors.white60, 
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 16,
-                    children: [
-                      _TrackChip(
-                        label: '-1.0s',
-                        isSelected: false,
-                        isAction: true,
-                        onPressed: () {
-                          final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
-                          widget.controller.setSubtitleOffset(currentOffset - 1000);
-                          setState(() {});
-                        },
-                      ),
-                      _TrackChip(
-                        label: '-0.1s',
-                        isSelected: false,
-                        isAction: true,
-                        onPressed: () {
-                          final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
-                          widget.controller.setSubtitleOffset(currentOffset - 100);
-                          setState(() {});
-                        },
-                      ),
-                      _TrackChip(
-                        label: 'Reset',
-                        isSelected: false,
-                        isAction: true,
-                        onPressed: () {
-                          widget.controller.setSubtitleOffset(0);
-                          setState(() {});
-                        },
-                      ),
-                      _TrackChip(
-                        label: '+0.1s',
-                        isSelected: false,
-                        isAction: true,
-                        onPressed: () {
-                          final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
-                          widget.controller.setSubtitleOffset(currentOffset + 100);
-                          setState(() {});
-                        },
-                      ),
-                      _TrackChip(
-                        label: '+1.0s',
-                        isSelected: false,
-                        isAction: true,
-                        onPressed: () {
-                          final currentOffset = widget.controller.betterPlayerSubtitlesSource?.offset ?? 0;
-                          widget.controller.setSubtitleOffset(currentOffset + 1000);
-                          setState(() {});
-                        },
-                      ),
-                    ],
-                  ),
                   const SizedBox(height: 48),
                 ],
               ),

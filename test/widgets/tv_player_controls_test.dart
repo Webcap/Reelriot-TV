@@ -1,58 +1,55 @@
 import 'dart:async';
-import 'package:better_player/better_player.dart';
-// Import the internal video player controller for mocking
-import 'package:better_player/src/video_player/video_player.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:caffeine_tv/services/player/caffeine_player_controller.dart';
 import 'package:caffeine_tv/widgets/tv_player_controls.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-class MockBetterPlayerController extends Mock implements BetterPlayerController {}
-class MockVideoPlayerController extends Mock implements VideoPlayerController {}
+class MockPlayer extends Mock implements Player {}
+class MockCaffeineController extends Mock implements CaffeinePlayerController {}
 
 void main() {
   setUpAll(() {
     registerFallbackValue(Duration.zero);
+    registerFallbackValue(CaffeinePlayerEventType.initialized);
   });
 
-  late MockBetterPlayerController mockBetterController;
-  late MockVideoPlayerController mockVideoController;
+  late MockCaffeineController mockController;
+  late MockPlayer mockPlayer;
   late StreamController<bool> visibilityController;
 
   setUp(() {
-    mockBetterController = MockBetterPlayerController();
-    mockVideoController = MockVideoPlayerController();
+    mockController = MockCaffeineController();
+    mockPlayer = MockPlayer();
     visibilityController = StreamController<bool>.broadcast();
 
-    // Mock configuration
-    when(() => mockBetterController.betterPlayerControlsConfiguration)
-        .thenReturn(const BetterPlayerControlsConfiguration(name: "Test Movie"));
+    // Mock properties
+    when(() => mockController.player).thenReturn(mockPlayer);
+    when(() => mockController.name).thenReturn("Test Movie");
+    when(() => mockController.watchingText).thenReturn(null);
+    
+    // Mock player state
+    final playerState = PlayerState(
+      duration: const Duration(minutes: 10),
+      position: const Duration(minutes: 5),
+      playing: true,
+    );
+    when(() => mockPlayer.state).thenReturn(playerState);
     
     // Mock visibility stream
-    when(() => mockBetterController.controlsVisibilityStream)
+    when(() => mockController.controlsVisibilityStream)
         .thenAnswer((_) => visibilityController.stream);
-    when(() => mockBetterController.toggleControlsVisibility(any())).thenAnswer((_) async {});
-    when(() => mockBetterController.videoPlayerController)
-        .thenReturn(mockVideoController);
     
-    // Mock video value
-    final videoValue = VideoPlayerValue(
-        duration: const Duration(minutes: 10),
-        position: const Duration(minutes: 5),
-        isPlaying: true,
-      );
-    when(() => mockVideoController.value).thenReturn(videoValue);
-
-    // Mock isPlaying
-    when(() => mockBetterController.isPlaying()).thenReturn(true);
-    
-    // Mock listener registration
-    when(() => mockBetterController.addEventsListener(any())).thenReturn(null);
-    when(() => mockBetterController.removeEventsListener(any())).thenReturn(null);
-
-    // Mock visibility toggle
-    when(() => mockBetterController.toggleControlsVisibility(any())).thenAnswer((_) async {});
+    // Mock methods
+    when(() => mockController.isPlaying()).thenReturn(true);
+    when(() => mockController.toggleControlsVisibility(any())).thenAnswer((_) async {});
+    when(() => mockController.addEventsListener(any())).thenReturn(null);
+    when(() => mockController.removeEventsListener(any())).thenReturn(null);
+    when(() => mockController.seekTo(any())).thenReturn(null);
+    when(() => mockController.play()).thenReturn(null);
+    when(() => mockController.pause()).thenReturn(null);
   });
 
   tearDown(() {
@@ -63,7 +60,7 @@ void main() {
     return MaterialApp(
       home: Scaffold(
         body: TvPlayerControls(
-          controller: mockBetterController,
+          controller: mockController,
           onVisibilityChanged: (_) {},
           onShowSettings: () {},
         ),
@@ -96,8 +93,7 @@ void main() {
     // The Play/Pause icon in the center should be present
     expect(find.byIcon(Icons.pause_rounded), findsWidgets);
 
-    // Verify focus is on the Play/Pause button (the one in the bottom bar)
-    // We can check if any Focus widget has focus
+    // Verify focus is on the Play/Pause button
     expect(FocusManager.instance.primaryFocus, isNotNull);
   });
 
@@ -143,33 +139,25 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
 
-    // The progress bar should now have focus. 
-    // We can verify focus is on the progress bar's focus node
-    // For now, let's just use the key to verify focus moved
+    // Focus should move up
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
   });
 
   testWidgets('Seek logic: Rewind/FF buttons call seekTo', (WidgetTester tester) async {
-    // Setup seekTo mock
-    when(() => mockBetterController.seekTo(any())).thenAnswer((_) async {});
-
     await tester.pumpWidget(buildTestWidget());
     visibilityController.add(true);
     await tester.pumpAndSettle();
-
-    // Initially Play/Pause has focus
-    expect(FocusManager.instance.primaryFocus, isNotNull);
 
     // Navigate to FF (Right from Play/Pause)
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
 
-    // Try tapping the FF icon directly to verify onPressed works
+    // Tap the FF icon
     await tester.tap(find.byIcon(Icons.forward_10_rounded));
     await tester.pumpAndSettle();
 
-    verify(() => mockBetterController.seekTo(any())).called(1);
+    verify(() => mockController.seekTo(any())).called(1);
   });
 
   testWidgets('Settings button triggers onShowSettings', (WidgetTester tester) async {
@@ -177,7 +165,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: TvPlayerControls(
-          controller: mockBetterController,
+          controller: mockController,
           onVisibilityChanged: (_) {},
           onShowSettings: () => settingsCalled = true,
         ),

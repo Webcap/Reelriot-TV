@@ -120,7 +120,8 @@ class WatchHistoryService {
           backdropPath = item.backdropPath;
           mType = item.mediaType;
         } else if (item is Map) {
-          mediaId = item['media_id'] ?? item['id'];
+          final dynamic rawMediaId = item['media_id'] ?? item['id'];
+          mediaId = rawMediaId is int ? rawMediaId : int.tryParse(rawMediaId?.toString() ?? '');
           title = item['title'];
           posterPath = item['poster_path'];
           backdropPath = item['backdrop_path'];
@@ -140,7 +141,8 @@ class WatchHistoryService {
           posterPath = item.posterPath;
           backdropPath = item.backdropPath;
         } else if (item is Map) {
-          mediaId = item['media_id'] ?? item['id'];
+          final dynamic rawMediaId = item['media_id'] ?? item['id'];
+          mediaId = rawMediaId is int ? rawMediaId : int.tryParse(rawMediaId?.toString() ?? '');
           title = item['name'] ?? item['title'];
           posterPath = item['poster_path'];
           backdropPath = item['backdrop_path'];

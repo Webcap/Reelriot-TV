@@ -1,10 +1,11 @@
 import 'dart:async';
-import 'package:better_player/better_player.dart';
+import 'package:caffeine_tv/services/player/caffeine_player_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
 
 class TvPlayerControls extends StatefulWidget {
-  final BetterPlayerController controller;
+  final CaffeinePlayerController controller;
   final Function(bool) onVisibilityChanged;
   final VoidCallback onShowSettings;
 
@@ -62,19 +63,19 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
     super.dispose();
   }
 
-  void _onPlayerEvent(BetterPlayerEvent event) {
-    if (event.betterPlayerEventType == BetterPlayerEventType.controlsVisible) {
+  void _onPlayerEvent(CaffeinePlayerEvent event) {
+    if (event.type == CaffeinePlayerEventType.controlsVisible) {
       _showControls();
-    } else if (event.betterPlayerEventType == BetterPlayerEventType.controlsHiddenEnd) {
+    } else if (event.type == CaffeinePlayerEventType.controlsHiddenEnd) {
       _hideControls();
-    } else if (event.betterPlayerEventType == BetterPlayerEventType.bufferingStart) {
+    } else if (event.type == CaffeinePlayerEventType.bufferingStart) {
       setState(() => _isBuffering = true);
       // Debounce: only show the overlay if buffering lasts >800ms to avoid flash
       _bufferingDebounce?.cancel();
       _bufferingDebounce = Timer(const Duration(milliseconds: 800), () {
         if (mounted && _isBuffering) setState(() => _showBufferingOverlay = true);
       });
-    } else if (event.betterPlayerEventType == BetterPlayerEventType.bufferingEnd) {
+    } else if (event.type == CaffeinePlayerEventType.bufferingEnd) {
       _bufferingDebounce?.cancel();
       setState(() {
         _isBuffering = false;
@@ -136,8 +137,8 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
         if (_showBufferingOverlay)
           _BufferingOverlay(
             controller: widget.controller,
-            title: widget.controller.betterPlayerControlsConfiguration.name,
-            watchingText: widget.controller.betterPlayerControlsConfiguration.watchingText,
+            title: widget.controller.name,
+            watchingText: widget.controller.watchingText,
           ),
 
         // Controls Overlay
@@ -184,7 +185,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.controller.betterPlayerControlsConfiguration.name.toUpperCase(),
+                        widget.controller.name.toUpperCase(),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 32,
@@ -198,7 +199,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
                           _buildInfoBadge('HD'),
                           const SizedBox(width: 12),
                           Text(
-                            widget.controller.betterPlayerControlsConfiguration.watchingText ?? '',
+                            widget.controller.watchingText ?? '',
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.6),
                               fontSize: 18,
@@ -235,39 +236,34 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
                   bottom: 40,
                   left: 60,
                   right: 60,
-                  child: Builder(
-                    builder: (context) {
-                      final videoController = widget.controller.videoPlayerController;
-                      if (videoController == null) return const SizedBox.shrink();
+                  child: ListenableBuilder(
+                    listenable: widget.controller,
+                    builder: (context, _) {
+                      final state = widget.controller.player.state;
                       
-                      return ValueListenableBuilder(
-                        valueListenable: videoController,
-                        builder: (context, videoValue, _) {
-                          return Column(
+                      return Column(
+                        children: [
+                          _buildProgressBar(state),
+                          const SizedBox(height: 24),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              _buildProgressBar(videoValue),
-                              const SizedBox(height: 24),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  _buildTimeText(videoValue.position),
-                                  const Spacer(),
-                                  _buildRewindButton(),
-                                  const SizedBox(width: 24),
-                                  _buildPlayPauseButton(),
-                                  const SizedBox(width: 24),
-                                  _buildFastForwardButton(),
-                                  const SizedBox(width: 48),
-                                  _buildSettingsButton(),
-                                  const Spacer(),
-                                  _buildTimeText(videoValue.duration),
-                                ],
-                              ),
+                              _buildTimeText(state.position),
+                              const Spacer(),
+                              _buildRewindButton(),
+                              const SizedBox(width: 24),
+                              _buildPlayPauseButton(),
+                              const SizedBox(width: 24),
+                              _buildFastForwardButton(),
+                              const SizedBox(width: 48),
+                              _buildSettingsButton(),
+                              const Spacer(),
+                              _buildTimeText(state.duration),
                             ],
-                          );
-                        },
+                          ),
+                        ],
                       );
-                    }
+                    },
                   ),
                 ),
               ],
@@ -307,58 +303,24 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
     );
   }
 
-  Widget _buildProgressBar([dynamic currentVideoValue]) {
-    final videoController = widget.controller.videoPlayerController;
-    if (videoController == null) return const SizedBox.shrink();
+  Widget _buildProgressBar([PlayerState? currentState]) {
+    final state = currentState ?? widget.controller.player.state;
+    final duration = state.duration;
+    final position = state.position;
+    final buffer = state.buffer;
 
-    if (currentVideoValue != null) {
-      final videoValue = currentVideoValue;
-      final duration = videoValue.duration as Duration?;
-      final position = videoValue.position as Duration;
+    final double playedPart = (duration == Duration.zero)
+        ? 0.0
+        : position.inMilliseconds / duration.inMilliseconds;
 
-      final double playedPart = (duration == null || duration == Duration.zero)
-          ? 0.0
-          : position.inMilliseconds / duration.inMilliseconds;
+    final double bufferedPart = (duration == Duration.zero)
+        ? 0.0
+        : (position.inMilliseconds + buffer.inMilliseconds) / duration.inMilliseconds;
 
-      final double bufferedPart = (duration == null || duration == Duration.zero)
-          ? 0.0
-          : _getBufferEnd(videoValue) / duration.inMilliseconds;
-
-      return _buildProgressBarWidget(playedPart, bufferedPart);
-    }
-
-    return ValueListenableBuilder(
-      valueListenable: videoController,
-      builder: (context, videoValue, _) {
-        final duration = videoValue.duration;
-        final double playedPart = (duration == null || duration == Duration.zero)
-            ? 0.0
-            : videoValue.position.inMilliseconds / duration.inMilliseconds;
-
-        final double bufferedPart = (duration == null || duration == Duration.zero)
-            ? 0.0
-            : _getBufferEnd(videoValue) / duration.inMilliseconds;
-
-        return _buildProgressBarWidget(playedPart, bufferedPart);
-      },
-    );
+    return _buildProgressBarWidget(playedPart, bufferedPart, state);
   }
 
-  double _getBufferEnd(VideoPlayerValue value) {
-    if (value.buffered.isEmpty) return 0;
-    final pos = value.position.inMilliseconds;
-    for (final range in value.buffered) {
-      if (range.start.inMilliseconds <= pos && range.end.inMilliseconds >= pos) {
-        return range.end.inMilliseconds.toDouble();
-      }
-    }
-    return 0;
-  }
-
-  Widget _buildProgressBarWidget(double playedPart, double bufferedPart) {
-    final videoController = widget.controller.videoPlayerController;
-    if (videoController == null) return const SizedBox.shrink();
-    final videoValue = videoController.value;
+  Widget _buildProgressBarWidget(double playedPart, double bufferedPart, PlayerState state) {
     return Focus(
       focusNode: _progressBarFocusNode,
       onKeyEvent: (node, event) {
@@ -374,7 +336,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
           _lastSeekTimestamp = now;
           
           final seekAmount = Duration(seconds: 30 * _seekAccelerationFactor);
-          widget.controller.seekTo(videoValue.position + seekAmount);
+          widget.controller.seekTo(state.position + seekAmount);
           _startHideTimer();
           return KeyEventResult.handled;
         }
@@ -388,7 +350,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
           _lastSeekTimestamp = now;
 
           final seekAmount = Duration(seconds: 30 * _seekAccelerationFactor);
-          final target = videoValue.position - seekAmount;
+          final target = state.position - seekAmount;
           widget.controller.seekTo(target < Duration.zero ? Duration.zero : target);
           _startHideTimer();
           return KeyEventResult.handled;
@@ -413,8 +375,8 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
             final double relative = localOffset.dx / box.size.width;
             final double percentage = relative.clamp(0.0, 1.0);
             
-            final duration = videoController.value.duration;
-            if (duration != null) {
+            final duration = widget.controller.player.state.duration;
+            if (duration != Duration.zero) {
               widget.controller.seekTo(duration * percentage);
               _startHideTimer();
             }
@@ -584,7 +546,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       focusNode: _rewindFocusNode,
       icon: Icons.replay_10_rounded,
       onPressed: () {
-        final pos = widget.controller.videoPlayerController?.value.position ?? Duration.zero;
+        final pos = widget.controller.player.state.position;
         widget.controller.seekTo(pos - const Duration(seconds: 10));
         _startHideTimer();
       },
@@ -598,7 +560,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       focusNode: _ffFocusNode,
       icon: Icons.forward_10_rounded,
       onPressed: () {
-        final pos = widget.controller.videoPlayerController?.value.position ?? Duration.zero;
+        final pos = widget.controller.player.state.position;
         widget.controller.seekTo(pos + const Duration(seconds: 10));
         _startHideTimer();
       },
@@ -668,7 +630,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
 // ─── TV Buffering Overlay ─────────────────────────────────────────────────────
 
 class _BufferingOverlay extends StatefulWidget {
-  final BetterPlayerController controller;
+  final CaffeinePlayerController controller;
   final String title;
   final String? watchingText;
 
@@ -705,204 +667,90 @@ class _BufferingOverlayState extends State<_BufferingOverlay>
     super.dispose();
   }
 
-  /// Returns seconds buffered ahead of the current position.
-  double _bufferedAheadSeconds(VideoPlayerValue value) {
-    if (value.buffered.isEmpty || value.duration == null) return 0;
-    final pos = value.position.inMilliseconds;
-    double maxEnd = 0;
-    for (final range in value.buffered) {
-      if (range.end.inMilliseconds > pos) {
-        maxEnd = range.end.inMilliseconds.toDouble();
-      }
-    }
-    return ((maxEnd - pos) / 1000).clamp(0, value.duration!.inSeconds.toDouble());
-  }
 
   /// Returns buffer fill fraction (0–1) relative to total duration.
-  double _bufferFraction(VideoPlayerValue value) {
-    if (value.buffered.isEmpty || value.duration == null || value.duration == Duration.zero) return 0;
-    final pos = value.position.inMilliseconds;
-    double maxEnd = 0;
-    for (final range in value.buffered) {
-      if (range.end.inMilliseconds > pos) {
-        maxEnd = range.end.inMilliseconds.toDouble();
-      }
-    }
-    return ((maxEnd - pos) / value.duration!.inMilliseconds).clamp(0.0, 1.0);
+  double _bufferFraction(PlayerState state) {
+    if (state.duration == Duration.zero) return 0;
+    return (state.buffer.inMilliseconds / state.duration.inMilliseconds).clamp(0.0, 1.0);
   }
 
   @override
   Widget build(BuildContext context) {
-    final videoController = widget.controller.videoPlayerController;
-
-    return Positioned.fill(
-      child: Container(
-        // Semi-transparent cinematic backdrop
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xCC000000),
-              Color(0xE6000000),
-              Color(0xCC000000),
-            ],
-          ),
-        ),
-        child: RepaintBoundary(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Pulsing branded spinner
-              ScaleTransition(
-                scale: _pulseAnim,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // Outer glow ring
-                    SizedBox(
-                      width: 120,
-                      height: 120,
-                      child: CircularProgressIndicator(
-                        color: const Color(0xFFEC1D24).withValues(alpha: 0.25),
-                        strokeWidth: 2,
-                        value: 1,
-                      ),
-                    ),
-                    // Spinning progress indicator
-                    SizedBox(
-                      width: 100,
-                      height: 100,
-                      child: CircularProgressIndicator(
-                        color: const Color(0xFFEC1D24),
-                        strokeWidth: 3,
-                        backgroundColor: Colors.white.withValues(alpha: 0.08),
-                      ),
-                    ),
-                    // Center icon
-                    Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.black.withValues(alpha: 0.6),
-                        border: Border.all(color: Colors.white12, width: 1),
-                      ),
-                      child: const Icon(
-                        Icons.play_arrow_rounded,
-                        color: Color(0xFFEC1D24),
-                        size: 40,
-                      ),
-                    ),
-                  ],
-                ),
+    return ListenableBuilder(
+      listenable: widget.controller,
+      builder: (context, _) {
+        final state = widget.controller.player.state;
+        
+        return SizedBox.expand(
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xCC000000),
+                  Color(0xE6000000),
+                  Color(0xCC000000),
+                ],
               ),
-
-              const SizedBox(height: 32),
-
-              // "Buffering..." label
-              const Text(
-                'Buffering…',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ScaleTransition(
+                  scale: _pulseAnim,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(width: 120, height: 120, child: CircularProgressIndicator(color: const Color(0xFFEC1D24).withValues(alpha: 0.25), strokeWidth: 2, value: 1)),
+                      SizedBox(width: 100, height: 100, child: CircularProgressIndicator(color: const Color(0xFFEC1D24), strokeWidth: 3, backgroundColor: Colors.white.withValues(alpha: 0.08))),
+                      Container(
+                        width: 72, height: 72,
+                        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.6), border: Border.all(color: Colors.white12, width: 1)),
+                        child: const Icon(Icons.play_arrow_rounded, color: Color(0xFFEC1D24), size: 40),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-
-              // Title and episode info
-              if (widget.title.isNotEmpty) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 32),
                 Text(
                   widget.title,
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
+                  style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: -0.5),
+                ),
+                if (widget.watchingText != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.watchingText!,
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 18, fontWeight: FontWeight.w500),
                   ),
-                  textAlign: TextAlign.center,
+                ],
+                const SizedBox(height: 48),
+                Container(
+                  width: 400,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.white10, width: 1)),
+                  child: Column(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: Stack(
+                          children: [
+                            Container(height: 4, width: double.infinity, color: Colors.white12),
+                            FractionallySizedBox(
+                              widthFactor: _bufferFraction(state).clamp(0.0, 1.0),
+                              child: Container(height: 4, decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), gradient: const LinearGradient(colors: [Color(0xFFEC1D24), Color(0xFFFF6B6B)]))),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
-              if (widget.watchingText != null && widget.watchingText!.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  widget.watchingText!,
-                  style: const TextStyle(
-                    color: Colors.white38,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-
-              const SizedBox(height: 40),
-
-              if (videoController != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 120),
-                  child: ValueListenableBuilder<VideoPlayerValue>(
-                    valueListenable: videoController,
-                    builder: (context, value, _) {
-                      final aheadSecs = _bufferedAheadSeconds(value);
-                      final fraction = _bufferFraction(value);
-
-                      return Column(
-                        children: [
-                          // Bar track
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: Stack(
-                              children: [
-                                // Track
-                                Container(
-                                  height: 4,
-                                  width: double.infinity,
-                                  color: Colors.white12,
-                                ),
-                                // Buffered fill
-                                FractionallySizedBox(
-                                  widthFactor: fraction.clamp(0.0, 1.0),
-                                  child: Container(
-                                    height: 4,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(4),
-                                      gradient: const LinearGradient(
-                                        colors: [Color(0xFFEC1D24), Color(0xFFFF6B6B)],
-                                      ),
-                                      boxShadow: const [
-                                        BoxShadow(
-                                          color: Color(0x80EC1D24),
-                                          blurRadius: 6,
-                                          spreadRadius: 1,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          // Buffered time label
-                          if (aheadSecs > 0)
-                            Text(
-                              '${aheadSecs.toStringAsFixed(0)}s buffered',
-                              style: const TextStyle(
-                                color: Colors.white38,
-                                fontSize: 13,
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

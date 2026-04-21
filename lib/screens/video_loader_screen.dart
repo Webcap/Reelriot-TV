@@ -11,8 +11,9 @@ import 'package:caffeine_tv/widgets/provider_loading_widget.dart';
 import 'package:caffeine_tv/utils/video_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:better_player/better_player.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:caffeine_tv/utils/wakelock_manager.dart';
+import 'package:caffeine_tv/services/player/caffeine_player_controller.dart';
 
 class VideoLoaderScreen extends StatefulWidget {
   final core.MovieDetail? movie;
@@ -216,7 +217,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
           final langIndex = supportedLanguages.indexWhere((l) => l.languageCode == _settings.language);
           final defaultLanguage = langIndex != -1 ? supportedLanguages[langIndex].englishName : 'English';
 
-          final List<BetterPlayerSubtitlesSource> subs = await VideoUtils.parseSubtitles(
+          final List<CaffeinePlayerSubtitlesSource> subs = await VideoUtils.parseSubtitles(
             subtitles: allSubtitleLinks,
             defaultLanguage: defaultLanguage,
             fetchAllLanguages: true, // TV app generally wants more choice

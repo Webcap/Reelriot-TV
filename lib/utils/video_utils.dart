@@ -1,4 +1,4 @@
-import 'package:better_player/better_player.dart';
+import 'package:caffeine_tv/services/player/caffeine_player_controller.dart';
 import 'package:caffeine_core/caffeine_core.dart' as core;
 
 class VideoUtils {
@@ -31,14 +31,14 @@ class VideoUtils {
     return processedLines.join('\n');
   }
 
-  /// Parse and create BetterPlayer subtitle sources from subtitle links
-  static Future<List<BetterPlayerSubtitlesSource>> parseSubtitles({
+  /// Parse and create caffeine_player subtitle sources from subtitle links
+  static Future<List<CaffeinePlayerSubtitlesSource>> parseSubtitles({
     required List<core.SubtitleLink> subtitles,
     required String defaultLanguage,
     required bool fetchAllLanguages,
     required Future<String?> Function(String) getSubtitleContent,
   }) async {
-    final List<BetterPlayerSubtitlesSource> subs = [];
+    final List<CaffeinePlayerSubtitlesSource> subs = [];
 
     if (subtitles.isEmpty) {
       return subs;
@@ -46,13 +46,13 @@ class VideoUtils {
 
     // 1. Identify which subtitles match the preferred language
     final preferredIndices = <int>{};
-    int? bestPreferredIndex;
+    // int? bestPreferredIndex;
     for (int i = 0; i < subtitles.length; i++) {
       final lang = (subtitles[i].label ?? '').toLowerCase();
       if (lang.startsWith(defaultLanguage.toLowerCase()) ||
           lang == defaultLanguage.toLowerCase()) {
         preferredIndices.add(i);
-        bestPreferredIndex ??= i;
+        // bestPreferredIndex ??= i;
       }
     }
 
@@ -62,7 +62,7 @@ class VideoUtils {
       for (int i = 0; i < subtitles.length; i++) {
         if (_isDefaultEnglish(subtitles[i].label ?? '')) {
           preferredIndices.add(i);
-          bestPreferredIndex ??= i;
+          // bestPreferredIndex ??= i;
           break; // Just one fallback is enough
         }
       }
@@ -71,7 +71,7 @@ class VideoUtils {
     // 3. Fallback to the first one if still nothing
     if (preferredIndices.isEmpty) {
       preferredIndices.add(0);
-      bestPreferredIndex = 0;
+      // bestPreferredIndex = 0;
     }
 
     // 4. Determine which subtitles to fetch
@@ -92,19 +92,18 @@ class VideoUtils {
         final content = await getSubtitleContent(url);
         if (content == null) continue;
 
-        final isDefault = i == bestPreferredIndex;
-
         final uriPath = Uri.tryParse(url)?.path.toLowerCase() ?? url.toLowerCase();
         final isSrt = uriPath.endsWith('.srt') || (subtitles[i].label ?? '').contains('OpenSubtitles');
 
+        final processedContent = isSrt
+            ? content
+            : processVttFileTimestamps(content);
+
         subs.add(
-          BetterPlayerSubtitlesSource(
+          CaffeinePlayerSubtitlesSource(
             name: subtitles[i].label ?? 'Unknown',
-            selectedByDefault: isDefault,
-            content: isSrt
-                ? content
-                : processVttFileTimestamps(content),
-            type: BetterPlayerSubtitlesSourceType.memory,
+            data: processedContent,
+            type: CaffeinePlayerSubtitlesSourceType.network,
           ),
         );
       } catch (e) {

@@ -33,8 +33,12 @@ dependencies:
   cupertino_icons: ^1.0.8
   caffeine_core:
     path: c:/Users/cnieves/Desktop/Projects/packages/caffeine_core
-  better_player:
-    path: c:/Users/cnieves/Desktop/Projects/caffeine_betterplayer
+  media_kit:
+    path: ../caffeine-player/media_kit
+  media_kit_video:
+    path: ../caffeine-player/media_kit_video
+  media_kit_libs_android_video:
+    path: ../caffeine-player/libs/android/media_kit_libs_android_video
   provider: ^6.0.3
   http: ^1.1.0
   cached_network_image: ^3.2.2

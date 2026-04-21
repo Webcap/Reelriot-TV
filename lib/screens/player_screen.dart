@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:better_player/better_player.dart';
+import 'package:media_kit_video/media_kit_video.dart';
+import 'package:caffeine_tv/services/player/caffeine_player_controller.dart';
 import 'package:caffeine_tv/services/settings_service.dart';
 import 'package:caffeine_tv/services/watch_history_service.dart';
 import 'package:caffeine_tv/utils/tv_keys.dart';
@@ -51,14 +52,14 @@ class PlayerScreen extends StatefulWidget {
   final String? providerCode;
   final List<Map<String, String>>? allProviders;
   final Map<String, String>? headers;
-  final List<BetterPlayerSubtitlesSource>? externalSubtitles;
+  final List<CaffeinePlayerSubtitlesSource>? externalSubtitles;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
-  BetterPlayerController? _controller;
+  CaffeinePlayerController? _controller;
   bool _hasError = false;
   String? _errorMessage;
   final WatchHistoryService _historyService = WatchHistoryService();
@@ -116,15 +117,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _mainFocusNode.requestFocus();
 
-      // Watchdog: The Chromecast Amlogic AVC decoder (c2.amlogic.avc.decoder) can
-      // flush its pipeline during HLS initialization causing BetterPlayer to get stuck
-      // decoding but never firing BetterPlayerEventType.initialized. A forced
-      // setupDataSource() call kicks it into ExoPlayer STATE_READY.
-      // Guard: skip if already initialized or if the exception handler is active
-      // (to prevent a race condition between the watchdog and retry logic).
-      _initWatchdogTimer = Timer(const Duration(seconds: 3), () {
+      // Watchdog: The Chromecast Amlogic AVC decoder can stall during initialization.
+      _initWatchdogTimer = Timer(const Duration(seconds: 6), () {
         if (!mounted || _isDisposed || _hasInitialized || _isHandlingException) return;
-        debugPrint('[PlayerScreen] ⚠️ Init watchdog fired — player not initialized after 3s, forcing reset');
+        debugPrint('[PlayerScreen] ⚠️ Init watchdog fired — player not initialized after 6s, forcing reset');
         _forcePlayerReset();
       });
     });
@@ -184,26 +180,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (downloadUrl != null && !_isDisposed && mounted) {
         debugPrint('[PlayerScreen] ✅ Subtitle URL found: $downloadUrl');
         
-        final newSource = BetterPlayerSubtitlesSource(
+        final newSource = CaffeinePlayerSubtitlesSource(
           name: '$langName (Auto)',
           urls: [downloadUrl],
-          type: BetterPlayerSubtitlesSourceType.network,
+          type: CaffeinePlayerSubtitlesSourceType.network,
         );
 
         // Merge with existing external subtitles
-        final List<BetterPlayerSubtitlesSource> updatedExternalSubs = [
+        final List<CaffeinePlayerSubtitlesSource> updatedExternalSubs = [
           ...widget.externalSubtitles ?? [],
           newSource,
         ];
 
         // Ensure uniqueness by name
-        final Map<String, BetterPlayerSubtitlesSource> uniqueSubs = {};
+        final Map<String, CaffeinePlayerSubtitlesSource> uniqueSubs = {};
         for (var sub in updatedExternalSubs) {
            if (sub.name != null) uniqueSubs[sub.name!] = sub;
         }
         final finalSubs = uniqueSubs.values.toList();
 
-        final currentPosition = _controller?.videoPlayerController?.value.position ?? Duration.zero;
+        final currentPosition = _controller?.position ?? Duration.zero;
         final currentUrl = widget.url;
 
         debugPrint('[PlayerScreen] 🔄 Updating data source with ${finalSubs.length} subtitles...');
@@ -216,28 +212,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
 
         // Re-setup data source with new subtitles but don't auto-activate
-        await _controller?.setupDataSource(
-          BetterPlayerDataSource(
-            BetterPlayerDataSourceType.network,
-            currentUrl,
-            videoFormat: currentUrl.contains('m3u8') ||
-                    currentUrl.contains('playlist') ||
-                    currentUrl.contains('proxy/stream')
-                ? BetterPlayerVideoFormat.hls
-                : null,
-            useAsmsTracks: true,
-            useAsmsAudioTracks: true,
-            useAsmsSubtitles: true,
-            subtitles: finalSubs,
-            preferredAudioLanguage: SettingsService().defaultAudioLanguage,
-            headers: _getMergedHeaders(currentUrl, widget.referrer, widget.headers),
-            bufferingConfiguration: const BetterPlayerBufferingConfiguration(
-              minBufferMs: 30000,
-              maxBufferMs: 60000,
-              bufferForPlaybackMs: 3000,
-              bufferForPlaybackAfterRebufferMs: 12000,
-            ),
-          ),
+        await _controller?.setDataSource(
+          currentUrl,
+          headers: _getMergedHeaders(currentUrl, widget.referrer, widget.headers),
+          liveStream: _isSports,
+          startAt: currentPosition,
+          subtitles: finalSubs,
         );
 
         if (!_isDisposed && mounted) {
@@ -277,23 +257,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _saveCurrentProgress({bool isFinished = false}) async {
-    if (_controller == null || _controller!.videoPlayerController == null) {
+    if (_controller == null) {
       return;
     }
 
-    final duration =
-        _controller!.videoPlayerController!.value.duration ?? Duration.zero;
+    final duration = _controller!.duration;
     if (duration == Duration.zero) {
       return;
     }
 
-    // Capture the most reliable position. If the controller reports zero (often during 
-    // error states or resets), fallback to the last progress event we captured.
     Duration position;
     if (isFinished) {
       position = duration;
     } else {
-      final ctrlPos = _controller!.videoPlayerController!.value.position;
+      final ctrlPos = _controller!.position;
       position = (ctrlPos > Duration.zero) 
           ? ctrlPos 
           : (_lastKnownPosition ?? Duration.zero);
@@ -332,60 +309,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     } catch (_) {}
 
-    _controller = BetterPlayerController(
-      BetterPlayerConfiguration(
-        autoPlay: true,
-        allowedScreenSleep: false, // Prevents race condition during source swap
-        fit: BoxFit.contain,
-        expandToFill: true,
-        subtitlesConfiguration: const BetterPlayerSubtitlesConfiguration(
-          fontSize: 24,
-          fontColor: Colors.white,
-          outlineColor: Colors.black,
-        ),
-        controlsConfiguration: BetterPlayerControlsConfiguration(
-          enablePlayPause: true,
-          enableMute: true,
-          enableFullscreen: true,
-          enableProgressBar: true,
-          enableSkips: false,
-          name: widget.title,
-          watchingText: widget.isMovie
-              ? ''
-              : '${widget.episodeName} | S${widget.season} E${widget.episode}',
-          playerTheme: BetterPlayerTheme.custom,
-          customControlsBuilder: (controller, onVisibilityChanged) =>
-              TvPlayerControls(
-                controller: controller,
-                onVisibilityChanged: (visible) {
-                  onVisibilityChanged(visible);
-                  _safeSetState(() => _controlsVisible = visible);
-                },
-                onShowSettings: _showSettings,
-              ),
-        ),
-        startAt: widget.startPosition ?? Duration.zero,
-      ),
-      betterPlayerDataSource: BetterPlayerDataSource(
-        BetterPlayerDataSourceType.network,
-        safeUrl,
-        liveStream: _isSports, // Only actual live channels should use liveStream: true
-        videoFormat:
-            safeUrl.contains('m3u8') ||
-                safeUrl.contains('playlist') ||
-                safeUrl.contains('proxy/stream')
-            ? BetterPlayerVideoFormat.hls
-            : null,
-        useAsmsTracks: true,
-        useAsmsAudioTracks: true,
-        useAsmsSubtitles: true,
-        subtitles: widget.externalSubtitles,
-        preferredAudioLanguage: SettingsService().defaultAudioLanguage,
-        headers: _getMergedHeaders(safeUrl, widget.referrer, widget.headers),
-        bufferingConfiguration: _getBufferingConfig(),
-      ),
-    );
-
+    _controller = CaffeinePlayerController();
+    
     _loadStartTime = DateTime.now();
     AnalyticsService.instance.trackQoSEvent('Playback Attempt', {
       'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
@@ -393,21 +318,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
       'name': widget.title,
       'url_host': Uri.tryParse(safeUrl)?.host,
     });
-    debugPrint('[PlayerScreen] 📺 Playing: $safeUrl');
-    debugPrint(
-      '[PlayerScreen] 🔗 Referrer: ${widget.referrer ?? _getReferer(safeUrl)}',
-    );
+    debugPrint('[PlayerScreen] 📺 Playing (media_kit): $safeUrl');
 
     _controller!.addEventsListener((event) async {
       if (_isDisposed) return;
-      if (event.betterPlayerEventType == BetterPlayerEventType.finished) {
+      if (event.type == CaffeinePlayerEventType.finished) {
         debugPrint(
           '[PlayerScreen] 🎉 Video finished, saving final progress (100%) and closing',
         );
         await _saveCurrentProgress(isFinished: true);
         if (mounted && !_isDisposed) Navigator.of(context).pop();
-      } else if (event.betterPlayerEventType == BetterPlayerEventType.initialized) {
-        // Mark initialized so the watchdog does not fire and overlay hides
+      } else if (event.type == CaffeinePlayerEventType.initialized) {
         _safeSetState(() {
           _hasInitialized = true;
         });
@@ -424,23 +345,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _loadStartTime = null;
         }
 
-        // Try twice as tracks might load late in HLS manifest
+        // Try twice as tracks might load late
         _selectPreferredAudioTrack();
         Future.delayed(
           const Duration(milliseconds: 1500),
           () => _selectPreferredAudioTrack(),
         );
-        Future.delayed(
-          const Duration(milliseconds: 4000),
-          () => _selectPreferredAudioTrack(),
-        );
-      } else if (event.betterPlayerEventType == BetterPlayerEventType.bufferingStart) {
+      } else if (event.type == CaffeinePlayerEventType.bufferingStart) {
         _bufferingStartTime = DateTime.now();
         AnalyticsService.instance.trackQoSEvent('Buffering Start', {
           'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
           'id': widget.item is Map ? widget.item['id']?.toString() : widget.item?.id?.toString(),
         });
-      } else if (event.betterPlayerEventType == BetterPlayerEventType.bufferingEnd) {
+      } else if (event.type == CaffeinePlayerEventType.bufferingEnd) {
         if (_bufferingStartTime != null) {
           final bufferTime = DateTime.now().difference(_bufferingStartTime!).inMilliseconds;
           AnalyticsService.instance.trackQoSEvent('Buffering End', {
@@ -450,18 +367,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
           });
           _bufferingStartTime = null;
         }
-      } else if (event.betterPlayerEventType ==
-          BetterPlayerEventType.exception) {
+      } else if (event.type == CaffeinePlayerEventType.error) {
         AnalyticsService.instance.trackQoSEvent('Playback Error', {
           'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
           'id': widget.item is Map ? widget.item['id']?.toString() : widget.item?.id?.toString(),
-          'error': event.parameters?['exception']?.toString(),
+          'error': event.message,
         });
-        if (!_isDisposed) _handlePlayerException(event);
-      } else if (event.betterPlayerEventType ==
-          BetterPlayerEventType.progress) {
+        _handleException(event.message ?? 'Unknown error');
+      } else if (event.type == CaffeinePlayerEventType.progress) {
         if (!_isDisposed) {
-          final progress = event.parameters?['progress'] as Duration?;
+          final progress = event.position;
           if (progress != null && 
               (_lastKnownPosition == null || (progress.inSeconds != _lastKnownPosition!.inSeconds))) {
               _lastKnownPosition = progress;
@@ -469,39 +384,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       }
     });
+
+    _controller!.setDataSource(
+      safeUrl,
+      headers: _getMergedHeaders(safeUrl, widget.referrer, widget.headers),
+      liveStream: _isSports,
+      startAt: widget.startPosition ?? Duration.zero,
+    );
   }
 
   bool get _isSports =>
       !widget.isMovie && (widget.season == null || widget.episode == null);
 
-  void _handlePlayerException(BetterPlayerEvent event) async {
+  void _handleException(String message) async {
     if (_isHandlingException || _isRefreshing || _isDisposed) return;
     _isHandlingException = true;
 
-    final exception = event.parameters?['exception'];
-    debugPrint('[PlayerScreen] ⚠️ Playback exception: $exception');
-
-    // Only retry for network/source errors, especially if we've been playing for a while
-    // or if the error code suggests a source issue (2001, 2002)
-    final errorStr = exception?.toString().toLowerCase() ?? '';
+    final errorStr = message.toLowerCase();
     
     // Specific HLS Live errors
-    final isBehindLiveWindow = errorStr.contains('behindlivewindowexception');
-    final isPlaylistStuck = errorStr.contains('playliststuckexception');
+    final isBehindLiveWindow = errorStr.contains('behindlivewindowexception') || errorStr.contains('behind live window');
+    final isPlaylistStuck = errorStr.contains('playliststuckexception') || errorStr.contains('stuck');
 
     final isSourceError =
         isBehindLiveWindow ||
         isPlaylistStuck ||
         errorStr.contains('source error') ||
-        errorStr.contains('httpdatasource') ||
-        errorStr.contains('sockettimeout') ||
-        errorStr.contains('unexpected end of stream');
+        errorStr.contains('http') ||
+        errorStr.contains('socket') ||
+        errorStr.contains('unexpected end');
 
-    // 403 = IP-locked / auth error — retrying the same URL is pointless, skip straight to fallback
     final is403 =
         errorStr.contains('403') ||
-        errorStr.contains('forbidden') ||
-        errorStr.contains('invalidresponsecodeexception');
+        errorStr.contains('forbidden');
 
     if (isBehindLiveWindow || isPlaylistStuck) {
       AnalyticsService.instance.trackQoSEvent('HLS Recovery Attempt', {
@@ -534,33 +449,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
 
       try {
-        final currentPosition =
-            _lastKnownPosition ??
-            _controller?.videoPlayerController?.value.position ??
-            widget.startPosition ??
-            Duration.zero;
+        final currentPosition = _lastKnownPosition ?? _controller?.position ?? Duration.zero;
 
         String? newUrl;
-        String? newReferrer;
         Map<String, String>? newHeaders;
 
         if (_isSports) {
-          // Special refresh logic for sports: re-query Supabase
           final refreshResult = await _refreshSportsStream();
           if (refreshResult != null && !_isDisposed) {
             newUrl = refreshResult['url'] as String?;
-            newReferrer = refreshResult['referrer'] as String?;
-            
-            // Update mirrors if they improved
-            if (refreshResult['sources'] != null && 
-                refreshResult['sources'] is List && 
-                widget.allProviders != null) {
-               // Update our local state if we want to refresh the mirrors list
-               // For now, at least we have the new main URL.
-            }
           }
         } else {
-          // Robust ID access for both MovieDetail/TvShowDetail objects and Map objects
           final dynamic rawId = widget.item is Map
               ? (widget.item['media_id'] ?? widget.item['id'])
               : widget.item?.id;
@@ -570,9 +469,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
               : int.tryParse(rawId?.toString() ?? '');
 
           if (mediaId == null) {
-            debugPrint(
-              '[PlayerScreen] ❌ Cannot retry: mediaId is null or invalid ($rawId)',
-            );
             _isHandlingException = false;
             _safeSetState(() => _isRefreshing = false);
             return;
@@ -580,22 +476,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
           final core.ProviderStreamResponse response;
           if (widget.isMovie) {
-            response = await _api.fetchMovieStream(
-              mediaId,
-              provider: widget.providerCode ?? 'vidlink',
-            );
+            response = await _api.fetchMovieStream(mediaId, provider: widget.providerCode ?? 'vidlink');
           } else {
-            response = await _api.fetchTvStream(
-              mediaId,
-              widget.season!,
-              widget.episode!,
-              provider: widget.providerCode ?? 'vidlink',
-            );
+            response = await _api.fetchTvStream(mediaId, widget.season!, widget.episode!, provider: widget.providerCode ?? 'vidlink');
           }
 
-          if (response.success &&
-              response.links != null &&
-              response.links!.isNotEmpty) {
+          if (response.success && response.links != null && response.links!.isNotEmpty) {
             newUrl = response.links!.first.url;
             newHeaders = response.links!.first.headers;
           }
@@ -603,96 +489,41 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         if (newUrl != null && newUrl.isNotEmpty) {
           debugPrint('[PlayerScreen] ✅ Re-fetched new URL: $newUrl');
-
           if (!mounted) return;
 
-          // Small delay to allow network to settle before retrying
           await Future.delayed(const Duration(seconds: 2));
           if (_isDisposed || !mounted) return;
 
-          // Seek to the last known position after initialization
-          late Function(BetterPlayerEvent) refreshListener;
-          refreshListener = (refreshEvent) {
-            if (refreshEvent.betterPlayerEventType ==
-                BetterPlayerEventType.initialized) {
-              _controller?.seekTo(currentPosition);
-              _controller?.play();
-              _controller?.removeEventsListener(refreshListener);
-              // Reset flag so future exceptions can be handled
-              _isHandlingException = false;
-            }
-          };
-          _controller?.addEventsListener(refreshListener);
-
-          // Re-initialize the player with the new URL and the current position
-          await _controller?.setupDataSource(
-            BetterPlayerDataSource(
-              BetterPlayerDataSourceType.network,
-              newUrl,
-              videoFormat:
-                  newUrl.contains('m3u8') ||
-                      newUrl.contains('playlist') ||
-                      newUrl.contains('proxy/stream')
-                  ? BetterPlayerVideoFormat.hls
-                  : null,
-              useAsmsTracks: true,
-              useAsmsAudioTracks: true,
-              useAsmsSubtitles: true,
-              preferredAudioLanguage: SettingsService().defaultAudioLanguage,
-              headers: _getMergedHeaders(
-                newUrl,
-                newReferrer ?? widget.referrer,
-                newHeaders,
-              ),
-              bufferingConfiguration: _getBufferingConfig(),
-            ),
+          // Re-initialize
+          await _controller?.setDataSource(
+            newUrl,
+            headers: _getMergedHeaders(newUrl, widget.referrer, newHeaders),
+            liveStream: _isSports,
+            startAt: currentPosition,
           );
 
           if (!_isDisposed && mounted) {
-            _controller?.play();
-            // Only seek to live edge for actual live/sports content.
-            // VOD HLS content (movies/shows that use m3u8) must resume from
-            // the saved position, not restart from the beginning.
-            if (_isSports) {
-              debugPrint('[PlayerScreen] 🎯 Recovery: Seeking to live edge (0)');
-              _controller?.seekTo(Duration.zero);
-            } else if (currentPosition > Duration.zero) {
-              debugPrint('[PlayerScreen] ⏩ Recovery: Restoring position to ${currentPosition.inSeconds}s');
-              _controller?.seekTo(currentPosition);
-            }
+            _isHandlingException = false;
             _safeSetState(() => _isRefreshing = false);
           }
         } else {
-          debugPrint('[PlayerScreen] ❌ Re-fetch failed or returned no links');
           _isHandlingException = false;
           _safeSetState(() => _isRefreshing = false);
-          if (widget.isMovie || widget.episode != null) {
-            // Automatically try another provider if re-fetch failed
-            await _fallbackToNextProvider();
-          } else {
-            _safeSetState(() {
-              _hasError = true;
-              _errorMessage =
-                  'Failed to refresh stream. Please try again later.';
-            });
-          }
+          await _fallbackToNextProvider();
         }
       } catch (e) {
-        debugPrint('[PlayerScreen] ❌ Error during refresh: $e');
         _isHandlingException = false;
         _safeSetState(() => _isRefreshing = false);
       }
     } else {
-      debugPrint('[PlayerScreen] ❌ Max retries reached or non-source error');
       _isHandlingException = false;
       _safeSetState(() => _isRefreshing = false);
-      if (isSourceError && (widget.isMovie || widget.episode != null)) {
-        // Source kept failing after retries — try next provider automatically
+      if (isSourceError) {
         await _fallbackToNextProvider();
       } else {
         _safeSetState(() {
           _hasError = true;
-          _errorMessage = exception?.toString() ?? 'Playback error';
+          _errorMessage = message;
         });
       }
     }
@@ -730,34 +561,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _selectPreferredAudioTrack() {
-    if (_controller == null || _isDisposed) return;
-
-    final tracks = _controller!.betterPlayerAsmsAudioTracks;
-    if (tracks == null || tracks.isEmpty) {
-      debugPrint('[PlayerScreen] 🎧 No audio tracks available yet.');
-      return;
-    }
-
+    if (_controller == null) return;
     final preferred = SettingsService().defaultAudioLanguage.toLowerCase();
-    debugPrint(
-      '[PlayerScreen] 🎧 Attempting to select audio track: $preferred',
-    );
-
+    final tracks = _controller!.audioTracks;
+    
     for (final track in tracks) {
       final lang = track.language?.toLowerCase() ?? '';
-      final label = track.label?.toLowerCase() ?? '';
-      debugPrint('[PlayerScreen]   - Track: lang="$lang", label="$label"');
+      final title = track.title?.toLowerCase() ?? '';
+      debugPrint('[PlayerScreen]   - Track: lang="$lang", title="$title"');
 
       final isMatch =
           lang == preferred ||
           lang.startsWith(preferred) ||
-          label.startsWith(preferred) ||
-          label.contains(preferred) ||
-          (preferred == 'en' && label.contains('english'));
+          title.startsWith(preferred) ||
+          title.contains(preferred) ||
+          (preferred == 'en' && title.contains('english'));
 
       if (isMatch) {
         debugPrint(
-          '[PlayerScreen] ✅ Match found! Selecting track: $label ($lang)',
+          '[PlayerScreen] ✅ Match found! Selecting track: $title ($lang)',
         );
         _controller!.setAudioTrack(track);
         return;
@@ -895,7 +717,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     // Capture current position and save it to history before switching
     await _saveCurrentProgress();
-    final currentPos = _controller?.videoPlayerController?.value.position ?? _lastKnownPosition;
+    final currentPos = _controller?.position ?? _lastKnownPosition;
 
     if (widget.allProviders == null || widget.allProviders!.isEmpty) {
       debugPrint('[PlayerScreen] ❌ No provider list for auto-fallback');
@@ -950,7 +772,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           await _saveCurrentProgress();
           if (!mounted || _isDisposed) return;
           
-          final currentPos = _controller?.videoPlayerController?.value.position ?? _lastKnownPosition;
+          final currentPos = _controller?.position ?? _lastKnownPosition;
 
           debugPrint(
             '[PlayerScreen] 🔄 Changing provider to: $newProviderCode',
@@ -1036,7 +858,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (searchResults.isNotEmpty) {
         debugPrint('[PlayerScreen] ✅ Found ${searchResults.length} new subtitles');
         
-        final List<BetterPlayerSubtitlesSource> newSubs = [];
+        final List<CaffeinePlayerSubtitlesSource> newSubs = [];
         final langName = supportedLanguages
             .firstWhere((l) => l.languageCode == langCode,
                 orElse: () => SubLanguages(languageName: '', languageCode: '', englishName: 'Unknown'))
@@ -1051,10 +873,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
             );
             if (downloadUrl != null) {
               newSubs.add(
-                BetterPlayerSubtitlesSource(
+                CaffeinePlayerSubtitlesSource(
                   name: '$langName (OS)',
                   urls: [downloadUrl],
-                  type: BetterPlayerSubtitlesSourceType.network,
+                  type: CaffeinePlayerSubtitlesSourceType.network,
                 ),
               );
             }
@@ -1067,13 +889,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
 
         // Merge with existing external subtitles if any
-        final List<BetterPlayerSubtitlesSource> updatedExternalSubs = [
+        final List<CaffeinePlayerSubtitlesSource> updatedExternalSubs = [
           ...widget.externalSubtitles ?? [],
           ...newSubs,
         ];
 
         // Unique filter to avoid duplicates
-        final Map<String, BetterPlayerSubtitlesSource> uniqueSubs = {};
+        final Map<String, CaffeinePlayerSubtitlesSource> uniqueSubs = {};
         for (var sub in updatedExternalSubs) {
            // Use name as key, might want to be more specific if possible
            uniqueSubs[sub.name!] = sub;
@@ -1081,32 +903,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         final finalSubs = uniqueSubs.values.toList();
 
-        final currentPosition = _controller?.videoPlayerController?.value.position ?? Duration.zero;
+        final currentPosition = _controller?.position ?? Duration.zero;
         final currentUrl = widget.url;
 
         // Re-setup data source with new subtitles
-        await _controller?.setupDataSource(
-          BetterPlayerDataSource(
-            BetterPlayerDataSourceType.network,
-            currentUrl,
-            videoFormat: currentUrl.contains('m3u8') ||
-                    currentUrl.contains('playlist') ||
-                    currentUrl.contains('proxy/stream')
-                ? BetterPlayerVideoFormat.hls
-                : null,
-            useAsmsTracks: true,
-            useAsmsAudioTracks: true,
-            useAsmsSubtitles: true,
-            subtitles: finalSubs,
-            preferredAudioLanguage: SettingsService().defaultAudioLanguage,
-            headers: _getMergedHeaders(currentUrl, widget.referrer, widget.headers),
-            bufferingConfiguration: const BetterPlayerBufferingConfiguration(
-              minBufferMs: 30000,
-              maxBufferMs: 60000,
-              bufferForPlaybackMs: 3000,
-              bufferForPlaybackAfterRebufferMs: 12000,
-            ),
-          ),
+        await _controller?.setDataSource(
+          currentUrl,
+          headers: _getMergedHeaders(currentUrl, widget.referrer, widget.headers),
+          liveStream: _isSports,
+          startAt: currentPosition,
+          subtitles: finalSubs,
         );
 
         _controller?.seekTo(currentPosition);
@@ -1129,55 +935,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _forcePlayerReset() async {
     if (_controller == null || _isDisposed || !mounted) return;
     
-    // Capture current position BEFORE reset so we can restore it
     await _saveCurrentProgress();
-    final currentPosition = _controller?.videoPlayerController?.value.position ?? _lastKnownPosition;
+    final currentPosition = _controller?.position ?? _lastKnownPosition;
 
-    debugPrint('[PlayerScreen] 🔄 Forcing player reset via setupDataSource... '
+    debugPrint('[PlayerScreen] 🔄 Forcing player reset (media_kit)... '
         '(saving position: ${currentPosition?.inSeconds}s)');
     try {
-    // Smart host-only rewrite — preserve encoded query params intact
-    var safeUrl = widget.url;
-    try {
-      final uri = Uri.parse(widget.url);
-      if (uri.host == 'videostr.net' || uri.host.endsWith('.videostr.net')) {
-        safeUrl = uri.replace(host: 'vidlink.pro').toString();
-      }
-    } catch (_) {}
+      var safeUrl = widget.url;
+      try {
+        final uri = Uri.parse(widget.url);
+        if (uri.host == 'videostr.net' || uri.host.endsWith('.videostr.net')) {
+          safeUrl = uri.replace(host: 'vidlink.pro').toString();
+        }
+      } catch (_) {}
 
-      await _controller?.setupDataSource(
-        BetterPlayerDataSource(
-          BetterPlayerDataSourceType.network,
-          safeUrl,
-          liveStream: _isSports, // Only actual live channels should use liveStream: true
-          videoFormat:
-              safeUrl.contains('m3u8') ||
-                  safeUrl.contains('playlist') ||
-                  safeUrl.contains('proxy/stream')
-              ? BetterPlayerVideoFormat.hls
-              : null,
-          useAsmsTracks: true,
-          useAsmsAudioTracks: true,
-          useAsmsSubtitles: true,
-          subtitles: widget.externalSubtitles,
-          preferredAudioLanguage: SettingsService().defaultAudioLanguage,
-          headers: _getMergedHeaders(safeUrl, widget.referrer, widget.headers),
-          bufferingConfiguration: _getBufferingConfig(),
-        ),
+      await _controller?.setDataSource(
+        safeUrl,
+        headers: _getMergedHeaders(safeUrl, widget.referrer, widget.headers),
+        liveStream: _isSports,
+        startAt: currentPosition ?? widget.startPosition ?? Duration.zero,
       );
 
       if (!_isDisposed && mounted) {
         _controller?.play();
-        // Restore the CURRENT position (not just the initial startPosition)
-        final resumePos = currentPosition ?? widget.startPosition;
-        if (resumePos != null && resumePos > Duration.zero) {
-          await Future.delayed(const Duration(milliseconds: 500));
-          if (!_isDisposed && mounted) {
-            _controller?.seekTo(resumePos);
-            debugPrint('[PlayerScreen] ⏩ Restored position to ${resumePos.inSeconds}s');
-          }
-        }
-        debugPrint('[PlayerScreen] ✅ Forced reset complete, playback started');
+        debugPrint('[PlayerScreen] ✅ Forced reset complete');
       }
     } catch (e) {
       debugPrint('[PlayerScreen] ❌ Error during forced reset: $e');
@@ -1242,7 +1023,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         if (TvKeys.isMediaFastForward(key)) {
           debugPrint('[PlayerScreen] ⏩ Media Fast Forward key');
-          final pos = _controller?.videoPlayerController?.value.position;
+          final pos = _controller?.position;
           if (pos != null) {
             _controller?.seekTo(pos + const Duration(seconds: 10));
           }
@@ -1253,7 +1034,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         if (TvKeys.isMediaRewind(key)) {
           debugPrint('[PlayerScreen] ⏪ Media Rewind key');
-          final pos = _controller?.videoPlayerController?.value.position;
+          final pos = _controller?.position;
           if (pos != null) {
             final target = pos - const Duration(seconds: 10);
             _controller?.seekTo(
@@ -1333,7 +1114,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   children: [
                     _controller == null
                         ? const SizedBox.shrink()
-                        : BetterPlayer(controller: _controller!),
+                        : Video(controller: _controller!.videoController),
                     // Loading overlay: stays in the tree to allow for the fade-out
                     // animation when _hasInitialized becomes true.
                     _buildLoadingOverlay(),
@@ -1454,28 +1235,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     ),
   );
 }
-  BetterPlayerBufferingConfiguration _getBufferingConfig() {
-    if (_isSports) {
-      // Aggressive buffering for live manifests with short windows (standard IPTV)
-      return const BetterPlayerBufferingConfiguration(
-        minBufferMs: 2500, // 2.5 seconds (allocate up to)
-        maxBufferMs: 15000, // 15 seconds max memory footprint
-        bufferForPlaybackMs: 500, // Start playing at 0.5s to minimize latency
-        bufferForPlaybackAfterRebufferMs: 1000, // Recover fast if dropped
-      );
-    }
-    return const BetterPlayerBufferingConfiguration(
-      minBufferMs: 30000, // Target 30s of buffered data ahead
-      maxBufferMs: 60000, // Allow up to 60s buffer ceiling (reduced from 90s to save memory)
-      bufferForPlaybackMs: 3000, // Start playing after 3s
-      bufferForPlaybackAfterRebufferMs: 12000, // Resume after 12s on rebuffer (was 5s!)
-    );
-  }
 
   void _setControlsVisibility(bool visible) {
     if (_isDisposed || !mounted || _controller == null) return;
     try {
-      _controller?.setControlsVisibility(visible);
+      _controller?.toggleControlsVisibility(visible);
     } catch (e) {
       debugPrint('[PlayerScreen] ⚠️ Failed to set controls visibility: $e');
     }
