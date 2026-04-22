@@ -328,27 +328,24 @@ class _SplashScreenState extends State<SplashScreen>
                       animation: _pulseAnim,
                       builder: (_, _) {
                         return Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 36, vertical: 16),
+                          width: 280,
+                          height: 280,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFEC1D24),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(32),
                             boxShadow: [
                               BoxShadow(
                                 color: const Color(0xFFEC1D24)
-                                    .withValues(alpha: _pulseAnim.value * 0.6),
+                                    .withValues(alpha: _pulseAnim.value * 0.4),
                                 blurRadius: 60,
                                 spreadRadius: 10,
                               ),
                             ],
                           ),
-                          child: const Text(
-                            'REELRIOT',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 52,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 8,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(32),
+                            child: Image.asset(
+                              'assets/images/ReelriotTVLogo.png',
+                              fit: BoxFit.cover,
                             ),
                           ),
                         );

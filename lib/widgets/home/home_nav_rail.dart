@@ -35,22 +35,25 @@ class HomeNavRail extends StatelessWidget {
       child: Column(
         children: [
           SizedBox(height: s(40)),
-          // Logo placeholder
+          // Brand Logo
           Container(
-            width: s(90),
-            height: s(45),
+            width: s(85),
+            height: s(85),
             decoration: BoxDecoration(
-              color: const Color(0xFFEC1D24), // Exact Marvel Brand Red
-              borderRadius: BorderRadius.circular(s(4)),
+              borderRadius: BorderRadius.circular(s(16)),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFEC1D24).withValues(alpha: 0.2),
+                  blurRadius: s(10),
+                  spreadRadius: s(2),
+                ),
+              ],
             ),
-            alignment: Alignment.center,
-            child: Text(
-              'REELRIOT',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: s(16),
-                fontWeight: FontWeight.w900,
-                letterSpacing: s(1),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(s(16)),
+              child: Image.asset(
+                'assets/images/ReelriotTVLogo.png',
+                fit: BoxFit.cover,
               ),
             ),
           ),

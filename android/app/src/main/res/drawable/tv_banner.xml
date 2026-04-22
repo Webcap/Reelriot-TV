@@ -4,7 +4,7 @@
     <item android:drawable="@android:color/black" />
     <item>
         <bitmap
-            android:gravity="center"
-            android:src="@mipmap/ic_launcher" />
+            android:gravity="fill"
+            android:src="@drawable/tv_banner_img" />
     </item>
 </layer-list>

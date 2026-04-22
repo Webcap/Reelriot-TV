@@ -41,7 +41,7 @@ class ExitDialog extends StatelessWidget {
             ),
             const SizedBox(height: 32),
             const Text(
-              'EXIT CAFFEINE?',
+              'EXIT REELRIOT?',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 32,
