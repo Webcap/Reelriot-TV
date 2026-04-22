@@ -356,7 +356,7 @@ class _PairingScreenState extends State<PairingScreen> {
         ).copyWith(
           overlayColor: WidgetStateProperty.resolveWith<Color?>(
             (Set<WidgetState> states) {
-              if (states.contains(WidgetState.focused)) return Colors.white.withOpacity(0.1);
+              if (states.contains(WidgetState.focused)) return Colors.white.withValues(alpha: 0.1);
               return null;
             },
           ),

@@ -286,8 +286,8 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: [
-                    Colors.black.withOpacity(0.95),
-                    const Color(0xFF7F1D1D).withOpacity(0.6), 
+                    Colors.black.withValues(alpha: 0.95),
+                    const Color(0xFF7F1D1D).withValues(alpha: 0.6), 
                     Colors.transparent,
                   ],
                   stops: const [0.0, 0.45, 1.0],
@@ -302,7 +302,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Colors.black.withOpacity(0.1), Colors.black.withOpacity(0.8)],
+                  colors: [Colors.black.withValues(alpha: 0.1), Colors.black.withValues(alpha: 0.8)],
                 ),
               ),
             ),
@@ -333,14 +333,14 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                           ClipRRect(
                             borderRadius: BorderRadius.circular(s(24)),
                             child: BackdropFilter(
-                              filter: ColorFilter.mode(Colors.black.withOpacity(0.35), BlendMode.darken),
+                              filter: ColorFilter.mode(Colors.black.withValues(alpha: 0.35), BlendMode.darken),
                               child: Container(
                                 padding: EdgeInsets.all(s(40)),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.05),
+                                  color: Colors.white.withValues(alpha: 0.05),
                                   borderRadius: BorderRadius.circular(s(24)),
                                   border: Border.all(
-                                    color: Colors.white.withOpacity(0.12),
+                                    color: Colors.white.withValues(alpha: 0.12),
                                     width: s(1.5),
                                   ),
                                 ),
@@ -362,7 +362,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                               height: 0.9,
                                               shadows: [
                                                 Shadow(
-                                                  color: Colors.black.withOpacity(0.5),
+                                                  color: Colors.black.withValues(alpha: 0.5),
                                                   offset: Offset(0, s(4)),
                                                   blurRadius: s(10),
                                                 ),
@@ -392,12 +392,12 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                                  Container(
                                                    padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
                                                    decoration: BoxDecoration(
-                                                     color: Colors.green.withOpacity(0.15),
+                                                     color: Colors.green.withValues(alpha: 0.15),
                                                      borderRadius: BorderRadius.circular(s(6)),
-                                                     border: Border.all(color: Colors.green.withOpacity(0.5), width: s(1.5)),
+                                                     border: Border.all(color: Colors.green.withValues(alpha: 0.5), width: s(1.5)),
                                                      boxShadow: [
                                                        BoxShadow(
-                                                         color: Colors.green.withOpacity(0.1),
+                                                         color: Colors.green.withValues(alpha: 0.1),
                                                          blurRadius: s(8),
                                                          spreadRadius: s(2),
                                                        ),
@@ -441,7 +441,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                             child: Text(
                                               m.overview ?? '',
                                               style: TextStyle(
-                                                color: Colors.white.withOpacity(0.85),
+                                                color: Colors.white.withValues(alpha: 0.85),
                                                 fontSize: s(22),
                                                 fontWeight: FontWeight.w400,
                                                 height: 1.6,
@@ -534,13 +534,13 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                              decoration: BoxDecoration(
                                                borderRadius: BorderRadius.circular(s(20)),
                                                border: Border.all(
-                                                 color: focused ? Colors.white : Colors.white.withOpacity(0.12),
+                                                 color: focused ? Colors.white : Colors.white.withValues(alpha: 0.12),
                                                  width: s(2),
                                                ),
-                                               color: focused ? Colors.white.withOpacity(0.25) : Colors.white.withOpacity(0.05),
+                                               color: focused ? Colors.white.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.05),
                                                boxShadow: focused ? [
                                                  BoxShadow(
-                                                   color: Colors.black.withOpacity(0.3),
+                                                   color: Colors.black.withValues(alpha: 0.3),
                                                    blurRadius: s(15),
                                                    spreadRadius: s(2),
                                                  )
@@ -568,7 +568,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                                  Text(
                                                    actor.name,
                                                    style: TextStyle(
-                                                     color: focused ? Colors.white : Colors.white.withOpacity(0.9),
+                                                     color: focused ? Colors.white : Colors.white.withValues(alpha: 0.9),
                                                      fontSize: s(18),
                                                      fontWeight: focused ? FontWeight.bold : FontWeight.w500,
                                                    ),
@@ -737,16 +737,16 @@ class _ActionBtnState extends State<_ActionBtn> {
                   padding: EdgeInsets.symmetric(horizontal: widget.s(40), vertical: widget.s(16)),
                   decoration: BoxDecoration(
                     color: widget.isPrimary 
-                        ? (focused ? Colors.white : const Color(0xFFEC1D24).withOpacity(0.8))
-                        : (focused ? Colors.white.withOpacity(0.25) : Colors.white.withOpacity(0.08)),
+                        ? (focused ? Colors.white : const Color(0xFFEC1D24).withValues(alpha: 0.8))
+                        : (focused ? Colors.white.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.08)),
                     borderRadius: BorderRadius.circular(widget.s(12)),
                     border: Border.all(
-                      color: focused ? Colors.white : Colors.white.withOpacity(0.15),
+                      color: focused ? Colors.white : Colors.white.withValues(alpha: 0.15),
                       width: widget.s(1.5),
                     ),
                     boxShadow: focused ? [
                       BoxShadow(
-                        color: (widget.isPrimary ? const Color(0xFFEC1D24) : Colors.white).withOpacity(0.3),
+                        color: (widget.isPrimary ? const Color(0xFFEC1D24) : Colors.white).withValues(alpha: 0.3),
                         blurRadius: widget.s(15),
                         spreadRadius: widget.s(2),
                       )
@@ -783,7 +783,7 @@ class _ActionBtnState extends State<_ActionBtn> {
                     bottom: 0,
                     child: Container(
                       height: widget.s(4),
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       child: FractionallySizedBox(
                         alignment: Alignment.centerLeft,
                         widthFactor: widget.progress!,

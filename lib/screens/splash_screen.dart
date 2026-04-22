@@ -304,10 +304,10 @@ class _SplashScreenState extends State<SplashScreen>
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withOpacity(0.7),
+                  Colors.black.withValues(alpha: 0.7),
                   Colors.transparent,
                   Colors.transparent,
-                  Colors.black.withOpacity(0.85),
+                  Colors.black.withValues(alpha: 0.85),
                 ],
                 stops: const [0.0, 0.2, 0.75, 1.0],
               ),
@@ -336,7 +336,7 @@ class _SplashScreenState extends State<SplashScreen>
                             boxShadow: [
                               BoxShadow(
                                 color: const Color(0xFFEC1D24)
-                                    .withOpacity(_pulseAnim.value * 0.6),
+                                    .withValues(alpha: _pulseAnim.value * 0.6),
                                 blurRadius: 60,
                                 spreadRadius: 10,
                               ),
@@ -380,18 +380,18 @@ class _SplashScreenState extends State<SplashScreen>
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                 child: Container(
-                  color: Colors.black.withOpacity(0.6),
+                  color: Colors.black.withValues(alpha: 0.6),
                   child: Center(
                     child: Container(
                       width: 450,
                       padding: const EdgeInsets.all(40),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1A1A1A).withOpacity(0.9),
+                        color: const Color(0xFF1A1A1A).withValues(alpha: 0.9),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(color: Colors.white12),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.5),
+                            color: Colors.black.withValues(alpha: 0.5),
                             blurRadius: 40,
                             spreadRadius: 10,
                           ),
@@ -403,7 +403,7 @@ class _SplashScreenState extends State<SplashScreen>
                           Container(
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFEC1D24).withOpacity(0.1),
+                              color: const Color(0xFFEC1D24).withValues(alpha: 0.1),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
@@ -572,8 +572,8 @@ class _MenuButtonState extends State<_MenuButton>
             color: _isFocused
                 ? (widget.isPrimary ? const Color(0xFFEC1D24) : Colors.white10)
                 : (widget.isPrimary
-                    ? const Color(0xFFEC1D24).withOpacity(0.8)
-                    : Colors.white.withOpacity(0.05)),
+                    ? const Color(0xFFEC1D24).withValues(alpha: 0.8)
+                    : Colors.white.withValues(alpha: 0.05)),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _isFocused ? Colors.white : Colors.white12,
@@ -582,7 +582,7 @@ class _MenuButtonState extends State<_MenuButton>
             boxShadow: _isFocused && widget.isPrimary
                 ? [
                     BoxShadow(
-                      color: const Color(0xFFEC1D24).withOpacity(0.4),
+                      color: const Color(0xFFEC1D24).withValues(alpha: 0.4),
                       blurRadius: 20,
                       spreadRadius: 2,
                     )

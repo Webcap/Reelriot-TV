@@ -151,7 +151,7 @@ class _ProviderScreenState extends State<ProviderScreen> {
               height: s(800),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFFDC2626).withOpacity(0.05),
+                color: const Color(0xFFDC2626).withValues(alpha: 0.05),
               ),
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 100, sigmaY: 100),
@@ -256,7 +256,7 @@ class _ProviderScreenState extends State<ProviderScreen> {
               duration: const Duration(milliseconds: 200),
               padding: EdgeInsets.all(s(16)),
               decoration: BoxDecoration(
-                color: focused ? Colors.white : Colors.white.withOpacity(0.05),
+                color: focused ? Colors.white : Colors.white.withValues(alpha: 0.05),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -279,7 +279,7 @@ class _ProviderScreenState extends State<ProviderScreen> {
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: s(8), vertical: s(8)),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
+            color: Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(s(40)),
             border: Border.all(color: Colors.white10),
           ),
@@ -323,7 +323,7 @@ class _ProviderScreenState extends State<ProviderScreen> {
               duration: const Duration(milliseconds: 200),
               padding: EdgeInsets.symmetric(horizontal: s(32), vertical: s(12)),
               decoration: BoxDecoration(
-                color: focused ? Colors.white : (isSelected ? Colors.white.withOpacity(0.1) : Colors.transparent),
+                color: focused ? Colors.white : (isSelected ? Colors.white.withValues(alpha: 0.1) : Colors.transparent),
                 borderRadius: BorderRadius.circular(s(30)),
               ),
               child: Text(
@@ -392,7 +392,7 @@ class _ProviderScreenState extends State<ProviderScreen> {
   Widget _buildSkeletonCard(double Function(double) s) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
+        color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(s(16)),
       ),
     );

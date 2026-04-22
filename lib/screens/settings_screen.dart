@@ -246,7 +246,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.all(8),
                   margin: const EdgeInsets.symmetric(horizontal: 48),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: Colors.white12),
                   ),
@@ -300,7 +300,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.all(8),
                   margin: const EdgeInsets.symmetric(horizontal: 48),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: Colors.white12),
                   ),
@@ -354,7 +354,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.all(8),
                   margin: const EdgeInsets.symmetric(horizontal: 48),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: Colors.white12),
                   ),
@@ -418,7 +418,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       return Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: focused ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+                          color: focused ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.05),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: focused ? Colors.white38 : Colors.white12),
                         ),
@@ -566,10 +566,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
 
       if (info.isUpdateAvailable) {
+        if (!context.mounted) return;
         Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => UpdateScreen(updateInfo: info)),
         );
       } else {
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('App is up to date!'),
@@ -579,6 +581,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (e) {
       if (mounted) {
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to check for updates: $e'),

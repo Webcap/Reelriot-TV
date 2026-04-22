@@ -743,7 +743,7 @@ class SportsScreenState extends State<SportsScreen> {
                 borderRadius: BorderRadius.circular(s(24)),
                 boxShadow: [
                   if (focused) BoxShadow(
-                    color: color.withOpacity(0.3),
+                    color: color.withValues(alpha: 0.3),
                     blurRadius: s(30),
                     spreadRadius: s(5),
                   )
@@ -773,8 +773,8 @@ class SportsScreenState extends State<SportsScreen> {
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                             colors: [
-                              Colors.black.withOpacity(0.9),
-                              Colors.black.withOpacity(0.4),
+                              Colors.black.withValues(alpha: 0.9),
+                              Colors.black.withValues(alpha: 0.4),
                               Colors.transparent,
                             ],
                           ),
@@ -826,7 +826,7 @@ class SportsScreenState extends State<SportsScreen> {
                               Container(
                                 padding: EdgeInsets.symmetric(horizontal: s(32), vertical: s(16)),
                                 decoration: BoxDecoration(
-                                  color: focused ? Colors.white : Colors.white.withOpacity(0.1),
+                                  color: focused ? Colors.white : Colors.white.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(s(12)),
                                 ),
                                 child: Row(
@@ -877,7 +877,7 @@ class SportsScreenState extends State<SportsScreen> {
   Widget _gradientBack(Color color) => Container(
     decoration: BoxDecoration(
       gradient: LinearGradient(
-        colors: [color.withOpacity(0.3), Colors.black],
+        colors: [color.withValues(alpha: 0.3), Colors.black],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
@@ -984,9 +984,9 @@ class _LiveBadge extends StatelessWidget {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(6)),
       decoration: BoxDecoration(
-        color: const Color(0xFFDC2626).withOpacity(0.15),
+        color: const Color(0xFFDC2626).withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(s(20)),
-        border: Border.all(color: const Color(0xFFDC2626).withOpacity(0.4)),
+        border: Border.all(color: const Color(0xFFDC2626).withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1057,10 +1057,10 @@ class _GameCardState extends State<_GameCard> {
           duration: const Duration(milliseconds: 150),
           width: s(360),
           decoration: BoxDecoration(
-            color: _focused ? widget.accentColor.withOpacity(0.15) : const Color(0xFF0B0F14),
+            color: _focused ? widget.accentColor.withValues(alpha: 0.15) : const Color(0xFF0B0F14),
             borderRadius: BorderRadius.circular(s(16)),
             border: Border.all(
-              color: _focused ? widget.accentColor : (g.isLive ? const Color(0xFFDC2626).withOpacity(0.4) : Colors.white12),
+              color: _focused ? widget.accentColor : (g.isLive ? const Color(0xFFDC2626).withValues(alpha: 0.4) : Colors.white12),
               width: _focused ? 2 : 1,
             ),
           ),
@@ -1096,9 +1096,9 @@ class _GameCardState extends State<_GameCard> {
                 Container(
                   padding: EdgeInsets.symmetric(horizontal: s(10), vertical: s(4)),
                   decoration: BoxDecoration(
-                    color: widget.accentColor.withOpacity(0.1),
+                    color: widget.accentColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(s(6)),
-                    border: Border.all(color: widget.accentColor.withOpacity(0.3)),
+                    border: Border.all(color: widget.accentColor.withValues(alpha: 0.3)),
                   ),
                   child: Text(
                     widget.league.name,
@@ -1219,7 +1219,7 @@ class _FilterChipState extends State<_FilterChip> {
           decoration: BoxDecoration(
             color: isSelected
                 ? const Color(0xFFDC2626)
-                : (_focused ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.05)),
+                : (_focused ? Colors.white.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.05)),
             borderRadius: BorderRadius.circular(s(30)),
             border: Border.all(
               color: isSelected ? Colors.transparent : (_focused ? Colors.white70 : Colors.white10),
@@ -1228,7 +1228,7 @@ class _FilterChipState extends State<_FilterChip> {
             boxShadow: [
               if (_focused || isSelected)
                 BoxShadow(
-                  color: (isSelected ? const Color(0xFFDC2626) : Colors.white).withOpacity(0.2),
+                  color: (isSelected ? const Color(0xFFDC2626) : Colors.white).withValues(alpha: 0.2),
                   blurRadius: s(16),
                   spreadRadius: s(2),
                 )
@@ -1275,14 +1275,14 @@ class _RefreshButton extends StatelessWidget {
               duration: const Duration(milliseconds: 200),
               padding: EdgeInsets.symmetric(horizontal: s(32), vertical: s(16)),
               decoration: BoxDecoration(
-                color: focused ? Colors.white : Colors.white.withOpacity(0.05),
+                color: focused ? Colors.white : Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(s(12)),
                 border: Border.all(
                   color: focused ? Colors.white : Colors.white24,
                   width: s(2),
                 ),
                 boxShadow: focused ? [
-                  BoxShadow(color: Colors.white.withOpacity(0.2), blurRadius: s(12), spreadRadius: s(2))
+                  BoxShadow(color: Colors.white.withValues(alpha: 0.2), blurRadius: s(12), spreadRadius: s(2))
                 ] : null,
               ),
               child: Row(

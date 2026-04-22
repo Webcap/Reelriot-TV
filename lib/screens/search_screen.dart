@@ -290,7 +290,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 await Navigator.of(context).push(
                   MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
                 );
-                if (context.mounted) {
+                if (mounted && context.mounted) {
                   HomeScreenState.of(context)?.setIndex(1);
                 }
               } finally {
@@ -313,7 +313,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 await Navigator.of(context).push(
                   MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: t.id)),
                 );
-                if (context.mounted) {
+                if (mounted && context.mounted) {
                   HomeScreenState.of(context)?.setIndex(1);
                 }
               } finally {
@@ -447,7 +447,7 @@ class _Key extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: focused 
                       ? (isPrimary ? Colors.white : Colors.white24)
-                      : (color ?? Colors.white.withOpacity(0.05)),
+                      : (color ?? Colors.white.withValues(alpha: 0.05)),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: focused ? Colors.white : Colors.white10,
@@ -506,7 +506,7 @@ class _ResultTile extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: focused ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.04),
+              color: focused ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.04),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: focused ? Colors.white : Colors.white10,
@@ -567,7 +567,7 @@ class _ResultTile extends StatelessWidget {
                         Text(
                           overview,
                           style: TextStyle(
-                            color: focused ? Colors.white.withOpacity(0.8) : Colors.white54,
+                            color: focused ? Colors.white.withValues(alpha: 0.8) : Colors.white54,
                             fontSize: 14,
                             height: 1.4,
                           ),
@@ -617,7 +617,7 @@ class _HistoryPill extends StatelessWidget {
             duration: const Duration(milliseconds: 150),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: focused ? Colors.white : Colors.white.withOpacity(0.05),
+              color: focused ? Colors.white : Colors.white.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: focused ? Colors.white : Colors.white10,

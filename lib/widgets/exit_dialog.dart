@@ -17,7 +17,7 @@ class ExitDialog extends StatelessWidget {
           border: Border.all(color: Colors.white12, width: 2),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.5),
+              color: Colors.black.withValues(alpha: 0.5),
               blurRadius: 40,
               offset: const Offset(0, 20),
             ),
@@ -30,7 +30,7 @@ class ExitDialog extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFFEC1D24).withOpacity(0.1),
+                color: const Color(0xFFEC1D24).withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -54,7 +54,7 @@ class ExitDialog extends StatelessWidget {
               'Are you sure you want to quit the application? We\'ll miss you!',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.6),
+                color: Colors.white.withValues(alpha: 0.6),
                 fontSize: 20,
                 height: 1.5,
               ),
@@ -129,7 +129,7 @@ class _DialogButtonState extends State<_DialogButton> {
           decoration: BoxDecoration(
             color: _isFocused
                 ? (widget.isPrimary ? const Color(0xFFEC1D24) : Colors.white)
-                : (widget.isPrimary ? const Color(0xFFEC1D24).withOpacity(0.1) : Colors.white.withOpacity(0.05)),
+                : (widget.isPrimary ? const Color(0xFFEC1D24).withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.05)),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _isFocused ? Colors.transparent : Colors.white10,

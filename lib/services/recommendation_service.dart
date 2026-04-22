@@ -3,6 +3,7 @@ import 'package:caffeine_core/caffeine_core.dart';
 import 'package:reelriot_tv/env.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart';
 
 class RecommendationResult {
   final List<MovieListItem> items;
@@ -39,7 +40,7 @@ class RecommendationService {
         );
       }
     } catch (e) {
-      print('Error fetching recommendations: $e');
+      debugPrint('Error fetching recommendations: $e');
     }
     return RecommendationResult(items: []);
   }

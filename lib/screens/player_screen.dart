@@ -813,9 +813,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final pureUrl = targetUrl.split("?")[0];
       if (pureUrl.endsWith(".m3u8")) {
         extension = "/video.m3u8";
-      } else if (pureUrl.endsWith(".ts"))
+      } else if (pureUrl.endsWith(".ts")) {
         extension = "/segment.ts";
-      else if (pureUrl.endsWith(".mp4")) extension = "/video.mp4";
+      } else if (pureUrl.endsWith(".mp4")) {
+        extension = "/video.mp4";
+      }
 
       return "$baseUrl/proxy/stream$extension?url=$encodedUrl&headers=$encodedHeaders";
     } catch (e) {
@@ -855,6 +857,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
 
       if (_isSports) {
+        if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (context) => PlayerScreen(
@@ -919,13 +922,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
               orElse: () => {},
             );
 
-            if (source.isNotEmpty) {
-              debugPrint(
-                '[PlayerScreen] ⚾ Sports mirror switch to: $newProviderCode',
-              );
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (context) => PlayerScreen(
+              if (source.isNotEmpty) {
+                debugPrint(
+                  '[PlayerScreen] ⚾ Sports mirror switch to: $newProviderCode',
+                );
+                if (!context.mounted) return;
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (context) => PlayerScreen(
                     url: newProviderCode,
                     title: widget.title,
                     item: widget.item,
@@ -943,6 +947,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (mounted && !_isDisposed) {
             // For sports, we should have already returned above.
             // If we reach here, it's a movie or TV show.
+            if (!context.mounted) return;
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
                 builder: (context) =>
@@ -1156,7 +1161,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // Back / Exit
         if (TvKeys.isBack(key)) {
           _saveCurrentProgress().then((_) {
-            if (mounted) Navigator.of(context).pop();
+            if (mounted && context.mounted) Navigator.of(context).pop();
           });
           return KeyEventResult.handled;
         }
@@ -1199,7 +1204,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (TvKeys.isMediaStop(key)) {
           debugPrint('[PlayerScreen] ⏹️ Media Stop key');
           _saveCurrentProgress().then((_) {
-            if (mounted) Navigator.of(context).pop();
+            if (mounted && context.mounted) Navigator.of(context).pop();
           });
           return KeyEventResult.handled;
         }
@@ -1225,7 +1230,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             return;
           }
           await _saveCurrentProgress();
-          if (mounted) {
+          if (mounted && context.mounted) {
             Navigator.of(context).pop();
           }
         },

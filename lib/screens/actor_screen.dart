@@ -136,7 +136,7 @@ class _ActorScreenState extends State<ActorScreen> {
                           Text(
                             _person!.biography!,
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.7),
+                              color: Colors.white.withValues(alpha: 0.7),
                               fontSize: s(22),
                               height: 1.5,
                             ),
