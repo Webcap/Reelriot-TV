@@ -38,7 +38,7 @@ class _PairingScreenState extends State<PairingScreen> {
   Map<String, String> get _authHeaders {
     final headers = <String, String>{
       'Content-Type': 'application/json',
-      'User-Agent': 'CaffeineTV/1.0',
+      'User-Agent': 'ReelriotTV/1.0',
     };
     if (caffeineApiKey.isNotEmpty) {
       headers['Authorization'] = 'Bearer $caffeineApiKey';
@@ -174,26 +174,47 @@ class _PairingScreenState extends State<PairingScreen> {
           
           if (refreshToken != null && refreshToken.isNotEmpty && mounted) {
             try {
-              if (accessToken != null && accessToken.isNotEmpty) {
-                _log('Establishing session with access and refresh tokens');
-                // Use access_token and refresh_token to properly establish the session
-                await Supabase.instance.client.auth.setSession(
-                  '$accessToken $refreshToken', // Some versions support this hack or specific formats
-                );
-                // Better: if possible, use recoverSession or setSession(Session)
-                // But for now, let's try to be robust. 
-                // In Supabase Flutter 2.x, setSession expects the full session string or 
-                // we can use client.auth.recoverSession(refreshToken)
-                await Supabase.instance.client.auth.recoverSession(refreshToken);
-              } else {
-                _log('Recovering session with refresh token only');
-                await Supabase.instance.client.auth.recoverSession(refreshToken);
+              _log('Establishing session. Tokens received:', 'refresh=${refreshToken.length} chars, access=${accessToken?.length ?? 0} chars');
+              
+              _log('Establishing session using recoverSession with JSON');
+              
+              // Extract user ID from JWT to construct a valid Session JSON
+              String? userId = 'unknown';
+              try {
+                final parts = accessToken!.split('.');
+                if (parts.length >= 2) {
+                  final payload = jsonDecode(
+                    utf8.decode(base64Url.decode(base64Url.normalize(parts[1])))
+                  );
+                  userId = payload['sub']?.toString() ?? 'unknown';
+                }
+              } catch (e) {
+                _log('Failed to decode JWT', e);
               }
+
+              final sessionJson = jsonEncode({
+                'access_token': accessToken,
+                'refresh_token': refreshToken,
+                'expires_in': 3600,
+                'expires_at': (DateTime.now().millisecondsSinceEpoch ~/ 1000) + 3600,
+                'token_type': 'bearer',
+                'user': {
+                  'id': userId,
+                  'aud': 'authenticated',
+                  'app_metadata': {},
+                  'user_metadata': {},
+                  'created_at': DateTime.now().toIso8601String(),
+                }
+              });
+              
+              await Supabase.instance.client.auth.recoverSession(sessionJson);
+              
               _log('Session established successfully');
               if (mounted) _onLinked();
-            } catch (e) {
+            } catch (e, st) {
               _log('Session establishment failed', e);
-              setState(() => _error = 'Failed to establish session: $e');
+              debugPrint('Stack trace: $st');
+              setState(() => _error = 'Session pairing failed: $e');
             }
           } else {
             _log('Linked but no refresh_token in response');
@@ -227,7 +248,7 @@ class _PairingScreenState extends State<PairingScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Text(
-                'Sign in to Caffeine TV',
+                'Sign in to Reelriot TV',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 28,
@@ -256,7 +277,7 @@ class _PairingScreenState extends State<PairingScreen> {
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'Make sure the Caffeine API is reachable.',
+                      'Make sure the Reelriot API is reachable.',
                       style: TextStyle(color: Colors.white54, fontSize: 14),
                       textAlign: TextAlign.center,
                     ),
@@ -278,7 +299,7 @@ class _PairingScreenState extends State<PairingScreen> {
                   padding: EdgeInsets.symmetric(horizontal: 24),
                   child: Text(
                     '1. On your phone or computer, open the pairing page.\n'
-                    '2. Sign in with your Caffeine account.\n'
+                    '2. Sign in with your Reelriot account.\n'
                     '3. Enter the code shown below.',
                     style: TextStyle(color: Colors.white70, fontSize: 16),
                     textAlign: TextAlign.center,

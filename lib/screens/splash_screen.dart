@@ -104,6 +104,7 @@ class _SplashScreenState extends State<SplashScreen>
           apiUrl: caffeineApiUrl,
           environment: environment,
           platform: 'tv',
+          apiKey: caffeineApiKey,
         ).timeout(const Duration(seconds: 3)).catchError((e) {
           debugPrint('[Splash] FeatureFlagManager failed or timed out: $e');
           return null; 

@@ -733,7 +733,7 @@ class _ActionBtnState extends State<_ActionBtn> {
               children: [
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  transform: Matrix4.identity()..scale(focused ? 1.05 : 1.0),
+                  transform: Matrix4.identity()..scaleByDouble(focused ? 1.05 : 1.0, focused ? 1.05 : 1.0, 1.0, 1.0),
                   padding: EdgeInsets.symmetric(horizontal: widget.s(40), vertical: widget.s(16)),
                   decoration: BoxDecoration(
                     color: widget.isPrimary 

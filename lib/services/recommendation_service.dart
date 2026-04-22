@@ -25,7 +25,12 @@ class RecommendationService {
     });
 
     try {
-      final response = await http.get(url).timeout(const Duration(seconds: 30));
+      final headers = <String, String>{};
+      if (caffeineApiKey.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $caffeineApiKey';
+      }
+
+      final response = await http.get(url, headers: headers).timeout(const Duration(seconds: 30));
       if (response.statusCode != 200) return RecommendationResult(items: []);
 
       final data = jsonDecode(response.body);
