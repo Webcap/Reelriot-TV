@@ -343,7 +343,7 @@ class _SplashScreenState extends State<SplashScreen>
                             ],
                           ),
                           child: const Text(
-                            'CAFFEINE',
+                            'REELRIOT',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 52,
@@ -357,7 +357,7 @@ class _SplashScreenState extends State<SplashScreen>
                     const SizedBox(height: 24),
                     // Tagline
                     const Text(
-                      'Stream Everything.',
+                      'Your Cinematic Riot.',
                       style: TextStyle(
                         color: Colors.white70,
                         fontSize: 20,
@@ -414,7 +414,7 @@ class _SplashScreenState extends State<SplashScreen>
                           ),
                           const SizedBox(height: 24),
                           const Text(
-                            'Connection reaching caffeine API failed',
+                            'Connection reaching Reelriot API failed',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white,

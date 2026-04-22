@@ -45,7 +45,7 @@ class HomeNavRail extends StatelessWidget {
             ),
             alignment: Alignment.center,
             child: Text(
-              'CAFFEINE',
+              'REELRIOT',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: s(16),
