@@ -1,5 +1,5 @@
 import 'package:caffeine_core/caffeine_core.dart';
-import 'package:caffeine_tv/services/settings_service.dart';
+import 'package:reelriot_tv/services/settings_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -455,7 +455,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             Switch(
                               value: enabled,
                               onChanged: (val) => _toggleExternalSubtitles(val),
-                              activeColor: const Color(0xFFDC2626),
+                              activeThumbColor: const Color(0xFFDC2626),
                             ),
                           ],
                         ),

@@ -1,13 +1,13 @@
 import 'package:caffeine_core/caffeine_core.dart';
-import 'package:caffeine_tv/screens/home_screen.dart';
-import 'package:caffeine_tv/screens/movie_detail_screen.dart';
-import 'package:caffeine_tv/screens/tv_detail_screen.dart';
-import 'package:caffeine_tv/services/api_service.dart';
+import 'package:reelriot_tv/screens/home_screen.dart';
+import 'package:reelriot_tv/screens/movie_detail_screen.dart';
+import 'package:reelriot_tv/screens/tv_detail_screen.dart';
+import 'package:reelriot_tv/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:caffeine_tv/services/ad_service.dart';
+import 'package:reelriot_tv/services/ad_service.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -526,7 +526,7 @@ class _ResultTile extends StatelessWidget {
                         ? Image.network(
                             'https://image.tmdb.org/t/p/w185$poster',
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(color: Colors.grey[900]),
+                            errorBuilder: (_, _, _) => Container(color: Colors.grey[900]),
                           )
                         : Container(color: Colors.grey[900]),
                   ),

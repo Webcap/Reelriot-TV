@@ -2,13 +2,13 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 import 'package:caffeine_core/caffeine_core.dart' as core;
-import 'package:caffeine_tv/constants.dart';
-import 'package:caffeine_tv/services/api_service.dart';
-import 'package:caffeine_tv/services/settings_service.dart';
-import 'package:caffeine_tv/services/ad_service.dart';
-import 'package:caffeine_tv/services/update_service.dart';
-import 'package:caffeine_tv/screens/update_screen.dart';
-import 'package:caffeine_tv/env.dart';
+import 'package:reelriot_tv/constants.dart';
+import 'package:reelriot_tv/services/api_service.dart';
+import 'package:reelriot_tv/services/settings_service.dart';
+import 'package:reelriot_tv/services/ad_service.dart';
+import 'package:reelriot_tv/services/update_service.dart';
+import 'package:reelriot_tv/screens/update_screen.dart';
+import 'package:reelriot_tv/env.dart';
 import 'package:flutter/material.dart';
 
 
@@ -255,7 +255,7 @@ class _SplashScreenState extends State<SplashScreen>
                       bottom: i == _rowCount - 1 ? 0 : 5,
                     ),
                     itemCount: row.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: gap),
+                    separatorBuilder: (_, _) => const SizedBox(width: gap),
                     itemBuilder: (_, idx) {
                       final path = row[idx];
                       
@@ -326,7 +326,7 @@ class _SplashScreenState extends State<SplashScreen>
                     // Glowing logo badge
                     AnimatedBuilder(
                       animation: _pulseAnim,
-                      builder: (_, __) {
+                      builder: (_, _) {
                         return Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 36, vertical: 16),
@@ -493,9 +493,9 @@ class _SplashScreenState extends State<SplashScreen>
     if (mounted) {
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) => widget.destination,
+          pageBuilder: (_, _, _) => widget.destination,
           transitionDuration: const Duration(milliseconds: 600),
-          transitionsBuilder: (_, animation, __, child) {
+          transitionsBuilder: (_, animation, _, child) {
             return FadeTransition(
               opacity: CurvedAnimation(parent: animation, curve: Curves.easeIn),
               child: child,
@@ -626,7 +626,7 @@ class _LoadingDots extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: controller,
-      builder: (_, __) {
+      builder: (_, _) {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: List.generate(3, (i) {

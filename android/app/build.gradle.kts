@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.webcap.caffeine_tv"
+    namespace = "media.webcap.reelriot.tv"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.webcap.caffeine_tv"
+        applicationId = "media.webcap.reelriot.tv"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -36,11 +36,11 @@ android {
         create("dev") {
             dimension = "version"
             applicationIdSuffix = ".dev"
-            resValue("string", "app_name", "Caffeine TV (DEV)")
+            resValue("string", "app_name", "Reelriot TV (DEV)")
         }
         create("prod") {
             dimension = "version"
-            resValue("string", "app_name", "Caffeine TV")
+            resValue("string", "app_name", "Reelriot TV")
         }
     }
 

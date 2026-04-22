@@ -1,16 +1,16 @@
 import 'package:caffeine_core/caffeine_core.dart';
-import 'package:caffeine_tv/constants.dart';
-import 'package:caffeine_tv/screens/video_loader_screen.dart';
-import 'package:caffeine_tv/screens/actor_screen.dart';
-import 'package:caffeine_tv/services/api_service.dart';
-import 'package:caffeine_tv/services/watch_history_service.dart';
-import 'package:caffeine_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/constants.dart';
+import 'package:reelriot_tv/screens/video_loader_screen.dart';
+import 'package:reelriot_tv/screens/actor_screen.dart';
+import 'package:reelriot_tv/services/api_service.dart';
+import 'package:reelriot_tv/services/watch_history_service.dart';
+import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:caffeine_tv/services/bookmark_service.dart';
+import 'package:reelriot_tv/services/bookmark_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:caffeine_tv/services/ad_service.dart';
+import 'package:reelriot_tv/services/ad_service.dart';
 
 class MovieDetailScreen extends StatefulWidget {
   const MovieDetailScreen({super.key, required this.movieId});
@@ -258,7 +258,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
         ? '$tmdbImageBaseUrl/w780${m.backdropPath}'
         : null;
 
-    final s = (double v) => (v * MediaQuery.of(context).size.width) / 1920;
+    double s(double v) => (v * MediaQuery.of(context).size.width) / 1920;
 
     return Scaffold(
       backgroundColor: const Color(0xFF000000), 

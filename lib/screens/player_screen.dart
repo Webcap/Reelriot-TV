@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
-import 'package:caffeine_tv/services/player/caffeine_player_controller.dart';
-import 'package:caffeine_tv/services/settings_service.dart';
-import 'package:caffeine_tv/services/watch_history_service.dart';
-import 'package:caffeine_tv/utils/tv_keys.dart';
-import 'package:caffeine_tv/widgets/player_settings_overlay.dart';
-import 'package:caffeine_tv/widgets/tv_player_controls.dart';
-import 'package:caffeine_tv/screens/video_loader_screen.dart';
-import 'package:caffeine_tv/utils/wakelock_manager.dart';
-import 'package:caffeine_tv/services/api_service.dart';
+import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
+import 'package:reelriot_tv/services/settings_service.dart';
+import 'package:reelriot_tv/services/watch_history_service.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
+import 'package:reelriot_tv/widgets/player_settings_overlay.dart';
+import 'package:reelriot_tv/widgets/tv_player_controls.dart';
+import 'package:reelriot_tv/screens/video_loader_screen.dart';
+import 'package:reelriot_tv/utils/wakelock_manager.dart';
+import 'package:reelriot_tv/services/api_service.dart';
 import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/scheduler.dart';
 import 'dart:convert';
-import 'package:caffeine_tv/services/subtitle_service.dart';
-import 'package:caffeine_tv/widgets/language_picker_dialog.dart';
-import 'package:caffeine_tv/models/sub_languages.dart';
-import 'package:caffeine_tv/services/analytics_service.dart';
+import 'package:reelriot_tv/services/subtitle_service.dart';
+import 'package:reelriot_tv/widgets/language_picker_dialog.dart';
+import 'package:reelriot_tv/models/sub_languages.dart';
+import 'package:reelriot_tv/services/analytics_service.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -120,8 +120,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       // Watchdog: The Chromecast Amlogic AVC decoder can stall during initialization.
       _initWatchdogTimer = Timer(const Duration(seconds: 6), () {
-        if (!mounted || _isDisposed || _hasInitialized || _isHandlingException)
+        if (!mounted || _isDisposed || _hasInitialized || _isHandlingException) {
           return;
+        }
         debugPrint(
           '[PlayerScreen] ⚠️ Init watchdog fired — player not initialized after 6s, forcing reset',
         );
@@ -690,8 +691,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String _getOrigin(String url) {
     try {
       final uri = Uri.parse(url);
-      if (uri.scheme.isEmpty || uri.host.isEmpty)
+      if (uri.scheme.isEmpty || uri.host.isEmpty) {
         return url.replaceAll(RegExp(r'/$'), '');
+      }
       return '${uri.scheme}://${uri.host}';
     } catch (_) {
       return url.replaceAll(RegExp(r'/$'), '');
@@ -809,9 +811,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       String extension = "";
       final pureUrl = targetUrl.split("?")[0];
-      if (pureUrl.endsWith(".m3u8"))
+      if (pureUrl.endsWith(".m3u8")) {
         extension = "/video.m3u8";
-      else if (pureUrl.endsWith(".ts"))
+      } else if (pureUrl.endsWith(".ts"))
         extension = "/segment.ts";
       else if (pureUrl.endsWith(".mp4")) extension = "/video.mp4";
 
@@ -1293,7 +1295,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 Image.network(
                   imageUrl,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
                 ),
               // Dark gradient overlay so the spinner is readable
               Container(
@@ -1395,7 +1397,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 child: Image.network(
                   imageUrl,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
                 ),
               ),
             

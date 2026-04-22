@@ -1,10 +1,10 @@
 import 'dart:convert';
-import 'package:caffeine_tv/env.dart';
+import 'package:reelriot_tv/env.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:caffeine_tv/screens/player_screen.dart';
-import 'package:caffeine_tv/services/ad_service.dart';
+import 'package:reelriot_tv/screens/player_screen.dart';
+import 'package:reelriot_tv/services/ad_service.dart';
 
 class SportsGameDetailScreen extends StatefulWidget {
   final String sport;

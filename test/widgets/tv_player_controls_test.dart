@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'package:caffeine_tv/services/player/caffeine_player_controller.dart';
-import 'package:caffeine_tv/widgets/tv_player_controls.dart';
+import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
+import 'package:reelriot_tv/widgets/tv_player_controls.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

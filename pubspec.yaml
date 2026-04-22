@@ -1,4 +1,4 @@
-name: caffeine_tv
+name: reelriot_tv
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -58,6 +58,8 @@ dependencies:
   path_provider_tizen: ^2.2.1
 
 
+  url_launcher: any
+  path_provider: any
 dependency_overrides:
   media_kit:
     path: ../media-kit/media_kit

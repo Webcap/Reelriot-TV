@@ -1,4 +1,4 @@
-import 'package:caffeine_tv/main.dart';
+import 'package:reelriot_tv/main.dart';
 
 void main() async {
   await bootstrap('.env.dev');

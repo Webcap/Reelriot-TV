@@ -1,5 +1,5 @@
-import 'package:caffeine_tv/services/settings_service.dart';
-import 'package:caffeine_tv/utils/responsive_utils.dart';
+import 'package:reelriot_tv/services/settings_service.dart';
+import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 

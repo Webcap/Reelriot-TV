@@ -1,4 +1,4 @@
-import 'package:caffeine_tv/utils/responsive_utils.dart';
+import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 

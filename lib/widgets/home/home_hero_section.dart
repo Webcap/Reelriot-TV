@@ -1,6 +1,6 @@
 import 'package:caffeine_core/caffeine_core.dart';
-import 'package:caffeine_tv/utils/responsive_utils.dart';
-import 'package:caffeine_tv/widgets/home/home_hero_button.dart';
+import 'package:reelriot_tv/utils/responsive_utils.dart';
+import 'package:reelriot_tv/widgets/home/home_hero_button.dart';
 import 'package:flutter/material.dart';
 
 class HomeHeroSection extends StatelessWidget {

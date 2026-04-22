@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:caffeine_tv/services/player/caffeine_player_controller.dart';
+import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -74,8 +74,9 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       setState(() => _isBuffering = true);
       _bufferingDebounce?.cancel();
       _bufferingDebounce = Timer(const Duration(milliseconds: 800), () {
-        if (mounted && _isBuffering)
+        if (mounted && _isBuffering) {
           setState(() => _showBufferingOverlay = true);
+        }
       });
     } else if (event.type == CaffeinePlayerEventType.bufferingEnd) {
       _bufferingDebounce?.cancel();
@@ -303,11 +304,12 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   }
 
   Widget _buildTimeText(Duration? duration) {
-    if (duration == null)
+    if (duration == null) {
       return const Text(
         "--:--",
         style: TextStyle(color: Colors.white70, fontSize: 20),
       );
+    }
     String twoDigits(int n) => n.toString().padLeft(2, "0");
     String minutes = twoDigits(duration.inMinutes.remainder(60));
     String seconds = twoDigits(duration.inSeconds.remainder(60));

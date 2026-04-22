@@ -1,7 +1,7 @@
-import 'package:caffeine_tv/constants.dart';
+import 'package:reelriot_tv/constants.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:caffeine_tv/widgets/long_press_focus.dart';
+import 'package:reelriot_tv/widgets/long_press_focus.dart';
 
 class PosterCard extends StatefulWidget {
   const PosterCard({
@@ -37,7 +37,7 @@ class _PosterCardState extends State<PosterCard> {
   Widget build(BuildContext context) {
     // Read once at the top of build
     final screenWidth = MediaQuery.of(context).size.width;
-    final s = (double v) => (v * screenWidth) / 1920;
+    double s(double v) => (v * screenWidth) / 1920;
 
     return LongPressFocus(
       focusNode: widget.focusNode,

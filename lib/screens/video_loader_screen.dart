@@ -1,19 +1,19 @@
 import 'package:caffeine_core/caffeine_core.dart' as core;
-import 'package:caffeine_tv/services/player/caffeine_player_controller.dart';
-import 'package:caffeine_tv/constants.dart';
-import 'package:caffeine_tv/models/provider_load_state.dart';
-import 'package:caffeine_tv/screens/player_screen.dart';
-import 'package:caffeine_tv/services/api_service.dart';
-import 'package:caffeine_tv/services/settings_service.dart';
-import 'package:caffeine_tv/services/subtitle_service.dart';
-import 'package:caffeine_tv/models/sub_languages.dart';
-import 'package:caffeine_tv/services/watch_history_service.dart';
-import 'package:caffeine_tv/widgets/provider_loading_widget.dart';
-import 'package:caffeine_tv/utils/video_utils.dart';
+import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
+import 'package:reelriot_tv/constants.dart';
+import 'package:reelriot_tv/models/provider_load_state.dart';
+import 'package:reelriot_tv/screens/player_screen.dart';
+import 'package:reelriot_tv/services/api_service.dart';
+import 'package:reelriot_tv/services/settings_service.dart';
+import 'package:reelriot_tv/services/subtitle_service.dart';
+import 'package:reelriot_tv/models/sub_languages.dart';
+import 'package:reelriot_tv/services/watch_history_service.dart';
+import 'package:reelriot_tv/widgets/provider_loading_widget.dart';
+import 'package:reelriot_tv/utils/video_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:caffeine_tv/utils/wakelock_manager.dart';
+import 'package:reelriot_tv/utils/wakelock_manager.dart';
 
 class VideoLoaderScreen extends StatefulWidget {
   final core.MovieDetail? movie;
@@ -340,7 +340,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = (double v) => _scale(context, v);
+    double s(double v) => _scale(context, v);
     final backdropPath =
         widget.movie?.backdropPath ?? widget.tvShow?.backdropPath;
     final title = widget.movie?.title ?? widget.tvShow?.name ?? 'Loading...';
@@ -357,8 +357,8 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
             CachedNetworkImage(
               imageUrl: '$tmdbImageBaseUrl/original$backdropPath',
               fit: BoxFit.cover,
-              errorWidget: (_, __, ___) => const SizedBox.shrink(),
-              placeholder: (_, __) => Container(color: Colors.black),
+              errorWidget: (_, _, _) => const SizedBox.shrink(),
+              placeholder: (_, _) => Container(color: Colors.black),
             ),
 
           // 2. Premium Linear Gradient (Matches PlayerScreen)

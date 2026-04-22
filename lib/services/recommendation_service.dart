@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:caffeine_core/caffeine_core.dart';
-import 'package:caffeine_tv/env.dart';
+import 'package:reelriot_tv/env.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -18,7 +18,7 @@ class RecommendationService {
     final userId = Supabase.instance.client.auth.currentUser?.id;
 
     final url = Uri.parse('$_baseUrl/recommendations').replace(queryParameters: {
-      if (userId != null) 'userId': userId,
+      'userId': ?userId,
       if (situation != null && situation.isNotEmpty) 'situation': situation,
       if (mediaType != null && mediaType.isNotEmpty) 'mediaType': mediaType,
     });

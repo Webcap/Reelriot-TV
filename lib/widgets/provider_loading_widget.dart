@@ -1,4 +1,4 @@
-import 'package:caffeine_tv/models/provider_load_state.dart';
+import 'package:reelriot_tv/models/provider_load_state.dart';
 import 'package:flutter/material.dart';
 
 class ProviderLoadingWidget extends StatefulWidget {

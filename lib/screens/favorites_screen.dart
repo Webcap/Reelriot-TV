@@ -1,8 +1,8 @@
 import 'package:caffeine_core/caffeine_core.dart';
-import 'package:caffeine_tv/screens/home_screen.dart';
-import 'package:caffeine_tv/screens/movie_detail_screen.dart';
-import 'package:caffeine_tv/screens/tv_detail_screen.dart';
-import 'package:caffeine_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/screens/home_screen.dart';
+import 'package:reelriot_tv/screens/movie_detail_screen.dart';
+import 'package:reelriot_tv/screens/tv_detail_screen.dart';
+import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 

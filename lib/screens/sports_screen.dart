@@ -1,12 +1,12 @@
 import 'dart:convert';
-import 'package:caffeine_tv/env.dart';
-import 'package:caffeine_tv/screens/sports_game_detail_screen.dart';
+import 'package:reelriot_tv/env.dart';
+import 'package:reelriot_tv/screens/sports_game_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:caffeine_tv/screens/player_screen.dart';
-import 'package:caffeine_tv/services/ad_service.dart';
+import 'package:reelriot_tv/screens/player_screen.dart';
+import 'package:reelriot_tv/services/ad_service.dart';
 
 // ---------------------------------------------------------------------------
 // ESPN league config
@@ -519,7 +519,7 @@ class SportsScreenState extends State<SportsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = (double v) => _s(context, v);
+    double s(double v) => _s(context, v);
     final now = DateTime.now();
     final dateStr = '${_dayName(now.weekday)}, ${_monthName(now.month)} ${now.day}';
 
@@ -759,7 +759,7 @@ class SportsScreenState extends State<SportsScreen> {
                         child: Image.network(
                           poster,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _gradientBack(color),
+                          errorBuilder: (_, _, _) => _gradientBack(color),
                         ),
                       )
                     else
@@ -955,7 +955,7 @@ class _StatusSection extends StatelessWidget {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: games.length,
-              separatorBuilder: (_, __) => SizedBox(width: s(16)),
+              separatorBuilder: (_, _) => SizedBox(width: s(16)),
               itemBuilder: (ctx, i) {
                 final game = games[i].key;
                 final league = games[i].value;
@@ -1151,7 +1151,7 @@ class _TeamRow extends StatelessWidget {
     return Row(
       children: [
         if (logoUrl != null && logoUrl!.isNotEmpty)
-          Image.network(logoUrl!, width: s(36), height: s(36), fit: BoxFit.contain, errorBuilder: (_, __, ___) => _placeholder(s))
+          Image.network(logoUrl!, width: s(36), height: s(36), fit: BoxFit.contain, errorBuilder: (_, _, _) => _placeholder(s))
         else
           _placeholder(s),
         SizedBox(width: s(12)),
@@ -1256,7 +1256,7 @@ class _RefreshButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
-    final s = (double v) => (v * width) / 1920;
+    double s(double v) => (v * width) / 1920;
 
     return Focus(
       onKeyEvent: (node, event) {

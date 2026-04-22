@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:caffeine_core/caffeine_core.dart' as core;
-import 'package:caffeine_tv/constants.dart';
-import 'package:caffeine_tv/env.dart';
-import 'package:caffeine_tv/services/settings_service.dart';
+import 'package:reelriot_tv/constants.dart';
+import 'package:reelriot_tv/env.dart';
+import 'package:reelriot_tv/services/settings_service.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {

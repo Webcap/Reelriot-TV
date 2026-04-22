@@ -1,6 +1,6 @@
-import 'package:caffeine_tv/services/update_service.dart';
-import 'package:caffeine_tv/screens/update_screen.dart';
-import 'package:caffeine_tv/utils/responsive_utils.dart';
+import 'package:reelriot_tv/services/update_service.dart';
+import 'package:reelriot_tv/screens/update_screen.dart';
+import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 

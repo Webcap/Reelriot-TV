@@ -1,18 +1,18 @@
 import 'package:caffeine_core/caffeine_core.dart';
-import 'package:caffeine_tv/constants.dart';
-import 'package:caffeine_tv/screens/video_loader_screen.dart';
-import 'package:caffeine_tv/screens/actor_screen.dart';
-import 'package:caffeine_tv/services/api_service.dart';
-import 'package:caffeine_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/constants.dart';
+import 'package:reelriot_tv/screens/video_loader_screen.dart';
+import 'package:reelriot_tv/screens/actor_screen.dart';
+import 'package:reelriot_tv/services/api_service.dart';
+import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:caffeine_tv/services/bookmark_service.dart';
-import 'package:caffeine_tv/services/watch_history_service.dart';
+import 'package:reelriot_tv/services/bookmark_service.dart';
+import 'package:reelriot_tv/services/watch_history_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:caffeine_tv/services/ad_service.dart';
-import 'package:caffeine_tv/widgets/long_press_focus.dart';
-import 'package:caffeine_tv/widgets/context_menu_dialog.dart';
+import 'package:reelriot_tv/services/ad_service.dart';
+import 'package:reelriot_tv/widgets/long_press_focus.dart';
+import 'package:reelriot_tv/widgets/context_menu_dialog.dart';
 import 'dart:ui';
 
 class TvDetailScreen extends StatefulWidget {
@@ -448,7 +448,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
     final backdropUrl = show.backdropPath != null && show.backdropPath!.isNotEmpty
         ? '$tmdbImageBaseUrl/w780${show.backdropPath}'
         : null;
-    final s = (double v) => _scale(context, v);
+    double s(double v) => _scale(context, v);
     final seasonDetail = _selectedSeason != null && _seasons != null
         ? _seasons![_selectedSeason!]
         : null;

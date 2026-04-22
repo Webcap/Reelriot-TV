@@ -1,9 +1,9 @@
 import 'dart:ui';
 import 'package:caffeine_core/caffeine_core.dart';
-import 'package:caffeine_tv/services/api_service.dart';
-import 'package:caffeine_tv/widgets/poster_card.dart';
-import 'package:caffeine_tv/screens/movie_detail_screen.dart';
-import 'package:caffeine_tv/screens/tv_detail_screen.dart';
+import 'package:reelriot_tv/services/api_service.dart';
+import 'package:reelriot_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/screens/movie_detail_screen.dart';
+import 'package:reelriot_tv/screens/tv_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -136,7 +136,7 @@ class _ProviderScreenState extends State<ProviderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = (double v) => _scale(context, v);
+    double s(double v) => _scale(context, v);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F1117),

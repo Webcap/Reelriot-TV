@@ -1,6 +1,6 @@
 import 'package:media_kit/media_kit.dart';
 import 'package:caffeine_core/caffeine_core.dart' as core;
-import 'package:caffeine_tv/services/player/caffeine_player_controller.dart';
+import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
 
 class VideoUtils {
   /// Process VTT file timestamps to fix formatting issues

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:http/http.dart' as http;
-import 'package:caffeine_tv/screens/sports_game_detail_screen.dart';
+import 'package:reelriot_tv/screens/sports_game_detail_screen.dart';
 
 class MockHttpClient extends Mock implements http.Client {}
 

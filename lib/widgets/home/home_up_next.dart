@@ -1,5 +1,5 @@
-import 'package:caffeine_tv/utils/responsive_utils.dart';
-import 'package:caffeine_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/utils/responsive_utils.dart';
+import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 
 class HomeUpNextRow extends StatelessWidget {

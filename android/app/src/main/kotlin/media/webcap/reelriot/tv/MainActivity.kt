@@ -1,4 +1,4 @@
-package com.webcap.caffeine_tv
+package media.webcap.reelriot.tv
 
 import io.flutter.embedding.android.FlutterActivity
 

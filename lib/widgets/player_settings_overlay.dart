@@ -1,9 +1,9 @@
-import 'package:caffeine_tv/services/player/caffeine_player_controller.dart';
+import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui';
-import 'package:caffeine_tv/widgets/language_picker_dialog.dart';
+import 'package:reelriot_tv/widgets/language_picker_dialog.dart';
 
 class PlayerSettingsOverlay extends StatefulWidget {
   final CaffeinePlayerController controller;
@@ -227,7 +227,7 @@ class _TrackChipState extends State<_TrackChip> {
 
   @override
   Widget build(BuildContext context) {
-    final s = (double v) => (v * MediaQuery.of(context).size.width) / 1920;
+    double s(double v) => (v * MediaQuery.of(context).size.width) / 1920;
 
     // Background color logic
     Color bgColor;

@@ -1,7 +1,7 @@
 import 'package:caffeine_core/caffeine_core.dart';
-import 'package:caffeine_tv/screens/movie_detail_screen.dart';
-import 'package:caffeine_tv/services/api_service.dart';
-import 'package:caffeine_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/screens/movie_detail_screen.dart';
+import 'package:reelriot_tv/services/api_service.dart';
+import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 
 class MoviesScreen extends StatefulWidget {

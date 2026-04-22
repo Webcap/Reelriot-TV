@@ -1,9 +1,9 @@
 import 'package:caffeine_core/caffeine_core.dart';
-import 'package:caffeine_tv/constants.dart';
-import 'package:caffeine_tv/screens/movie_detail_screen.dart';
-import 'package:caffeine_tv/screens/tv_detail_screen.dart';
-import 'package:caffeine_tv/services/api_service.dart';
-import 'package:caffeine_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/constants.dart';
+import 'package:reelriot_tv/screens/movie_detail_screen.dart';
+import 'package:reelriot_tv/screens/tv_detail_screen.dart';
+import 'package:reelriot_tv/services/api_service.dart';
+import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -53,7 +53,7 @@ class _ActorScreenState extends State<ActorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = (double v) => _scale(context, v);
+    double s(double v) => _scale(context, v);
     
     if (_loading) {
       return const Scaffold(

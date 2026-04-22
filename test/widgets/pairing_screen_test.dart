@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:caffeine_tv/screens/pairing_screen.dart';
+import 'package:reelriot_tv/screens/pairing_screen.dart';
 
 class MockHttpClient extends Mock implements http.Client {}
 class MockSupabaseClient extends Mock implements SupabaseClient {}

@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:caffeine_tv/env.dart';
+import 'package:reelriot_tv/env.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -179,7 +178,7 @@ class _PairingScreenState extends State<PairingScreen> {
                 _log('Establishing session with access and refresh tokens');
                 // Use access_token and refresh_token to properly establish the session
                 await Supabase.instance.client.auth.setSession(
-                  accessToken + ' ' + refreshToken, // Some versions support this hack or specific formats
+                  '$accessToken $refreshToken', // Some versions support this hack or specific formats
                 );
                 // Better: if possible, use recoverSession or setSession(Session)
                 // But for now, let's try to be robust. 
