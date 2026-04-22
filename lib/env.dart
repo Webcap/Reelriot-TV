@@ -7,6 +7,7 @@ String get caffeineApiUrl {
 }
 String get supabaseUrl => dotenv.env['SUPABASE_URL'] ?? '';
 String get supabaseAnonKey => dotenv.env['SUPABASE_ANON_KEY'] ?? dotenv.env['SUPABASE_ANNON_KEY'] ?? '';
+String get caffeineApiKey => dotenv.env['CAFFEINE_API_KEY'] ?? '';
 String get pairingPageUrl => dotenv.env['PAIRING_PAGE_URL'] ?? '';
 
 /// When true, app shows pairing screen until user signs in. When false (default), login is optional and home is shown.

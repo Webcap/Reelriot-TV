@@ -16,8 +16,36 @@ class ApiService {
   
   static const String _browserUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+  /// Headers for Caffeine API requests — includes Authorization when a key is set.
+  Map<String, String> get _caffeineApiHeaders {
+    final headers = <String, String>{'User-Agent': _browserUserAgent};
+    final key = caffeineApiKey;
+    if (key.isNotEmpty) headers['Authorization'] = 'Bearer $key';
+    return headers;
+  }
+
   Future<Map<String, dynamic>> loadConfig() async {
-    return core.fetchConfig(caffeineBaseUrl);
+    return core.fetchConfig(caffeineBaseUrl, apiKey: caffeineApiKey);
+  }
+
+  /// TV App polls this to see if it's been linked.
+  Future<http.Response> pollPairing(String code) async {
+    final url = Uri.parse('$caffeineBaseUrl/tv/pair?code=${Uri.encodeComponent(code)}');
+    return http.get(url, headers: _caffeineApiHeaders).timeout(const Duration(seconds: 10));
+  }
+
+  /// Explicitly confirm pairing (usually done from phone/web, but here for completeness).
+  Future<http.Response> confirmPairing(String code, String accessToken, String refreshToken) async {
+    final url = Uri.parse('$caffeineBaseUrl/tv/pair/confirm');
+    return http.post(
+      url,
+      headers: {..._caffeineApiHeaders, 'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'code': code,
+        'access_token': accessToken,
+        'refresh_token': refreshToken,
+      }),
+    ).timeout(const Duration(seconds: 10));
   }
 
   Future<core.MovieListResponse> fetchPopularMovies() async {
@@ -149,7 +177,7 @@ class ApiService {
 
   Future<core.ProviderStreamResponse> fetchMovieStream(int movieId, {String provider = 'vixsrc'}) async {
     final url = core.Endpoints.streamMovieUrl(caffeineBaseUrl, provider, movieId.toString(), language: audioLanguage, country: region);
-    final res = await http.get(Uri.parse(url), headers: {'User-Agent': _browserUserAgent}).timeout(const Duration(seconds: 30));
+    final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 30));
     if (res.statusCode != 200) throw Exception('Stream failed');
     return core.ProviderStreamResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
@@ -157,7 +185,7 @@ class ApiService {
   Future<core.ProviderStreamResponse> fetchTvStream(
       int tmdbId, int season, int episode, {String provider = 'vixsrc'}) async {
     final url = core.Endpoints.streamTvUrl(caffeineBaseUrl, provider, tmdbId.toString(), season, episode, language: audioLanguage, country: region);
-    final res = await http.get(Uri.parse(url), headers: {'User-Agent': _browserUserAgent}).timeout(const Duration(seconds: 30));
+    final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 30));
     if (res.statusCode != 200) throw Exception('Stream failed');
     return core.ProviderStreamResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }

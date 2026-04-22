@@ -493,7 +493,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return;
     }
 
-    if (isSourceError && _retryCount < 3) {
+      if (isSourceError && _retryCount < 3) {
       _retryCount++;
       debugPrint(
         '[PlayerScreen] 🔄 Attempting to re-fetch stream URL (Retry $_retryCount/3)...',
@@ -601,9 +601,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (isSourceError) {
         await _fallbackToNextProvider();
       } else {
+        String friendlyMessage = message;
+        if (errorStr.contains('socket') || errorStr.contains('connection')) {
+          friendlyMessage = 'Network Connection Lost. Please check your internet.';
+        } else if (errorStr.contains('404')) {
+          friendlyMessage = 'Content not found on this server.';
+        } else if (errorStr.contains('403') || errorStr.contains('forbidden')) {
+          friendlyMessage = 'Access denied by the provider.';
+        }
+
         _safeSetState(() {
           _hasError = true;
-          _errorMessage = message;
+          _errorMessage = friendlyMessage;
         });
       }
     }
@@ -1220,58 +1229,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
         },
         child: Scaffold(
           backgroundColor: Colors.black,
-          body: _hasError
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.error_outline,
-                        color: Colors.red,
-                        size: 64,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _errorMessage ?? 'An error occurred',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white12,
-                        ),
-                        child: const Text('Go Back'),
-                      ),
-                    ],
-                  ),
-                )
-              : Stack(
-                  children: [
-                    _controller == null
-                        ? const SizedBox.shrink()
-                        : mkv.Video(controller: _controller!.videoController),
+          body: Stack(
+            children: [
+              if (_controller != null)
+                mkv.Video(controller: _controller!.videoController),
 
-                    // TV Controls overlay
-                    if (_controller != null)
-                      TvPlayerControls(
-                        controller: _controller!,
-                        onVisibilityChanged: (visible) {
-                          _safeSetState(() {
-                            _controlsVisible = visible;
-                          });
-                        },
-                        onShowSettings: _showSettings,
-                      ),
-
-                    // Loading overlay: stays in the tree to allow for the fade-out
-                    // animation when _hasInitialized becomes true.
-                    _buildLoadingOverlay(),
-                  ],
+              // TV Controls overlay
+              if (_controller != null && !_hasError)
+                TvPlayerControls(
+                  controller: _controller!,
+                  onVisibilityChanged: (visible) {
+                    _safeSetState(() {
+                      _controlsVisible = visible;
+                    });
+                  },
+                  onShowSettings: _showSettings,
                 ),
+
+              // Loading overlay: stays in the tree to allow for the fade-out
+              // animation when _hasInitialized becomes true.
+              _buildLoadingOverlay(),
+
+              // Premium Error Overlay
+              if (_hasError) _buildErrorOverlay(),
+            ],
+          ),
         ),
       ),
     );
@@ -1396,5 +1378,200 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (e) {
       debugPrint('[PlayerScreen] ⚠️ Failed to set controls visibility: $e');
     }
+  }
+
+  Widget _buildErrorOverlay() {
+    final imageUrl = _posterUrl;
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withValues(alpha: 0.8),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Background blurred poster
+            if (imageUrl != null)
+              Opacity(
+                opacity: 0.3,
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            
+            // Glass effect
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.2),
+                    Colors.black.withValues(alpha: 0.8),
+                  ],
+                ),
+              ),
+            ),
+
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 600),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEC1D24).withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(0xFFEC1D24).withValues(alpha: 0.3),
+                          width: 2,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.error_outline_rounded,
+                        color: Color(0xFFEC1D24),
+                        size: 80,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    Text(
+                      'PLAYBACK ERROR',
+                      style: TextStyle(
+                        color: const Color(0xFFEC1D24).withValues(alpha: 0.8),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _errorMessage ?? 'An unexpected error occurred while playing this content.',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Please try again or select a different server from the settings menu.',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.5),
+                        fontSize: 16,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 48),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildErrorButton(
+                          label: 'Try Again',
+                          icon: Icons.refresh_rounded,
+                          isPrimary: true,
+                          onPressed: () {
+                            _safeSetState(() {
+                              _hasError = false;
+                              _retryCount = 0;
+                            });
+                            _setupController();
+                          },
+                        ),
+                        const SizedBox(width: 20),
+                        _buildErrorButton(
+                          label: 'Change Server',
+                          icon: Icons.dns_rounded,
+                          onPressed: () {
+                            _safeSetState(() {
+                              _hasError = false;
+                            });
+                            _showSettings();
+                          },
+                        ),
+                        const SizedBox(width: 20),
+                        _buildErrorButton(
+                          label: 'Go Back',
+                          icon: Icons.arrow_back_rounded,
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorButton({
+    required String label,
+    required IconData icon,
+    required VoidCallback onPressed,
+    bool isPrimary = false,
+  }) {
+    return InkWell(
+      onTap: onPressed,
+      autofocus: isPrimary,
+      borderRadius: BorderRadius.circular(8),
+      child: Builder(
+        builder: (context) {
+          final isFocused = Focus.of(context).hasFocus;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            decoration: BoxDecoration(
+              color: isFocused
+                  ? Colors.white
+                  : (isPrimary
+                      ? const Color(0xFFEC1D24).withValues(alpha: 0.2)
+                      : Colors.white10),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isFocused
+                    ? Colors.white
+                    : (isPrimary ? const Color(0xFFEC1D24) : Colors.white24),
+                width: 2,
+              ),
+              boxShadow: isFocused
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.3),
+                        blurRadius: 15,
+                        spreadRadius: 2,
+                      )
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  color: isFocused
+                      ? Colors.black
+                      : (isPrimary ? const Color(0xFFEC1D24) : Colors.white),
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: isFocused ? Colors.black : Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 }

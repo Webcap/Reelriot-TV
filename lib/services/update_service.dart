@@ -8,15 +8,17 @@ class UpdateService {
   UpdateService._internal();
 
   /// Compares current version with latest version using the new structured API.
-  Future<UpdateInfo> checkForUpdate(String caffeineApiUrl, {String env = 'prod'}) async {
+  Future<UpdateInfo> checkForUpdate(String caffeineApiUrl,
+      {String env = 'prod', String? apiKey}) async {
     final packageInfo = await PackageInfo.fromPlatform();
     final currentVersion = packageInfo.version;
-    
+
     // Fetch from new structured endpoint
     final updateInfo = await fetchUpdateInfo(
       caffeineApiUrl: caffeineApiUrl,
       platform: 'tv',
       environment: env,
+      apiKey: apiKey,
     );
 
     if (updateInfo == null) {

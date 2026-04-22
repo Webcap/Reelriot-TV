@@ -115,6 +115,7 @@ class _SplashScreenState extends State<SplashScreen>
         UpdateService().checkForUpdate(
           caffeineApiUrl,
           env: environment,
+          apiKey: caffeineApiKey,
         ).timeout(const Duration(seconds: 3)).catchError((e) {
           debugPrint('[Splash] Update check failed or timed out: $e');
           return UpdateInfo(

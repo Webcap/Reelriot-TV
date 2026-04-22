@@ -329,7 +329,12 @@ Future<Map<String, dynamic>> _fetchAggregatedSports() async {
   try {
     final base = caffeineApiUrl.endsWith('/') ? caffeineApiUrl : '$caffeineApiUrl/';
     final url = '${base}sports/scoreboard/all';
-    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+    final res = await http.get(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $caffeineApiKey',
+      },
+    ).timeout(const Duration(seconds: 30));
     if (res.statusCode != 200) {
       return {};
     }

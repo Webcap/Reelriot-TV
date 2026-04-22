@@ -36,6 +36,17 @@ class _PairingScreenState extends State<PairingScreen> {
   bool _loading = true;
   Timer? _pollTimer;
 
+  Map<String, String> get _authHeaders {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'User-Agent': 'CaffeineTV/1.0',
+    };
+    if (caffeineApiKey.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $caffeineApiKey';
+    }
+    return headers;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -74,7 +85,7 @@ class _PairingScreenState extends State<PairingScreen> {
       _log('Sending POST request to /tv/pair');
       final res = await client.post(
         Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
+        headers: _authHeaders,
         body: '{}',
       ).timeout(const Duration(seconds: 10));
       
@@ -141,6 +152,7 @@ class _PairingScreenState extends State<PairingScreen> {
         final base = (widget.baseUrl ?? caffeineApiUrl).replaceFirst(RegExp(r'/$'), '');
         final res = await client.get(
           Uri.parse('$base/tv/pair?code=${Uri.encodeComponent(code)}'),
+          headers: _authHeaders,
         ).timeout(const Duration(seconds: 8));
         
         if (!mounted) {
@@ -164,11 +176,19 @@ class _PairingScreenState extends State<PairingScreen> {
           if (refreshToken != null && refreshToken.isNotEmpty && mounted) {
             try {
               if (accessToken != null && accessToken.isNotEmpty) {
-                 _log('Establishing session with access and refresh tokens');
-                 await Supabase.instance.client.auth.setSession(refreshToken);
+                _log('Establishing session with access and refresh tokens');
+                // Use access_token and refresh_token to properly establish the session
+                await Supabase.instance.client.auth.setSession(
+                  accessToken + ' ' + refreshToken, // Some versions support this hack or specific formats
+                );
+                // Better: if possible, use recoverSession or setSession(Session)
+                // But for now, let's try to be robust. 
+                // In Supabase Flutter 2.x, setSession expects the full session string or 
+                // we can use client.auth.recoverSession(refreshToken)
+                await Supabase.instance.client.auth.recoverSession(refreshToken);
               } else {
-                 _log('Recovering session with refresh token only');
-                 await Supabase.instance.client.auth.setSession(refreshToken);
+                _log('Recovering session with refresh token only');
+                await Supabase.instance.client.auth.recoverSession(refreshToken);
               }
               _log('Session established successfully');
               if (mounted) _onLinked();

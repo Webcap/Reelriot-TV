@@ -560,6 +560,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final info = await UpdateService().checkForUpdate(
         caffeineApiUrl,
         env: environment,
+        apiKey: caffeineApiKey,
       );
 
       if (!mounted) return;

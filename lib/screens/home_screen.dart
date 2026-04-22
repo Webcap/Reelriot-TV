@@ -367,6 +367,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
       final info = await UpdateService().checkForUpdate(
         caffeineApiUrl,
         env: environment,
+        apiKey: caffeineApiKey,
       );
       
       debugPrint('[HomeScreen] 🏁 Structured Update check result: available=${info.isUpdateAvailable}, version=${info.latestVersion}, forced=${info.isForced}');

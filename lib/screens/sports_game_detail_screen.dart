@@ -109,7 +109,12 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
       debugPrint('[SportsGameDetailScreen] Fetching summary from: $url');
       
       final client = widget.client ?? http.Client();
-      final response = await client.get(Uri.parse(url));
+      final response = await client.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $caffeineApiKey',
+        },
+      );
 
       if (!mounted) {
         if (widget.client == null) client.close();
