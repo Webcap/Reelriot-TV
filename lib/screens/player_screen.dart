@@ -468,9 +468,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final isSourceError =
         isBehindLiveWindow ||
         isPlaylistStuck ||
-        errorStr.contains('source error') ||
-        errorStr.contains('http') ||
         errorStr.contains('socket') ||
+        errorStr.contains('ffurl') ||
         errorStr.contains('unexpected end');
 
     final is403 = errorStr.contains('403') || errorStr.contains('forbidden');
@@ -564,10 +563,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
           await Future.delayed(const Duration(seconds: 2));
           if (_isDisposed || !mounted) return;
 
+          // Determine if we should use the proxy for this retry
+          // We use proxy on the 2nd and 3rd retry if it's a source error
+          final mergedHeaders = _getMergedHeaders(newUrl, widget.referrer, newHeaders);
+          final finalUrl = (_retryCount >= 2) 
+              ? _buildProxiedUrl(newUrl, mergedHeaders)
+              : newUrl;
+
+          if (_retryCount >= 2) {
+            debugPrint('[PlayerScreen] 🛡️ Using proxy fallback for retry $_retryCount');
+          }
+
           // Re-initialize
           await _controller?.setDataSource(
-            newUrl,
-            headers: _getMergedHeaders(newUrl, widget.referrer, newHeaders),
+            finalUrl,
+            headers: mergedHeaders,
             liveStream: _isSports,
             startAt: currentPosition,
           );
@@ -782,6 +792,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return headers;
   }
 
+  String _buildProxiedUrl(String targetUrl, Map<String, String> headers) {
+    try {
+      final baseUrl = _api.caffeineBaseUrl;
+      final encodedUrl = base64Url.encode(utf8.encode(targetUrl));
+      final encodedHeaders = base64Url.encode(utf8.encode(jsonEncode(headers)));
+
+      String extension = "";
+      final pureUrl = targetUrl.split("?")[0];
+      if (pureUrl.endsWith(".m3u8"))
+        extension = "/video.m3u8";
+      else if (pureUrl.endsWith(".ts"))
+        extension = "/segment.ts";
+      else if (pureUrl.endsWith(".mp4")) extension = "/video.mp4";
+
+      return "$baseUrl/proxy/stream$extension?url=$encodedUrl&headers=$encodedHeaders";
+    } catch (e) {
+      debugPrint('[PlayerScreen] ❌ Failed to build proxied URL: $e');
+      return targetUrl;
+    }
+  }
+
   Future<void> _fallbackToNextProvider() async {
     _trackSessionEnd();
     await _saveCurrentProgress();
@@ -812,7 +843,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
         '[PlayerScreen] 🔄 Auto-falling back to next provider: $nextProviderCode',
       );
 
-      if (mounted && !_isDisposed) {
+      if (_isSports) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => PlayerScreen(
+              url: nextProviderCode,
+              title: widget.title,
+              item: widget.item,
+              isMovie: false,
+              referrer: nextProvider['referrer'],
+              allProviders: widget.allProviders,
+              startPosition: currentPos,
+              providerCode: nextProviderCode,
+            ),
+          ),
+        );
+      } else if (mounted && !_isDisposed) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (context) =>
@@ -884,6 +930,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           }
 
           if (mounted && !_isDisposed) {
+            // For sports, we should have already returned above.
+            // If we reach here, it's a movie or TV show.
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
                 builder: (context) =>
@@ -898,8 +946,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Widget _buildVideoLoader(String providerCode, Duration? position) {
     return VideoLoaderScreen(
-      movie: widget.isMovie ? widget.item : null,
-      tvShow: !widget.isMovie ? widget.item : null,
+      movie: (widget.isMovie && widget.item is core.MovieDetail)
+          ? widget.item as core.MovieDetail
+          : null,
+      tvShow: (!widget.isMovie && widget.item is core.TvShowDetail)
+          ? widget.item as core.TvShowDetail
+          : null,
       season: widget.season,
       episode: widget.episode,
       episodeId: widget.episodeId,

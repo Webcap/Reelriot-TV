@@ -153,6 +153,21 @@ class CaffeinePlayerController extends ChangeNotifier {
           .map((e) => "${e.key}: ${e.value}")
           .join("\r\n");
       (player.platform as dynamic).setProperty('http-header-fields', headerString);
+      
+      // Explicitly set User-Agent and Referrer for the initial TCP connection
+      final userAgent = headers.entries
+          .firstWhere((e) => e.key.toLowerCase() == 'user-agent', orElse: () => const MapEntry('', ''))
+          .value;
+      if (userAgent.isNotEmpty) {
+        (player.platform as dynamic).setProperty('user-agent', userAgent);
+      }
+
+      final referer = headers.entries
+          .firstWhere((e) => e.key.toLowerCase() == 'referer' || e.key.toLowerCase() == 'referrer', orElse: () => const MapEntry('', ''))
+          .value;
+      if (referer.isNotEmpty) {
+        (player.platform as dynamic).setProperty('referrer', referer);
+      }
     }
 
     // Performance optimizations for TV boxes (Amlogic/Mali)
@@ -169,6 +184,9 @@ class CaffeinePlayerController extends ChangeNotifier {
     
     // Try to force a more compatible format for Mali
     (player.platform as dynamic).setProperty('fbo-format', 'rgba8');
+    
+    // Force seekable to true for better HLS/Proxy support
+    (player.platform as dynamic).setProperty('force-seekable', 'yes');
 
     if (liveStream) {
       // Stability optimizations for live streams
