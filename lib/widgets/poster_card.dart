@@ -13,6 +13,7 @@ class PosterCard extends StatefulWidget {
     this.onLongPress,
     this.onFocus,
     this.focusNode,
+    this.isSponsored = false,
   });
 
   final String? posterPath;
@@ -22,6 +23,7 @@ class PosterCard extends StatefulWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onFocus;
   final FocusNode? focusNode;
+  final bool isSponsored;
 
   @override
   State<PosterCard> createState() => _PosterCardState();
@@ -30,6 +32,7 @@ class PosterCard extends StatefulWidget {
 class _PosterCardState extends State<PosterCard> {
   String get _imageUrl {
     if (widget.posterPath == null || widget.posterPath!.isEmpty) return '';
+    if (widget.isSponsored) return widget.posterPath!; // Direct URL for ads
     return '$tmdbImageBaseUrl/w500${widget.posterPath}';
   }
 
@@ -60,64 +63,90 @@ class _PosterCardState extends State<PosterCard> {
               height: cardHeight,
               margin: EdgeInsets.only(right: s(24)),
                 child: RepaintBoundary(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+                  child: Stack(
                     children: [
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(s(20)), // rounded-xl
-                          child: Container(
-                            width: cardWidth,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[900],
-                              border: Border.all(
-                                color: hasFocus ? Colors.white : Colors.transparent,
-                                width: s(4), // 4px focus ring
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(s(20)), // rounded-xl
+                              child: Container(
+                                width: cardWidth,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[900],
+                                  border: Border.all(
+                                    color: hasFocus ? Colors.white : Colors.transparent,
+                                    width: s(4), // 4px focus ring
+                                  ),
+                                  boxShadow: hasFocus ? [
+                                    BoxShadow(
+                                      color: const Color(0xFFEC1D24).withValues(alpha: 0.45),
+                                      blurRadius: s(28),
+                                      spreadRadius: s(3),
+                                    )
+                                  ] : null,
+                                ),
+                                child: _imageUrl.isNotEmpty
+                                  ? CachedNetworkImage(
+                                      imageUrl: _imageUrl,
+                                      fit: BoxFit.cover,
+                                      placeholder: (context, url) => Container(color: Colors.grey[900]),
+                                      errorWidget: (context, url, error) => const Icon(Icons.error),
+                                    )
+                                  : Container(color: Colors.grey[900]),
                               ),
-                              boxShadow: hasFocus ? [
-                                BoxShadow(
-                                  color: const Color(0xFFEC1D24).withValues(alpha: 0.45),
-                                  blurRadius: s(28),
-                                  spreadRadius: s(3),
-                                )
-                              ] : null,
                             ),
-                            child: _imageUrl.isNotEmpty
-                              ? CachedNetworkImage(
-                                  imageUrl: _imageUrl,
-                                  fit: BoxFit.cover,
-                                  placeholder: (context, url) => Container(color: Colors.grey[900]),
-                                  errorWidget: (context, url, error) => const Icon(Icons.error),
-                                )
-                              : Container(color: Colors.grey[900]),
+                          ),
+                          SizedBox(height: s(12)),
+                          Text(
+                            widget.title,
+                            style: TextStyle(
+                              color: hasFocus ? Colors.white : Colors.white70,
+                              fontSize: s(24),
+                              fontWeight: hasFocus ? FontWeight.bold : FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (widget.subtitle != null) ...[
+                            SizedBox(height: s(4)),
+                            Text(
+                              widget.subtitle!,
+                              style: TextStyle(
+                                color: hasFocus ? Colors.white70 : Colors.white38,
+                                fontSize: s(18),
+                                fontWeight: FontWeight.w400,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (widget.isSponsored)
+                        Positioned(
+                          top: s(12),
+                          left: s(12),
+                          child: Container(
+                            padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.75),
+                              borderRadius: BorderRadius.circular(s(8)),
+                              border: Border.all(color: Colors.white24),
+                            ),
+                            child: Text(
+                              'SPONSORED',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: s(14),
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: s(1),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                      SizedBox(height: s(12)),
-                      Text(
-                        widget.title,
-                        style: TextStyle(
-                          color: hasFocus ? Colors.white : Colors.white70,
-                          fontSize: s(24),
-                          fontWeight: hasFocus ? FontWeight.bold : FontWeight.w500,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (widget.subtitle != null) ...[
-                        SizedBox(height: s(4)),
-                        Text(
-                          widget.subtitle!,
-                          style: TextStyle(
-                            color: hasFocus ? Colors.white70 : Colors.white38,
-                            fontSize: s(18),
-                            fontWeight: FontWeight.w400,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
                     ],
                   ),
                 ),

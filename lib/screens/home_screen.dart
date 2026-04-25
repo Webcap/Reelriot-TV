@@ -13,6 +13,7 @@ import 'package:reelriot_tv/screens/video_loader_screen.dart';
 import 'package:reelriot_tv/screens/player_screen.dart';
 import 'package:reelriot_tv/env.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -625,48 +626,106 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
       // --- Featured Live Event ---
       MovieListItem? featuredItem;
-      if (SettingsService().sportsEnabled) {
+      try {
+        final featured = await Supabase.instance.client
+            .from('live_streams')
+            .select('*')
+            .eq('is_featured', true)
+            .maybeSingle();
+
+        if (featured != null) {
+          final streamUrl = featured['video_url'] ?? '';
+          final sport = featured['sport'] ?? 'Sports';
+          _liveStreamUrls[-100] = streamUrl;
+
+          featuredItem = MovieListItem(
+            id: -100, // Special ID for live events
+            title: featured['title'],
+            overview: "Experience the excitement of $sport live on Caffeine TV. Watch ${featured['title']} now!",
+            posterPath: featured['poster_url'] ?? featured['thumbnail_url'],
+            backdropPath: featured['poster_url'] ?? featured['thumbnail_url'],
+            mediaType: 'live',
+          );
+        }
+      } catch (e) {
+        debugPrint('[HomeScreen] ❌ Error fetching featured event: $e');
+      }
+
+      // --- Ads Integration ---
+      List<MovieListItem> ads = [];
+      if (SettingsService().adsEnabled || (kDebugMode && SettingsService().simulateAds)) {
         try {
-          final featured = await Supabase.instance.client
-              .from('live_streams')
+          final results = await Supabase.instance.client
+              .from('sponsorships')
               .select('*')
-              .eq('is_featured', true)
-              .maybeSingle();
-
-          if (featured != null) {
-            final streamUrl = featured['video_url'] ?? '';
-            final sport = featured['sport'] ?? 'Sports';
-            _liveStreamUrls[-100] = streamUrl;
-
-            featuredItem = MovieListItem(
-              id: -100, // Special ID for live events
-              title: featured['title'],
-              overview: "Experience the excitement of $sport live on Caffeine TV. Watch ${featured['title']} now!",
-              posterPath: featured['poster_url'] ?? featured['thumbnail_url'],
-              backdropPath: featured['poster_url'] ?? featured['thumbnail_url'],
-              mediaType: 'live',
-            );
+              .eq('is_active', true);
+          
+          for (var ad in results) {
+            ads.add(MovieListItem(
+              id: ad['id'].toString().hashCode,
+              title: ad['title'],
+              overview: ad['description'],
+              posterPath: ad['image_url'],
+              backdropPath: ad['image_url'],
+              mediaType: 'ad',
+              isSponsored: true,
+            ));
           }
         } catch (e) {
-          debugPrint('[HomeScreen] ❌ Error fetching featured event: $e');
+          debugPrint('[HomeScreen] ❌ Error fetching ads: $e');
+        }
+
+        // Inject simulated ads if simulation is enabled
+        if (kDebugMode && SettingsService().simulateAds) {
+          if (ads.isEmpty) {
+            ads.add(MovieListItem(
+              id: 999901,
+              title: 'Aurora Ultra: Power Redefined',
+              overview: 'Experience unparalleled performance with the new Aurora Ultra series.',
+              posterPath: 'https://caffeine.synqholdings.com/assets/images/simulated/poster_ad_1.png',
+              backdropPath: 'https://caffeine.synqholdings.com/assets/images/simulated/poster_ad_1.png',
+              mediaType: 'ad',
+              isSponsored: true,
+            ));
+            ads.add(MovieListItem(
+              id: 999902,
+              title: 'CyberShield VPN',
+              overview: 'Stay secure anywhere with our ultra-fast VPN service.',
+              posterPath: 'https://caffeine.synqholdings.com/assets/images/simulated/poster_ad_2.png',
+              backdropPath: 'https://caffeine.synqholdings.com/assets/images/simulated/poster_ad_2.png',
+              mediaType: 'ad',
+              isSponsored: true,
+            ));
+          }
         }
       }
 
       if (mounted) {
-        if (featuredItem != null && _trending != null) {
-          _trending!.insert(0, featuredItem);
-          // If the slider was just loaded, refocus on the featured item
-          if (_trendingIndex == 0) {
-            _focusedMovie = MovieDetail(
-              id: featuredItem.id,
-              title: featuredItem.title,
-              overview: featuredItem.overview,
-              posterPath: featuredItem.posterPath,
-              backdropPath: featuredItem.backdropPath,
-              mediaType: featuredItem.mediaType,
-            );
+        setState(() {
+          if (featuredItem != null && _trending != null) {
+            _trending!.insert(0, featuredItem);
+            
+            // If the slider was just loaded, refocus on the featured item
+            if (_trendingIndex == 0) {
+              _focusedMovie = MovieDetail(
+                id: featuredItem.id,
+                title: featuredItem.title,
+                overview: featuredItem.overview,
+                posterPath: featuredItem.posterPath,
+                backdropPath: featuredItem.backdropPath,
+                mediaType: featuredItem.mediaType,
+              );
+            }
           }
-        }
+
+          // Inject ads into rows
+          if (ads.isNotEmpty && _popular != null && _popular!.length > 5) {
+            _popular!.insert(2, ads[0]);
+            if (ads.length > 1 && _topRated != null && _topRated!.length > 5) {
+              _topRated!.insert(4, ads[1]);
+            }
+          }
+        });
       }
     } catch (e) {
       debugPrint('[HomeScreen] ❌ Error loading content: $e');

@@ -40,9 +40,8 @@ class AdService extends ChangeNotifier {
     if (_isInitialized) return;
     _sdk = sdk ?? StartAppSdk();
     
-    // Explicitly disable test ads to ensure real ads are shown in production/release.
-    // In debug mode, the platform SDK might still show test ads.
-    await _sdk!.setTestAdsEnabled(false);
+    // Enable test ads only in debug mode to ensure real ads are shown in production.
+    await _sdk!.setTestAdsEnabled(kDebugMode);
 
     _isInitialized = true;
     debugPrint('Start.io SDK Initialized with ID: $startAppId (Enabled: $_isEnabled)');

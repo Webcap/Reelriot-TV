@@ -49,6 +49,7 @@ class HomeMediaRow extends StatelessWidget {
                 child: PosterCard(
                   posterPath: m.posterPath,
                   title: m.title ?? '',
+                  isSponsored: m.isSponsored,
                   onFocus: () => onFocus(m.id),
                   onLongPress: () => onLongPress(m),
                   onTap: () => onTap(m),

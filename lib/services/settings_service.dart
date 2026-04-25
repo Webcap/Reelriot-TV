@@ -84,6 +84,9 @@ class SettingsService extends ChangeNotifier {
   bool _adsEnabled = true;
   bool get adsEnabled => _adsEnabled;
 
+  bool _simulateAds = false;
+  bool get simulateAds => _simulateAds;
+
   void updateFromConfig(Map<String, dynamic> config) {
     // Check various keys for sports availability
     _sportsEnabled = (config['enable_ott'] == true ||
@@ -96,6 +99,9 @@ class SettingsService extends ChangeNotifier {
             config['enable_ads'].toString().toLowerCase() == 'true') ||
         (config['ads_enabled'] == true ||
             config['ads_enabled'].toString().toLowerCase() == 'true');
+
+    _simulateAds = (config['simulate_ads'] == true ||
+            config['simulate_ads'].toString().toLowerCase() == 'true');
 
     if (config['opensubtitles_key'] != null) {
       _opensubtitlesKey = config['opensubtitles_key'];
