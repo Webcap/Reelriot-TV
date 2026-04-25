@@ -238,7 +238,7 @@ class _PairingScreenState extends State<PairingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final effectivePairingPageUrl = widget.pairingPageUrl ?? pairingPageUrl;
+    final effectivePairingPageUrl = widget.pairingPageUrl ?? (pairingPageUrl.isEmpty ? 'reelriot.app/activate' : pairingPageUrl);
     
     return Scaffold(
       backgroundColor: const Color(0xFF0B0F14),
@@ -298,7 +298,7 @@ class _PairingScreenState extends State<PairingScreen> {
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 24),
                   child: Text(
-                    '1. On your phone or computer, open the pairing page.\n'
+                    '1. On your phone or computer, go to reelriot.app/activate\n'
                     '2. Sign in with your Reelriot account.\n'
                     '3. Enter the code shown below.',
                     style: TextStyle(color: Colors.white70, fontSize: 16),

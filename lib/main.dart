@@ -4,8 +4,10 @@ import 'package:reelriot_tv/screens/home_screen.dart';
 import 'package:reelriot_tv/screens/pairing_screen.dart';
 import 'package:reelriot_tv/screens/splash_screen.dart';
 import 'package:reelriot_tv/services/ad_service.dart';
+import 'package:reelriot_tv/services/outage_service.dart';
 import 'package:reelriot_tv/services/settings_service.dart';
 import 'package:reelriot_tv/utils/cleanup_utils.dart';
+import 'package:reelriot_tv/widgets/outage_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
@@ -61,6 +63,9 @@ Future<void> bootstrap(String envFile) async {
     }
   }
 
+  // Start API health monitoring — detects outages and blocks the UI
+  OutageService.instance.start();
+
   // Background initialization of other third-party services (Ads)
   unawaited(_initializeBgServices());
 
@@ -101,6 +106,9 @@ class CaffeineTvApp extends StatelessWidget {
         '/pairing': (context) => const PairingScreen(),
         '/home': (context) => const HomeScreen(),
       },
+      // Wrap every route with the outage overlay so no screen is accessible
+      // when the Caffeine API is down.
+      builder: (context, child) => OutageOverlay(child: child ?? const SizedBox.shrink()),
     );
   }
 }

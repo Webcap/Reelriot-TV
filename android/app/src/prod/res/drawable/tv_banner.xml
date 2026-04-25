@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android TV home screen banner (1280x720 recommended). Placeholder; replace with actual banner image if desired. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@android:color/black" />
+    <item>
+        <bitmap
+            android:gravity="fill"
+            android:src="@drawable/tv_banner_img" />
+    </item>
+</layer-list>
