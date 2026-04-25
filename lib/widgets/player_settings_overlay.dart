@@ -93,7 +93,7 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
                     ],
                   ),
                   const SizedBox(height: 48),
-                  if (audioTracks.isNotEmpty) ...[
+                  if (!widget.controller.isLiveStream && audioTracks.isNotEmpty) ...[
                     const _CategoryHeader(title: 'Audio Language'),
                     const SizedBox(height: 16),
                     Wrap(
@@ -113,7 +113,7 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
                     ),
                     const SizedBox(height: 48),
                   ],
-                  if (subtitleTracks.isNotEmpty) ...[
+                  if (!widget.controller.isLiveStream && subtitleTracks.isNotEmpty) ...[
                     const _CategoryHeader(title: 'Subtitles'),
                     const SizedBox(height: 16),
                     Wrap(

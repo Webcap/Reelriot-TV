@@ -105,11 +105,11 @@ class _SplashScreenState extends State<SplashScreen>
           environment: environment,
           platform: 'tv',
           apiKey: caffeineApiKey,
-        ).timeout(const Duration(seconds: 3)).catchError((e) {
+        ).timeout(const Duration(seconds: 8)).catchError((e) {
           debugPrint('[Splash] FeatureFlagManager failed or timed out: $e');
           return null; 
         }),
-        api.loadConfig().timeout(const Duration(seconds: 3)).catchError((e) {
+        api.loadConfig().timeout(const Duration(seconds: 8)).catchError((e) {
           debugPrint('[Splash] Config load failed or timed out: $e');
           return <String, dynamic>{}; // Return empty map instead of null
         }),
@@ -117,7 +117,7 @@ class _SplashScreenState extends State<SplashScreen>
           caffeineApiUrl,
           env: environment,
           apiKey: caffeineApiKey,
-        ).timeout(const Duration(seconds: 3)).catchError((e) {
+        ).timeout(const Duration(seconds: 8)).catchError((e) {
           debugPrint('[Splash] Update check failed or timed out: $e');
           return UpdateInfo(
             isUpdateAvailable: false,

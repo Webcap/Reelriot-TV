@@ -49,13 +49,14 @@ class CaffeinePlayerController extends ChangeNotifier {
   bool _isBuffering = false;
   bool _controlsVisible = false;
   bool _isDisposed = false;
+  bool _isLiveStream = false;
 
   CaffeinePlayerController() {
     player = Player();
     videoController = VideoController(
       player,
       configuration: const VideoControllerConfiguration(
-        hwdec: 'mediacodec',
+        hwdec: 'no', // Software decoding is much more stable on Chromecast/Amlogic
       ),
     );
     _setupListeners();
@@ -63,6 +64,8 @@ class CaffeinePlayerController extends ChangeNotifier {
 
   Stream<bool> get controlsVisibilityStream =>
       _controlsVisibilityStreamController.stream;
+
+  bool get isLiveStream => _isLiveStream;
 
   void _setupListeners() {
     _subscriptions.add(player.stream.buffering.listen((isBuffering) {
@@ -147,46 +150,35 @@ class CaffeinePlayerController extends ChangeNotifier {
     List<CaffeinePlayerSubtitlesSource>? subtitles,
   }) async {
     if (_isDisposed) return;
+    _isLiveStream = liveStream;
+    notifyListeners();
 
-    if (headers != null && headers.isNotEmpty) {
-      final headerString = headers.entries
-          .map((e) => "${e.key}: ${e.value}")
-          .join("\r\n");
-      (player.platform as dynamic).setProperty('http-header-fields', headerString);
-      
-      // Explicitly set User-Agent and Referrer for the initial TCP connection
-      final userAgent = headers.entries
-          .firstWhere((e) => e.key.toLowerCase() == 'user-agent', orElse: () => const MapEntry('', ''))
-          .value;
-      if (userAgent.isNotEmpty) {
-        (player.platform as dynamic).setProperty('user-agent', userAgent);
-      }
+    
+    // Standard headers for all requests
+    final Map<String, String> defaultHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Chromecast Build/UTTC.250917.004) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+      'Accept': '*/*',
+      'Connection': 'keep-alive',
+    };
 
-      final referer = headers.entries
-          .firstWhere((e) => e.key.toLowerCase() == 'referer' || e.key.toLowerCase() == 'referrer', orElse: () => const MapEntry('', ''))
-          .value;
-      if (referer.isNotEmpty) {
-        (player.platform as dynamic).setProperty('referrer', referer);
-      }
+    // Final merged headers for the request
+    Map<String, String> merged = {...defaultHeaders};
+    if (headers != null) {
+      merged.addAll(headers);
     }
 
     // Performance optimizations for TV boxes (Amlogic/Mali)
-    (player.platform as dynamic).setProperty('hwdec', 'mediacodec');
-    (player.platform as dynamic).setProperty('vd-lavc-fast', 'yes');
-    (player.platform as dynamic).setProperty('vd-lavc-skiploopfilter', 'all');
-    (player.platform as dynamic).setProperty('vd-lavc-threads', '1'); // Reduce sync issues
+    (player.platform as dynamic).setProperty('vd-lavc-dr', 'no'); // Keep direct rendering disabled for SELinux safety
     (player.platform as dynamic).setProperty('cache', 'yes');
     
     // Low-latency and sync optimizations for Chromecast/Mali
-    (player.platform as dynamic).setProperty('video-sync', 'display-resample');
+    (player.platform as dynamic).setProperty('video-sync', 'audio');
     (player.platform as dynamic).setProperty('framedrop', 'vo');
-    (player.platform as dynamic).setProperty('opengl-swapinterval', '0');
-    
-    // Try to force a more compatible format for Mali
-    (player.platform as dynamic).setProperty('fbo-format', 'rgba8');
     
     // Force seekable to true for better HLS/Proxy support
     (player.platform as dynamic).setProperty('force-seekable', 'yes');
+    (player.platform as dynamic).setProperty('demuxer-max-bytes', '50000000');
+    (player.platform as dynamic).setProperty('demuxer-max-back-bytes', '25000000');
 
     if (liveStream) {
       // Stability optimizations for live streams
@@ -216,7 +208,10 @@ class CaffeinePlayerController extends ChangeNotifier {
     }
 
     await player.open(
-      Media(url),
+      Media(
+        url,
+        httpHeaders: merged,
+      ),
       play: true,
     );
     

@@ -44,13 +44,20 @@ Future<void> bootstrap(String envFile) async {
       final session = Supabase.instance.client.auth.currentSession;
       if (session != null) {
         debugPrint(
-          '[Main] 👤 Session recovered on startup for: ${session.user.email}',
+          '[Main] 👤 Session recovered on startup for: ${session.user.email ?? 'Anonymous'}',
         );
       } else {
         debugPrint('[Main] 👤 No session found on startup');
       }
     } catch (e) {
       debugPrint('[Main] ❌ Supabase initialization failed: $e');
+      if (e.toString().contains('refresh_token_already_used')) {
+        debugPrint('[Main] ⚠️ Refresh token already used. Clearing session...');
+        try {
+          // Attempt to sign out to clear the corrupted session from local storage
+          await Supabase.instance.client.auth.signOut();
+        } catch (_) {}
+      }
     }
   }
 

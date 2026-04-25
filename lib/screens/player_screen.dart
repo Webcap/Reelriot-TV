@@ -19,6 +19,7 @@ import 'package:reelriot_tv/services/subtitle_service.dart';
 import 'package:reelriot_tv/widgets/language_picker_dialog.dart';
 import 'package:reelriot_tv/models/sub_languages.dart';
 import 'package:reelriot_tv/services/analytics_service.dart';
+import 'package:reelriot_tv/env.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -326,14 +327,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     // --- SMART URL REWRITE ---
-    // Only rewrite if videostr.net is the actual HOST, never inside encoded
-    // query parameters (e.g. ?headers={"referer":"https://videostr.net/"})
-    // which proxy servers like storm.vodvidl.site read to forward correct auth headers.
-    var safeUrl = widget.url;
+    // 1. Decode HTML entities if they slipped through (common in scraped sports links)
+    var safeUrl = widget.url.replaceAll('&amp;', '&');
+    var headers = _getMergedHeaders(safeUrl, widget.referrer, widget.headers);
+
+    // 2. Only rewrite if videostr.net is the actual HOST
     try {
-      final uri = Uri.parse(widget.url);
+      final uri = Uri.parse(safeUrl);
       if (uri.host == 'videostr.net' || uri.host.endsWith('.videostr.net')) {
         safeUrl = uri.replace(host: 'vidlink.pro').toString();
+        // Refresh headers for the new host
+        headers = _getMergedHeaders(safeUrl, widget.referrer, widget.headers);
+      }
+      
+      // 3. For instreams.live, we often need the proxy immediately because of IP-locking
+      if (uri.host.contains('instreams.live')) {
+        debugPrint('[PlayerScreen] 🛡️ Known IP-locked domain (instreams.live), using proxy fallback');
+        // We use the headers meant for the UPSTREAM to build the proxied URL
+        safeUrl = _buildProxiedUrl(safeUrl, headers);
+        
+        // CRITICAL: When hitting our proxy, we should NOT send the target headers 
+        // (like Origin: instreams.click) to our own proxy server, as that will 
+        // trigger CORS blocks. The proxy will use them for its upstream request.
+        headers = {
+          'User-Agent': headers['User-Agent'] ?? '',
+          'Accept': '*/*',
+        };
       }
     } catch (_) {}
 
@@ -443,7 +462,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     _controller!.setDataSource(
       safeUrl,
-      headers: _getMergedHeaders(safeUrl, widget.referrer, widget.headers),
+      headers: headers,
       liveStream: _isSports,
       startAt: widget.startPosition ?? Duration.zero,
     );
@@ -558,6 +577,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
 
         if (newUrl != null && newUrl.isNotEmpty) {
+          // Decode HTML entities (critical for scraped sports links)
+          newUrl = newUrl.replaceAll('&amp;', '&');
           debugPrint('[PlayerScreen] ✅ Re-fetched new URL: $newUrl');
           if (!mounted) return;
 
@@ -566,19 +587,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
           // Determine if we should use the proxy for this retry
           // We use proxy on the 2nd and 3rd retry if it's a source error
-          final mergedHeaders = _getMergedHeaders(newUrl, widget.referrer, newHeaders);
+          var finalHeaders = _getMergedHeaders(newUrl, widget.referrer, newHeaders);
           final finalUrl = (_retryCount >= 2) 
-              ? _buildProxiedUrl(newUrl, mergedHeaders)
+              ? _buildProxiedUrl(newUrl, finalHeaders)
               : newUrl;
 
           if (_retryCount >= 2) {
             debugPrint('[PlayerScreen] 🛡️ Using proxy fallback for retry $_retryCount');
+            // When using proxy, the client-to-proxy request shouldn't carry target headers
+            finalHeaders = {
+              'User-Agent': finalHeaders['User-Agent'] ?? '',
+              'Accept': '*/*',
+            };
           }
 
           // Re-initialize
           await _controller?.setDataSource(
             finalUrl,
-            headers: mergedHeaders,
+            headers: finalHeaders,
             liveStream: _isSports,
             startAt: currentPosition,
           );
@@ -708,7 +734,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Standard headers for all requests
     final Map<String, String> headers = {
       'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Linux; Android 14; Chromecast Build/UTTC.250917.004) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
       'Accept': '*/*',
       'Connection': 'keep-alive',
       'Sec-Fetch-Mode': 'cors',
@@ -794,11 +820,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
       headers['Origin'] = 'https://vixsrc.to';
     }
 
-    // Log final resolved headers for debugging proxy issues
-    debugPrint(
-      '[PlayerScreen] 🔑 Final headers for ${Uri.tryParse(url)?.host}: '
-      'Referer=${headers['Referer']}, Origin=${headers['Origin']}',
-    );
+    if (url.contains('instreams.live')) {
+      headers['Referer'] = 'https://instreams.click/';
+      headers['Origin'] = 'https://instreams.click';
+    }
+
+    // Log final resolved headers for debugging (only if not already proxied to avoid spam)
+    if (!url.contains('/proxy/stream')) {
+      debugPrint(
+        '[PlayerScreen] 🔑 Final headers for ${Uri.tryParse(url)?.host}: '
+        'Referer=${headers['Referer']}, Origin=${headers['Origin']}',
+      );
+    }
 
     return headers;
   }
@@ -806,6 +839,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String _buildProxiedUrl(String targetUrl, Map<String, String> headers) {
     try {
       final baseUrl = _api.caffeineBaseUrl;
+      final apiKey = caffeineApiKey;
       final encodedUrl = base64Url.encode(utf8.encode(targetUrl));
       final encodedHeaders = base64Url.encode(utf8.encode(jsonEncode(headers)));
 
@@ -819,7 +853,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         extension = "/video.mp4";
       }
 
-      return "$baseUrl/proxy/stream$extension?url=$encodedUrl&headers=$encodedHeaders";
+      // Add the key parameter for authorization if we have an API key
+      final authParam = apiKey.isNotEmpty ? "&key=$apiKey" : "";
+      return "$baseUrl/proxy/stream$extension?url=$encodedUrl&headers=$encodedHeaders$authParam";
     } catch (e) {
       debugPrint('[PlayerScreen] ❌ Failed to build proxied URL: $e');
       return targetUrl;
@@ -1099,17 +1135,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
       '(saving position: ${currentPosition?.inSeconds}s)',
     );
     try {
-      var safeUrl = widget.url;
+      // 1. Decode HTML entities (critical for scraped sports links)
+      var safeUrl = widget.url.replaceAll('&amp;', '&');
+      var headers = _getMergedHeaders(safeUrl, widget.referrer, widget.headers);
+      
       try {
-        final uri = Uri.parse(widget.url);
+        final uri = Uri.parse(safeUrl);
         if (uri.host == 'videostr.net' || uri.host.endsWith('.videostr.net')) {
           safeUrl = uri.replace(host: 'vidlink.pro').toString();
+          headers = _getMergedHeaders(safeUrl, widget.referrer, widget.headers);
+        }
+
+        if (uri.host.contains('instreams.live')) {
+          safeUrl = _buildProxiedUrl(safeUrl, headers);
+          headers = {
+            'User-Agent': headers['User-Agent'] ?? '',
+            'Accept': '*/*',
+          };
         }
       } catch (_) {}
 
       await _controller?.setDataSource(
         safeUrl,
-        headers: _getMergedHeaders(safeUrl, widget.referrer, widget.headers),
+        headers: headers,
         liveStream: _isSports,
         startAt: currentPosition ?? widget.startPosition ?? Duration.zero,
       );
@@ -1421,92 +1469,94 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
 
             Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 600),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEC1D24).withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFFEC1D24).withValues(alpha: 0.3),
-                          width: 2,
+              child: SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEC1D24).withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFFEC1D24).withValues(alpha: 0.3),
+                            width: 2,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.error_outline_rounded,
+                          color: Color(0xFFEC1D24),
+                          size: 80,
                         ),
                       ),
-                      child: const Icon(
-                        Icons.error_outline_rounded,
-                        color: Color(0xFFEC1D24),
-                        size: 80,
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    Text(
-                      'PLAYBACK ERROR',
-                      style: TextStyle(
-                        color: const Color(0xFFEC1D24).withValues(alpha: 0.8),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _errorMessage ?? 'An unexpected error occurred while playing this content.',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Please try again or select a different server from the settings menu.',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.5),
-                        fontSize: 16,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 48),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildErrorButton(
-                          label: 'Try Again',
-                          icon: Icons.refresh_rounded,
-                          isPrimary: true,
-                          onPressed: () {
-                            _safeSetState(() {
-                              _hasError = false;
-                              _retryCount = 0;
-                            });
-                            _setupController();
-                          },
+                      const SizedBox(height: 32),
+                      Text(
+                        'PLAYBACK ERROR',
+                        style: TextStyle(
+                          color: const Color(0xFFEC1D24).withValues(alpha: 0.8),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 2,
                         ),
-                        const SizedBox(width: 20),
-                        _buildErrorButton(
-                          label: 'Change Server',
-                          icon: Icons.dns_rounded,
-                          onPressed: () {
-                            _safeSetState(() {
-                              _hasError = false;
-                            });
-                            _showSettings();
-                          },
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _errorMessage ?? 'An unexpected error occurred while playing this content.',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
                         ),
-                        const SizedBox(width: 20),
-                        _buildErrorButton(
-                          label: 'Go Back',
-                          icon: Icons.arrow_back_rounded,
-                          onPressed: () => Navigator.of(context).pop(),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Please try again or select a different server from the settings menu.',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          fontSize: 16,
                         ),
-                      ],
-                    ),
-                  ],
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 48),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildErrorButton(
+                            label: 'Try Again',
+                            icon: Icons.refresh_rounded,
+                            isPrimary: true,
+                            onPressed: () {
+                              _safeSetState(() {
+                                _hasError = false;
+                                _retryCount = 0;
+                              });
+                              _setupController();
+                            },
+                          ),
+                          const SizedBox(width: 20),
+                          _buildErrorButton(
+                            label: 'Change Server',
+                            icon: Icons.dns_rounded,
+                            onPressed: () {
+                              _safeSetState(() {
+                                _hasError = false;
+                              });
+                              _showSettings();
+                            },
+                          ),
+                          const SizedBox(width: 20),
+                          _buildErrorButton(
+                            label: 'Go Back',
+                            icon: Icons.arrow_back_rounded,
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
