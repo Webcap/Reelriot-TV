@@ -51,6 +51,7 @@ class HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 1;
   final GlobalKey<FavoritesScreenState> _favoritesKey = GlobalKey<FavoritesScreenState>();
   final GlobalKey<SportsScreenState> _sportsKey = GlobalKey<SportsScreenState>();
+  final GlobalKey<SettingsScreenState> _settingsKey = GlobalKey<SettingsScreenState>();
   final GlobalKey<_MainHomeViewState> _homeKey = GlobalKey<_MainHomeViewState>();
   late List<FocusNode> _navNodes;
 
@@ -151,13 +152,15 @@ class HomeScreenState extends State<HomeScreen> {
               tabs: tabs,
               onTabSelected: (index) {
                 if (mounted) setState(() => _selectedIndex = index);
-                if (tabs[index].label == 'Sports') {
+                final tabLabel = tabs[index].label;
+                if (tabLabel == 'Sports') {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     _sportsKey.currentState?.load();
                   });
-                }
-                if (tabs[index].label == 'Favorites') {
+                } else if (tabLabel == 'Favorites') {
                   _favoritesKey.currentState?.refresh();
+                } else if (tabLabel == 'Profile') {
+                  _settingsKey.currentState?.refresh();
                 }
               },
               onTabReset: (index) {
@@ -165,6 +168,8 @@ class HomeScreenState extends State<HomeScreen> {
                   _homeKey.currentState?.resetToTop();
                 } else if (tabs[index].label == 'Sports') {
                   _sportsKey.currentState?.load();
+                } else if (tabs[index].label == 'Profile') {
+                  _settingsKey.currentState?.refresh();
                 }
               },
             ),
@@ -175,7 +180,7 @@ class HomeScreenState extends State<HomeScreen> {
                   const SearchScreen(),
                   RepaintBoundary(child: _MainHomeView(key: _homeKey)),
                   if (SettingsService().sportsEnabled) RepaintBoundary(child: SportsScreen(key: _sportsKey)),
-                  const SettingsScreen(),
+                  SettingsScreen(key: _settingsKey),
                   FavoritesScreen(key: _favoritesKey),
                 ],
               ),

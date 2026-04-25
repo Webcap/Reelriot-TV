@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:reelriot_tv/services/settings_service.dart';
 import 'package:flutter/material.dart';
@@ -7,15 +8,17 @@ import '../services/api_service.dart';
 import '../services/update_service.dart';
 import '../env.dart';
 import 'update_screen.dart';
+import '../utils/avatar_utils.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final VoidCallback? onMounted;
+  const SettingsScreen({super.key, this.onMounted});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  State<SettingsScreen> createState() => SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class SettingsScreenState extends State<SettingsScreen> {
   final _settings = SettingsService();
   bool _loading = false;
   String? _name;
@@ -23,6 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _movieWatchTimeMs = 0;
   int _tvWatchTimeMs = 0;
   late String _currentLanguage;
+  String? _avatar;
   late String _currentRegion;
   late String _currentAudioLanguage;
 
@@ -51,12 +55,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
     {'name': 'United Kingdom', 'code': 'GB'},
   ];
 
+  Stream<Map<String, dynamic>?>? _profileStream;
+  StreamSubscription<AuthState>? _authSubscription;
+
   @override
   void initState() {
     super.initState();
     _currentLanguage = _settings.language;
     _currentRegion = _settings.region;
     _currentAudioLanguage = _settings.defaultAudioLanguage;
+    _initProfileStream();
+    _loadUserData();
+    widget.onMounted?.call();
+
+    // Auth listener for basic state
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedIn || data.event == AuthChangeEvent.signedOut) {
+        _initProfileStream();
+        _loadUserData();
+      }
+    });
+  }
+
+  void _initProfileStream() {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      setState(() => _profileStream = null);
+      return;
+    }
+
+    setState(() {
+      _profileStream = Supabase.instance.client
+          .from('profiles')
+          .stream(primaryKey: ['id'])
+          .eq('id', user.id)
+          .limit(1)
+          .map((data) {
+            if (data.isNotEmpty) {
+              debugPrint('[TV Avatar Sync] 🟢 Received real-time update: profile_id=${data.first['profile_id']}');
+              return data.first;
+            }
+            return null;
+          });
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> refresh() async {
     _loadUserData();
   }
 
@@ -67,19 +117,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _loading = true);
 
     try {
-      final user = session.user;
+      final userResponse = await Supabase.instance.client.auth.getUser();
+      final user = userResponse.user;
+      if (user == null) return;
       _email = user.email;
 
-      // 1. Fetch profile name
+      // 1. Fetch profile name (Initial fetch, rest is handled by stream)
       final profileRes = await Supabase.instance.client
           .from('profiles')
-          .select('name')
+          .select('*')
           .eq('id', user.id)
           .limit(1);
       
       if (mounted) {
         setState(() {
-          _name = profileRes.isNotEmpty ? profileRes[0]['name'] as String? : null;
+          final profileData = profileRes.isNotEmpty ? profileRes[0] : null;
+          _name = profileData?['name'] as String?;
+          
+          // Initial avatar resolution
+          _avatar = user.userMetadata?['avatar']?.toString() ?? 
+                    user.userMetadata?['avatar_url']?.toString() ??
+                    profileData?['profile_id']?.toString();
         });
       }
 
@@ -171,40 +229,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const CircularProgressIndicator(color: Colors.white)
               else ...[
                 // Profile Section
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  margin: const EdgeInsets.symmetric(horizontal: 48),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white12),
-                  ),
-                  child: Column(
-                    children: [
-                      const CircleAvatar(
-                        radius: 40,
-                        backgroundColor: Color(0xFFDC2626),
-                        child: Icon(Icons.person, size: 48, color: Colors.white),
+                StreamBuilder<Map<String, dynamic>?>(
+                  stream: _profileStream,
+                  builder: (context, snapshot) {
+                    final data = snapshot.data;
+                    final dbProfileId = data?['profile_id']?.toString();
+                    
+                    // Smart fallback: If DB says 0 or null, check if _avatar (from metadata) has a better value
+                    final avatarId = (dbProfileId != null && dbProfileId != '0') 
+                        ? dbProfileId 
+                        : (_avatar ?? '0');
+                        
+                    final name = data?['name']?.toString() ?? _name ?? 'User';
+
+                    return Container(
+                      padding: const EdgeInsets.all(24),
+                      margin: const EdgeInsets.symmetric(horizontal: 48),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white12),
                       ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _name ?? 'User',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 100,
+                            height: 100,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDC2626).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(22),
+                              border: Border.all(color: Colors.white24, width: 2),
+                              image: DecorationImage(
+                                image: NetworkImage(AvatarUtils.getAvatarUrl(avatarId)),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _email ?? '',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _email ?? '',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
-                  ),
+                    );
+                  }
                 ),
                 const SizedBox(height: 24),
                 // Stats Section
