@@ -44,7 +44,9 @@ Future<void> bootstrap(String envFile) async {
       await Supabase.initialize(
         url: url,
         anonKey: anonKey,
-        authFlowType: AuthFlowType.pkce,
+        authOptions: const FlutterAuthClientOptions(
+          authFlowType: AuthFlowType.pkce,
+        ),
         debug: false,
       );
       // Verify session recovery
