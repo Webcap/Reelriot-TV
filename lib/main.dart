@@ -41,7 +41,12 @@ Future<void> bootstrap(String envFile) async {
   if (url.isNotEmpty && anonKey.isNotEmpty) {
     debugPrint('[Main] 🛠️ Initializing Supabase...');
     try {
-      await Supabase.initialize(url: url, anonKey: anonKey, debug: false);
+      await Supabase.initialize(
+        url: url,
+        anonKey: anonKey,
+        authFlowType: AuthFlowType.pkce,
+        debug: false,
+      );
       // Verify session recovery
       final session = Supabase.instance.client.auth.currentSession;
       if (session != null) {
@@ -53,13 +58,8 @@ Future<void> bootstrap(String envFile) async {
       }
     } catch (e) {
       debugPrint('[Main] ❌ Supabase initialization failed: $e');
-      if (e.toString().contains('refresh_token_already_used')) {
-        debugPrint('[Main] ⚠️ Refresh token already used. Clearing session...');
-        try {
-          // Attempt to sign out to clear the corrupted session from local storage
-          await Supabase.instance.client.auth.signOut();
-        } catch (_) {}
-      }
+      // We no longer aggressively signOut here. 
+      // If the token is truly dead, Supabase will emit a signedOut event naturally.
     }
   }
 
@@ -126,19 +126,15 @@ class _AuthGate extends StatelessWidget {
     return StreamBuilder<AuthState>(
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          final showHomeOnWait =
-              Supabase.instance.client.auth.currentSession != null;
-          return SplashScreen(
-            destination: showHomeOnWait
-                ? const HomeScreen()
-                : const PairingScreen(),
-          );
+        // If we already have a session in the client, prefer staying on Home
+        // rather than jumping to Pairing while the stream is initializing.
+        final currentSession = Supabase.instance.client.auth.currentSession;
+
+        if (snapshot.connectionState == ConnectionState.waiting && currentSession == null) {
+          return const SplashScreen(destination: PairingScreen());
         }
 
-        final session =
-            snapshot.data?.session ??
-            Supabase.instance.client.auth.currentSession;
+        final session = snapshot.data?.session ?? currentSession;
         final destination = session != null
             ? const HomeScreen()
             : const PairingScreen();
