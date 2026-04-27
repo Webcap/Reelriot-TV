@@ -12,6 +12,7 @@ class HomeHeroSection extends StatelessWidget {
   final VoidCallback onFavorite;
   final bool backgroundOnly;
   final bool contentOnly;
+  final FocusNode? focusNode;
 
   const HomeHeroSection({
     super.key,
@@ -23,6 +24,7 @@ class HomeHeroSection extends StatelessWidget {
     required this.onFavorite,
     this.backgroundOnly = false,
     this.contentOnly = false,
+    this.focusNode,
   });
 
   @override

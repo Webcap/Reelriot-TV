@@ -2,10 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:reelriot_tv/env.dart';
+import 'package:reelriot_tv/widgets/long_press_focus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
 
 void _log(String message, [Object? detail]) {
   if (kDebugMode) {
@@ -360,32 +361,42 @@ class _PairingScreenState extends State<PairingScreen> {
   Widget _buildButton(String label, VoidCallback onPressed) {
     return Padding(
       padding: const EdgeInsets.only(top: 24),
-      child: ElevatedButton(
+      child: LongPressFocus(
         autofocus: true,
-        onPressed: () {
+        onTap: () {
           _log('Button pressed', label);
           onPressed();
         },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFDC2626),
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 20),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          elevation: 8,
-        ).copyWith(
-          overlayColor: WidgetStateProperty.resolveWith<Color?>(
-            (Set<WidgetState> states) {
-              if (states.contains(WidgetState.focused)) return Colors.white.withValues(alpha: 0.1);
-              return null;
-            },
-          ),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
+        child: Builder(builder: (context) {
+          final focused = Focus.of(context).hasFocus;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 20),
+            decoration: BoxDecoration(
+              color: focused ? Colors.white : const Color(0xFFDC2626),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: focused ? Colors.white : Colors.transparent,
+                width: 2,
+              ),
+              boxShadow: focused ? [
+                BoxShadow(
+                  color: const Color(0xFFDC2626).withValues(alpha: 0.4),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                )
+              ] : null,
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: focused ? Colors.black : Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
+        }),
       ),
     );
   }

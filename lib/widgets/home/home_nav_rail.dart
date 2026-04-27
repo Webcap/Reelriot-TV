@@ -16,6 +16,7 @@ class HomeNavRail extends StatelessWidget {
   final List<HomeTab> tabs;
   final Function(int) onTabSelected;
   final Function(int) onTabReset;
+  final VoidCallback? onMoveRight;
 
   const HomeNavRail({
     super.key,
@@ -24,6 +25,7 @@ class HomeNavRail extends StatelessWidget {
     required this.tabs,
     required this.onTabSelected,
     required this.onTabReset,
+    this.onMoveRight,
   });
 
   @override
@@ -100,8 +102,12 @@ class HomeNavRail extends StatelessWidget {
 
                       // Handle Moving Focus to Content (Right)
                       if (TvKeys.isRight(key)) {
-                        // Request focus to the next group (the main content area)
-                        FocusScope.of(context).focusInDirection(TraversalDirection.right);
+                        if (onMoveRight != null) {
+                          onMoveRight!();
+                        } else {
+                          // Fallback to automatic traversal
+                          FocusScope.of(context).focusInDirection(TraversalDirection.right);
+                        }
                         return KeyEventResult.handled;
                       }
 

@@ -3,6 +3,7 @@ import 'package:reelriot_tv/screens/home_screen.dart';
 import 'package:reelriot_tv/screens/movie_detail_screen.dart';
 import 'package:reelriot_tv/screens/tv_detail_screen.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/widgets/long_press_focus.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -16,10 +17,15 @@ class FavoritesScreen extends StatefulWidget {
 
 class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliveClientMixin {
   final _supabase = Supabase.instance.client;
+  final FocusNode _focusNode = FocusNode();
   List<MovieListItem> _bookmarkedMovies = [];
   List<TvListItem> _bookmarkedTv = [];
   bool _loading = false;
   String? _error;
+
+  void requestFocus() {
+    _focusNode.requestFocus();
+  }
 
   @override
   bool get wantKeepAlive => true;
@@ -28,6 +34,12 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
   void initState() {
     super.initState();
     _fetchBookmarks();
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
   }
 
   void refresh() {
@@ -179,9 +191,10 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
   }
 
   Widget _buildLoginPrompt() {
-    return Center(
+    return Padding(
+      padding: const EdgeInsets.only(top: 100), // Align with nav rail
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
           const Icon(Icons.favorite_border, size: 80, color: Colors.white24),
           const SizedBox(height: 24),
@@ -196,15 +209,25 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pushNamed('/pairing'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE60000),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text('Sign In / Sign Up', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          LongPressFocus(
+            focusNode: _focusNode,
+            onTap: () => Navigator.of(context).pushNamed('/pairing'),
+            child: Builder(builder: (context) {
+              final focused = Focus.of(context).hasFocus;
+              return ElevatedButton(
+                onPressed: () => Navigator.of(context).pushNamed('/pairing'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: focused ? Colors.white : const Color(0xFFE60000),
+                  foregroundColor: focused ? Colors.black : Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: focused ? const BorderSide(color: Colors.white, width: 2) : BorderSide.none,
+                  ),
+                ),
+                child: const Text('Sign In / Sign Up', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              );
+            }),
           ),
         ],
       ),

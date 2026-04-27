@@ -14,12 +14,17 @@ class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
   @override
-  State<SearchScreen> createState() => _SearchScreenState();
+  State<SearchScreen> createState() => SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> {
+class SearchScreenState extends State<SearchScreen> {
   final ApiService _api = ApiService();
+  final FocusNode _searchNode = FocusNode();
   final TextEditingController _queryController = TextEditingController();
+
+  void requestFocus() {
+    _searchNode.requestFocus();
+  }
   List<MovieListItem>? _movies;
   List<TvListItem>? _tv;
   String? _error;
@@ -39,6 +44,7 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void dispose() {
     _queryController.dispose();
+    _searchNode.dispose();
     _debounceTimer?.cancel();
     super.dispose();
   }
@@ -193,6 +199,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildSearchBar() {
     return Focus(
+      focusNode: _searchNode,
       child: Builder(
         builder: (context) {
           final focused = Focus.of(context).hasFocus;

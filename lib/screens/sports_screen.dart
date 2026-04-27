@@ -358,12 +358,17 @@ class SportsScreen extends StatefulWidget {
 }
 
 class SportsScreenState extends State<SportsScreen> {
+  final FocusNode _refreshNode = FocusNode();
   List<_LeagueData>? _data;
   Map<String, dynamic>? _featuredEvent;
   bool _loading = true;
   String? _error;
   String? _selectedSport;
   List<String> _availableSports = [];
+
+  void requestFocus() {
+    _refreshNode.requestFocus();
+  }
 
   @override
   void initState() {
@@ -514,6 +519,12 @@ class SportsScreenState extends State<SportsScreen> {
     }
   }
 
+  @override
+  void dispose() {
+    _refreshNode.dispose();
+    super.dispose();
+  }
+
 
   double _s(BuildContext context, double v) =>
       (v * MediaQuery.of(context).size.width) / 1920;
@@ -586,7 +597,7 @@ class SportsScreenState extends State<SportsScreen> {
                   Text(dateStr, style: TextStyle(color: Colors.white38, fontSize: s(24), fontWeight: FontWeight.w500)),
                 ],
               ),
-              _RefreshButton(onTap: load),
+              _RefreshButton(onTap: load, focusNode: _refreshNode),
             ],
           ),
           SizedBox(height: s(40)),
@@ -1252,7 +1263,8 @@ class _FilterChipState extends State<_FilterChip> {
 
 class _RefreshButton extends StatelessWidget {
   final VoidCallback onTap;
-  const _RefreshButton({required this.onTap});
+  final FocusNode? focusNode;
+  const _RefreshButton({required this.onTap, this.focusNode});
 
   @override
   Widget build(BuildContext context) {
@@ -1260,6 +1272,7 @@ class _RefreshButton extends StatelessWidget {
     double s(double v) => (v * width) / 1920;
 
     return Focus(
+      focusNode: focusNode,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
           onTap();

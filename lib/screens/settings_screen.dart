@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:reelriot_tv/services/settings_service.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
+import 'package:reelriot_tv/widgets/long_press_focus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -21,6 +22,7 @@ class SettingsScreen extends StatefulWidget {
 
 class SettingsScreenState extends State<SettingsScreen> {
   final _settings = SettingsService();
+  final FocusNode _focusNode = FocusNode();
   bool _loading = false;
   String? _name;
   String? _email;
@@ -30,6 +32,10 @@ class SettingsScreenState extends State<SettingsScreen> {
   String? _avatar;
   late String _currentRegion;
   late String _currentAudioLanguage;
+
+  void requestFocus() {
+    _focusNode.requestFocus();
+  }
 
   final List<Map<String, String>> _languages = [
     {'name': 'English', 'code': 'en'},
@@ -104,6 +110,7 @@ class SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     _authSubscription?.cancel();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -211,11 +218,11 @@ class SettingsScreenState extends State<SettingsScreen> {
     final session = Supabase.instance.client.auth.currentSession;
     final isSignedIn = session != null;
 
-    return Center(
+    return Padding(
+      padding: const EdgeInsets.only(top: 100), // Align with nav rail items
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(vertical: 48),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text(
               'Settings',
@@ -540,14 +547,8 @@ class SettingsScreenState extends State<SettingsScreen> {
               ],
               const SizedBox(height: 32),
               // Update Section
-              Focus(
-                onKeyEvent: (_, event) {
-                  if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
-                    _checkForUpdate(context);
-                    return KeyEventResult.handled;
-                  }
-                  return KeyEventResult.ignored;
-                },
+              LongPressFocus(
+                onTap: () => _checkForUpdate(context),
                 child: Builder(builder: (context) {
                   final focused = Focus.of(context).hasFocus;
                   return ElevatedButton.icon(
@@ -564,14 +565,8 @@ class SettingsScreenState extends State<SettingsScreen> {
                 }),
               ),
               const SizedBox(height: 16),
-              Focus(
-                onKeyEvent: (_, event) {
-                  if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
-                    _signOut(context);
-                    return KeyEventResult.handled;
-                  }
-                  return KeyEventResult.ignored;
-                },
+              LongPressFocus(
+                onTap: () => _signOut(context),
                 child: Builder(builder: (context) {
                   final focused = Focus.of(context).hasFocus;
                   return ElevatedButton.icon(
@@ -588,14 +583,9 @@ class SettingsScreenState extends State<SettingsScreen> {
                 }),
               ),
             ] else
-              Focus(
-                onKeyEvent: (_, event) {
-                  if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
-                    Navigator.of(context).pushNamed('/pairing');
-                    return KeyEventResult.handled;
-                  }
-                  return KeyEventResult.ignored;
-                },
+              LongPressFocus(
+                focusNode: _focusNode,
+                onTap: () => Navigator.of(context).pushNamed('/pairing'),
                 child: Builder(builder: (context) {
                   final focused = Focus.of(context).hasFocus;
                   return ElevatedButton.icon(

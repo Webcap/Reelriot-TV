@@ -34,6 +34,7 @@ import 'package:reelriot_tv/widgets/home/home_providers.dart';
 import 'package:reelriot_tv/widgets/home/home_up_next.dart';
 import 'package:reelriot_tv/widgets/home/home_hero_section.dart';
 import 'package:reelriot_tv/widgets/home/home_hero_button.dart';
+import 'package:reelriot_tv/widgets/long_press_focus.dart';
 import 'package:reelriot_tv/widgets/home/home_airing_today.dart';
 import 'package:reelriot_tv/widgets/home/home_ai_recommendations.dart';
 import 'package:reelriot_tv/widgets/home/home_update_card.dart';
@@ -50,6 +51,7 @@ class HomeScreenState extends State<HomeScreen> {
   static HomeScreenState? of(BuildContext context) => context.findAncestorStateOfType<HomeScreenState>();
 
   int _selectedIndex = 1;
+  final GlobalKey<SearchScreenState> _searchKey = GlobalKey<SearchScreenState>();
   final GlobalKey<FavoritesScreenState> _favoritesKey = GlobalKey<FavoritesScreenState>();
   final GlobalKey<SportsScreenState> _sportsKey = GlobalKey<SportsScreenState>();
   final GlobalKey<SettingsScreenState> _settingsKey = GlobalKey<SettingsScreenState>();
@@ -190,12 +192,26 @@ class HomeScreenState extends State<HomeScreen> {
                       _settingsKey.currentState?.refresh();
                     }
                   },
+                  onMoveRight: () {
+                    final tabLabel = tabs[_selectedIndex].label;
+                    if (tabLabel == 'Search') {
+                      _searchKey.currentState?.requestFocus();
+                    } else if (tabLabel == 'Home') {
+                      _homeKey.currentState?.requestFocus();
+                    } else if (tabLabel == 'Sports') {
+                      _sportsKey.currentState?.requestFocus();
+                    } else if (tabLabel == 'Profile') {
+                      _settingsKey.currentState?.requestFocus();
+                    } else if (tabLabel == 'Favorites') {
+                      _favoritesKey.currentState?.requestFocus();
+                    }
+                  },
                 ),
                 Expanded(
                   child: IndexedStack(
                     index: _selectedIndex,
                     children: [
-                      const SearchScreen(),
+                      SearchScreen(key: _searchKey),
                       _buildMainView(),
                       if (SettingsService().sportsEnabled) RepaintBoundary(child: SportsScreen(key: _sportsKey)),
                       SettingsScreen(key: _settingsKey),
@@ -242,6 +258,11 @@ class _MainHomeView extends StatefulWidget {
 class _MainHomeViewState extends State<_MainHomeView> {
   final ApiService _api = ApiService();
   final WatchHistoryService _historyService = WatchHistoryService();
+  final FocusNode _entryFocusNode = FocusNode();
+
+  void requestFocus() {
+    _entryFocusNode.requestFocus();
+  }
 
   void _showItemContextMenu({
     required dynamic item,
@@ -927,6 +948,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _autoSlideTimer?.cancel();
+    _entryFocusNode.dispose();
     _authSubscription?.cancel();
     _debounceTimer?.cancel();
     super.dispose();
@@ -999,10 +1021,55 @@ class _MainHomeViewState extends State<_MainHomeView> {
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white54, fontSize: 16),
             ),
-            const SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: () => _loadContent(),
-              child: const Text('Retry Connection'),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LongPressFocus(
+                  onTap: () => _loadContent(),
+                  child: Builder(builder: (context) {
+                    final focused = Focus.of(context).hasFocus;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: focused ? Colors.white : Colors.white10,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: focused ? Colors.white : Colors.white24),
+                      ),
+                      child: Text(
+                        'Retry Connection',
+                        style: TextStyle(
+                          color: focused ? Colors.black : Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(width: 16),
+                LongPressFocus(
+                  onTap: () => Navigator.of(context).pushNamed('/pairing'),
+                  child: Builder(builder: (context) {
+                    final focused = Focus.of(context).hasFocus;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: focused ? Colors.white : const Color(0xFFE60000),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: focused ? Colors.white : Colors.transparent),
+                      ),
+                      child: Text(
+                        'Sign In',
+                        style: TextStyle(
+                          color: focused ? Colors.black : Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ],
             ),
           ],
         ),
@@ -1014,6 +1081,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     return Stack(
       children: [
         HomeHeroSection(
+          focusNode: _entryFocusNode,
           backgroundOnly: true,
           focusedMovie: _focusedMovie,
           trending: _trending,
