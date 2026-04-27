@@ -375,13 +375,11 @@ class _SplashScreenState extends State<SplashScreen>
           // ── Error Overlay ──────────────────────────────────
           if (_hasError)
             Positioned.fill(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Container(
-                  color: Colors.black.withValues(alpha: 0.6),
-                  child: Center(
-                    child: Container(
-                      width: 450,
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.9),
+                child: Center(
+                  child: Container(
+                    width: 450,
                       padding: const EdgeInsets.all(40),
                       decoration: BoxDecoration(
                         color: const Color(0xFF1A1A1A).withValues(alpha: 0.9),
@@ -446,7 +444,6 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                 ),
               ),
-            ),
         ],
       ),
     );

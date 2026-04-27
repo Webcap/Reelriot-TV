@@ -28,6 +28,11 @@ class AnalyticsService {
       final info = await PackageInfo.fromPlatform();
       _appVersion = '${info.version}+${info.buildNumber}';
 
+      if (kIsWeb) {
+        debugPrint('Mixpanel not supported on web yet, skipping');
+        return;
+      }
+
       _mixpanel = await Mixpanel.init(token, trackAutomaticEvents: true);
       _initialized = true;
       debugPrint('Mixpanel initialized successfully');
@@ -77,7 +82,7 @@ class AnalyticsService {
       final payload = {
         'event_name': eventName,
         'platform': 'tv',
-        'sub_platform': Platform.isAndroid ? 'android_tv' : 'tizen',
+        'sub_platform': kIsWeb ? 'webos' : (Platform.isAndroid ? 'android_tv' : 'tizen'),
         'user_id': userId,
         'is_qos': isQoS,
         'properties': properties ?? {},

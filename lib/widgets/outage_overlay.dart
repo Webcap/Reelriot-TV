@@ -94,14 +94,11 @@ class _OutageScreenState extends State<_OutageScreen>
   @override
   Widget build(BuildContext context) {
     return Positioned.fill(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Material(
-          type: MaterialType.transparency,
-          child: Container(
-            color: Colors.black.withValues(alpha: 0.88),
-            child: _buildContent(context),
-          ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: Container(
+          color: Colors.black.withValues(alpha: 0.95),
+          child: _buildContent(context),
         ),
       ),
     );

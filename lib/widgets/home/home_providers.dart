@@ -45,30 +45,26 @@ class HomeProvidersRow extends StatelessWidget {
                 final focused = Focus.of(context).hasFocus;
                 return GestureDetector(
                   onTap: () => onProviderTap(p),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(s(24)),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: s(360),
-                        decoration: BoxDecoration(
-                          color: focused 
-                              ? Colors.white.withValues(alpha: 0.15) 
-                              : Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(s(24)),
-                          border: Border.all(
-                            color: focused ? Colors.white : Colors.white10,
-                            width: focused ? s(4) : s(2),
-                          ),
-                          boxShadow: focused ? [
-                            BoxShadow(
-                              color: (p['color'] as Color).withValues(alpha: 0.3),
-                              blurRadius: s(30),
-                              spreadRadius: s(5),
-                            )
-                          ] : [],
-                        ),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: s(360),
+                    decoration: BoxDecoration(
+                      color: focused 
+                          ? const Color(0xFF1F2937)
+                          : Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(s(24)),
+                      border: Border.all(
+                        color: focused ? Colors.white : Colors.white10,
+                        width: focused ? s(4) : s(2),
+                      ),
+                      boxShadow: focused ? [
+                        BoxShadow(
+                          color: (p['color'] as Color).withValues(alpha: 0.3),
+                          blurRadius: s(30),
+                          spreadRadius: s(5),
+                        )
+                      ] : [],
+                    ),
                     padding: EdgeInsets.all(s(20)),
                     child: Center(
                       child: p['isSvg'] == true
@@ -93,14 +89,12 @@ class HomeProvidersRow extends StatelessWidget {
                                 ),
                               ),
                             ),
-                          ),
-                        ),
-                      ),
                     ),
-                  );
-                },
-              ),
-            );
+                  ),
+                );
+              },
+            ),
+          );
         },
       ),
     );
