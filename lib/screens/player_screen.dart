@@ -526,7 +526,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
       if (isSourceError && _retryCount < 3) {
-      _retryCount++;
+        // If we are already on retry 2 or higher, we are using the proxy. 
+        // If the proxy fails too, we should just fall back to the next provider immediately.
+        if (_retryCount >= 2) {
+          debugPrint('[PlayerScreen] ⚠️ Proxy fallback failed, moving to next provider...');
+          _isHandlingException = false;
+          await _fallbackToNextProvider();
+          return;
+        }
+
+        _retryCount++;
       debugPrint(
         '[PlayerScreen] 🔄 Attempting to re-fetch stream URL (Retry $_retryCount/3)...',
       );
@@ -606,10 +615,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
           if (_retryCount >= 2) {
             debugPrint('[PlayerScreen] 🛡️ Using proxy fallback for retry $_retryCount');
-            // When using proxy, the client-to-proxy request shouldn't carry target headers
+            // When using proxy, we use a minimal set of headers for the client-to-proxy request,
+            // but we MUST preserve Authorization to satisfy global API key middleware.
             finalHeaders = {
               'User-Agent': finalHeaders['User-Agent'] ?? '',
               'Accept': '*/*',
+              if (finalHeaders.containsKey('Authorization'))
+                'Authorization': finalHeaders['Authorization']!,
             };
           }
 

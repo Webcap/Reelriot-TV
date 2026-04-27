@@ -51,8 +51,9 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   final List<Map<String, String>> _providers = [
     {'code': 'vidlink', 'name': 'VidLink'},
     {'code': 'vixsrc', 'name': 'Vixsrc'},
-    {'code': 'vidsrc', 'name': 'Vidsrc'},
+    {'code': 'vidsrcsu', 'name': 'Vidsrc.su'},
     {'code': 'vidzee', 'name': 'Vidzee'},
+    {'code': 'flixhq', 'name': 'FlixHQ'},
   ];
 
   late List<ProviderLoadState> _providerStates;
