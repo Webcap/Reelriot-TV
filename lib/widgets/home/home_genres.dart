@@ -1,4 +1,5 @@
 import 'package:reelriot_tv/utils/responsive_utils.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -40,7 +41,7 @@ class HomeGenresRow extends StatelessWidget {
                 padding: EdgeInsets.only(right: s(24)),
                 child: Focus(
                   onKeyEvent: (node, event) {
-                    if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select)) {
+                    if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
                       onGenreTap(g);
                       return KeyEventResult.handled;
                     }

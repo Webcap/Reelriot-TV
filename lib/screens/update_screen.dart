@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'dart:ui';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/update_service.dart';
@@ -213,9 +214,7 @@ class _UpdateButtonState extends State<_UpdateButton> {
       autofocus: widget.autofocus,
       onFocusChange: (v) => setState(() => _isFocused = v),
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter)) {
+        if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
           widget.onPressed();
           return KeyEventResult.handled;
         }

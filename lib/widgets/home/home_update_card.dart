@@ -1,6 +1,7 @@
 import 'package:reelriot_tv/services/update_service.dart';
 import 'package:reelriot_tv/screens/update_screen.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -25,9 +26,7 @@ class HomeUpdateCard extends StatelessWidget {
         SizedBox(height: s(48)),
         Focus(
           onKeyEvent: (node, event) {
-            if (event is KeyDownEvent &&
-                (event.logicalKey == LogicalKeyboardKey.enter ||
-                    event.logicalKey == LogicalKeyboardKey.select)) {
+            if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => UpdateScreen(updateInfo: updateInfo)),

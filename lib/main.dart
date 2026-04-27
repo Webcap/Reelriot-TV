@@ -9,7 +9,6 @@ import 'package:reelriot_tv/services/settings_service.dart';
 import 'package:reelriot_tv/utils/cleanup_utils.dart';
 import 'package:reelriot_tv/widgets/outage_overlay.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';

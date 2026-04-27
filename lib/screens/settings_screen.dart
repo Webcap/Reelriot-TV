@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:reelriot_tv/services/settings_service.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -339,9 +340,7 @@ class SettingsScreenState extends State<SettingsScreen> {
                       final isSelected = _currentLanguage == lang['code'];
                       return Focus(
                         onKeyEvent: (_, event) {
-                          if (event is KeyDownEvent &&
-                              (event.logicalKey == LogicalKeyboardKey.enter ||
-                                  event.logicalKey == LogicalKeyboardKey.select)) {
+                          if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
                             _updateLanguage(lang['code']!);
                             return KeyEventResult.handled;
                           }
@@ -393,9 +392,7 @@ class SettingsScreenState extends State<SettingsScreen> {
                       final isSelected = _currentRegion == reg['code'];
                       return Focus(
                         onKeyEvent: (_, event) {
-                          if (event is KeyDownEvent &&
-                              (event.logicalKey == LogicalKeyboardKey.enter ||
-                                  event.logicalKey == LogicalKeyboardKey.select)) {
+                          if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
                             _updateRegion(reg['code']!);
                             return KeyEventResult.handled;
                           }
@@ -447,9 +444,7 @@ class SettingsScreenState extends State<SettingsScreen> {
                       final isSelected = _currentAudioLanguage == lang['code'];
                       return Focus(
                         onKeyEvent: (_, event) {
-                          if (event is KeyDownEvent &&
-                              (event.logicalKey == LogicalKeyboardKey.enter ||
-                                  event.logicalKey == LogicalKeyboardKey.select)) {
+                          if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
                             _updateAudioLanguage(lang['code']!);
                             return KeyEventResult.handled;
                           }
@@ -485,9 +480,7 @@ class SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 48),
                   child: Focus(
                     onKeyEvent: (_, event) {
-                      if (event is KeyDownEvent &&
-                          (event.logicalKey == LogicalKeyboardKey.enter ||
-                              event.logicalKey == LogicalKeyboardKey.select)) {
+                      if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
                         _toggleExternalSubtitles(!_settings.useExternalSubtitles);
                         return KeyEventResult.handled;
                       }
@@ -549,9 +542,7 @@ class SettingsScreenState extends State<SettingsScreen> {
               // Update Section
               Focus(
                 onKeyEvent: (_, event) {
-                  if (event is KeyDownEvent &&
-                      (event.logicalKey == LogicalKeyboardKey.enter ||
-                          event.logicalKey == LogicalKeyboardKey.select)) {
+                  if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
                     _checkForUpdate(context);
                     return KeyEventResult.handled;
                   }
@@ -575,9 +566,7 @@ class SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 16),
               Focus(
                 onKeyEvent: (_, event) {
-                  if (event is KeyDownEvent &&
-                      (event.logicalKey == LogicalKeyboardKey.enter ||
-                          event.logicalKey == LogicalKeyboardKey.select)) {
+                  if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
                     _signOut(context);
                     return KeyEventResult.handled;
                   }
@@ -601,9 +590,7 @@ class SettingsScreenState extends State<SettingsScreen> {
             ] else
               Focus(
                 onKeyEvent: (_, event) {
-                  if (event is KeyDownEvent &&
-                      (event.logicalKey == LogicalKeyboardKey.enter ||
-                          event.logicalKey == LogicalKeyboardKey.select)) {
+                  if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
                     Navigator.of(context).pushNamed('/pairing');
                     return KeyEventResult.handled;
                   }

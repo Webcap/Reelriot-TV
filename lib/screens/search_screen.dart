@@ -3,6 +3,7 @@ import 'package:reelriot_tv/screens/home_screen.dart';
 import 'package:reelriot_tv/screens/movie_detail_screen.dart';
 import 'package:reelriot_tv/screens/tv_detail_screen.dart';
 import 'package:reelriot_tv/services/api_service.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
@@ -428,10 +429,8 @@ class _Key extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(4.0),
         child: Focus(
-          onKeyEvent: (_, event) {
-            if (event is KeyDownEvent &&
-                (event.logicalKey == LogicalKeyboardKey.enter ||
-                    event.logicalKey == LogicalKeyboardKey.select)) {
+        onKeyEvent: (_, event) {
+          if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
               onTap();
               return KeyEventResult.handled;
             }
@@ -489,9 +488,7 @@ class _ResultTile extends StatelessWidget {
 
     return Focus(
       onKeyEvent: (_, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.select)) {
+        if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
           onTap();
           return KeyEventResult.handled;
         }
@@ -601,9 +598,7 @@ class _HistoryPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Focus(
       onKeyEvent: (_, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.select)) {
+        if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
           onTap();
           return KeyEventResult.handled;
         }

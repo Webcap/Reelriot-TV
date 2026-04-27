@@ -1,5 +1,6 @@
 import 'package:reelriot_tv/services/settings_service.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -71,9 +72,10 @@ class HomeNavRail extends StatelessWidget {
                     onKeyEvent: (node, event) {
                       if (event is! KeyDownEvent) return KeyEventResult.ignored;
                       
+                      final key = event.logicalKey;
+
                       // Handle Selection
-                      if (event.logicalKey == LogicalKeyboardKey.enter ||
-                          event.logicalKey == LogicalKeyboardKey.select) {
+                      if (TvKeys.isSelect(key)) {
                         if (selectedIndex == i) {
                           onTabReset(i);
                         } else {
@@ -83,13 +85,13 @@ class HomeNavRail extends StatelessWidget {
                       }
 
                       // Handle Vertical Navigation
-                      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      if (TvKeys.isDown(key)) {
                         if (i < navNodes.length - 1) {
                           navNodes[i + 1].requestFocus();
                           return KeyEventResult.handled;
                         }
                       }
-                      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                      if (TvKeys.isUp(key)) {
                         if (i > 0) {
                           navNodes[i - 1].requestFocus();
                           return KeyEventResult.handled;
@@ -97,7 +99,7 @@ class HomeNavRail extends StatelessWidget {
                       }
 
                       // Handle Moving Focus to Content (Right)
-                      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                      if (TvKeys.isRight(key)) {
                         // Request focus to the next group (the main content area)
                         FocusScope.of(context).focusInDirection(TraversalDirection.right);
                         return KeyEventResult.handled;

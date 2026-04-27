@@ -1,5 +1,5 @@
-import 'dart:ui';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -34,7 +34,7 @@ class HomeProvidersRow extends StatelessWidget {
           final p = providers[index];
           return Focus(
             onKeyEvent: (node, event) {
-              if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select)) {
+              if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
                 onProviderTap(p);
                 return KeyEventResult.handled;
               }

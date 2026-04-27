@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -353,7 +354,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       focusNode: _progressBarFocusNode,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        if (TvKeys.isRight(event.logicalKey)) {
           final now = DateTime.now().millisecondsSinceEpoch;
           if (_lastSeekTimestamp != null && (now - _lastSeekTimestamp!) < 400) {
             _seekAccelerationFactor = (_seekAccelerationFactor + 1).clamp(
@@ -370,7 +371,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
           _startHideTimer();
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        if (TvKeys.isLeft(event.logicalKey)) {
           final now = DateTime.now().millisecondsSinceEpoch;
           if (_lastSeekTimestamp != null && (now - _lastSeekTimestamp!) < 400) {
             _seekAccelerationFactor = (_seekAccelerationFactor + 1).clamp(
@@ -390,7 +391,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
           _startHideTimer();
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        if (TvKeys.isDown(event.logicalKey)) {
           _playPauseFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
@@ -471,20 +472,19 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       focusNode: _playPauseFocusNode,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.select) {
+        if (TvKeys.isSelect(event.logicalKey)) {
           _togglePlayPause();
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        if (TvKeys.isUp(event.logicalKey)) {
           _progressBarFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        if (TvKeys.isRight(event.logicalKey)) {
           _ffFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        if (TvKeys.isLeft(event.logicalKey)) {
           _rewindFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
@@ -521,16 +521,15 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       focusNode: _settingsFocusNode,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.select) {
+        if (TvKeys.isSelect(event.logicalKey)) {
           widget.onShowSettings();
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        if (TvKeys.isUp(event.logicalKey)) {
           _progressBarFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        if (TvKeys.isLeft(event.logicalKey)) {
           _ffFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
@@ -600,20 +599,19 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       focusNode: focusNode,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.select) {
+        if (TvKeys.isSelect(event.logicalKey)) {
           onPressed();
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        if (TvKeys.isUp(event.logicalKey)) {
           _progressBarFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        if (TvKeys.isLeft(event.logicalKey)) {
           final res = onLeft();
           return res is KeyEventResult ? res : KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        if (TvKeys.isRight(event.logicalKey)) {
           final res = onRight();
           return res is KeyEventResult ? res : KeyEventResult.handled;
         }

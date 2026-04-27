@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import '../models/sub_languages.dart';
 
 class LanguagePickerDialog extends StatefulWidget {
@@ -97,9 +98,7 @@ class _LanguageItemState extends State<_LanguageItem> {
     return Focus(
       onFocusChange: widget.onFocusChange,
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.select)) {
+        if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
           widget.onTap();
           return KeyEventResult.handled;
         }

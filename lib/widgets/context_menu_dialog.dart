@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'dart:ui';
 
 class ContextMenuDialog extends StatelessWidget {
@@ -141,9 +142,7 @@ class _ContextMenuItemWidgetState extends State<_ContextMenuItemWidget> {
       autofocus: widget.isFirst,
       onFocusChange: (focused) => setState(() => _isFocused = focused),
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.select)) {
+        if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
           widget.item.onTap();
           Navigator.of(context).pop();
           return KeyEventResult.handled;

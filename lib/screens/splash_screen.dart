@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:ui';
 import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'package:reelriot_tv/constants.dart';
 import 'package:reelriot_tv/services/api_service.dart';

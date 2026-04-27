@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'dart:async';
 
 class LongPressFocus extends StatefulWidget {
@@ -38,10 +39,7 @@ class _LongPressFocusState extends State<LongPressFocus> {
   }
 
   void _handleKeyDown(LogicalKeyboardKey key) {
-    if (key == LogicalKeyboardKey.enter || 
-        key == LogicalKeyboardKey.select || 
-        key == LogicalKeyboardKey.space ||
-        key == LogicalKeyboardKey.gameButtonA) {
+    if (TvKeys.isSelect(key)) {
       if (_longPressTimer != null) return;
       _isLongPress = false;
       _longPressTimer = Timer(const Duration(milliseconds: 500), () {
@@ -53,10 +51,7 @@ class _LongPressFocusState extends State<LongPressFocus> {
   }
 
   void _handleKeyUp(LogicalKeyboardKey key) {
-    if (key == LogicalKeyboardKey.enter || 
-        key == LogicalKeyboardKey.select || 
-        key == LogicalKeyboardKey.space ||
-        key == LogicalKeyboardKey.gameButtonA) {
+    if (TvKeys.isSelect(key)) {
       final wasLongPress = _isLongPress;
       _longPressTimer?.cancel();
       _longPressTimer = null;
@@ -96,8 +91,7 @@ class _LongPressFocusState extends State<LongPressFocus> {
           if (result != KeyEventResult.ignored) return result;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.enter || 
-            event.logicalKey == LogicalKeyboardKey.select) {
+        if (TvKeys.isSelect(event.logicalKey)) {
           return KeyEventResult.handled;
         }
 

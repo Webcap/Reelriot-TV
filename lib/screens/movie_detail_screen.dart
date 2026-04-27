@@ -4,6 +4,7 @@ import 'package:reelriot_tv/screens/video_loader_screen.dart';
 import 'package:reelriot_tv/screens/actor_screen.dart';
 import 'package:reelriot_tv/services/api_service.dart';
 import 'package:reelriot_tv/services/watch_history_service.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -504,9 +505,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                    final actor = _credits!.cast[index];
                                    return Focus(
                                      onKeyEvent: (_, event) {
-                                       if (event is KeyDownEvent &&
-                                           (event.logicalKey == LogicalKeyboardKey.enter ||
-                                            event.logicalKey == LogicalKeyboardKey.select)) {
+                                       if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
                                          Navigator.of(context).push(
                                            MaterialPageRoute(
                                              builder: (context) => ActorScreen(personId: actor.id),
@@ -715,9 +714,7 @@ class _ActionBtnState extends State<_ActionBtn> {
     return Focus(
       autofocus: widget.autofocus,
       onKeyEvent: (_, event) {
-        if (event is KeyDownEvent && 
-           (event.logicalKey == LogicalKeyboardKey.enter || 
-            event.logicalKey == LogicalKeyboardKey.select)) {
+        if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
           _handleTap();
           return KeyEventResult.handled;
         }

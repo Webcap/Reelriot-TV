@@ -1,4 +1,5 @@
 import 'package:reelriot_tv/utils/responsive_utils.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -55,7 +56,7 @@ class HomeTopNav extends StatelessWidget {
                 final isSelected = cat == selectedCategory;
                 return Focus(
                   onKeyEvent: (node, event) {
-                    if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select)) {
+                    if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
                       if (selectedCategory != cat) {
                         onCategorySelected(cat);
                       }

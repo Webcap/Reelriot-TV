@@ -4,6 +4,7 @@ import 'package:reelriot_tv/services/api_service.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:reelriot_tv/screens/movie_detail_screen.dart';
 import 'package:reelriot_tv/screens/tv_detail_screen.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -247,6 +248,13 @@ class _ProviderScreenState extends State<ProviderScreen> {
 
   Widget _buildBackButton(BuildContext context, double Function(double) s) {
     return Focus(
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
+          Navigator.pop(context);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
       child: Builder(
         builder: (context) {
           final focused = Focus.of(context).hasFocus;
@@ -308,7 +316,7 @@ class _ProviderScreenState extends State<ProviderScreen> {
     final isSelected = opt['value'] == current;
     return Focus(
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select)) {
+        if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
           onSelect(opt['value']!);
           return KeyEventResult.handled;
         }
@@ -345,7 +353,7 @@ class _ProviderScreenState extends State<ProviderScreen> {
     final isSelected = opt['value'] == _selectedSort;
     return Focus(
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select)) {
+        if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
            setState(() => _selectedSort = opt['value']!);
            _load();
           return KeyEventResult.handled;

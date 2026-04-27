@@ -14,11 +14,13 @@ class TvKeys {
 
   // ── Confirm / Select ────────────────────────────────────────────────────────
 
-  /// True for Enter, Select (D-pad center), numpad Enter.
+  /// True for Enter, Select (D-pad center), numpad Enter, Space, and Game Button A.
   static bool isSelect(LogicalKeyboardKey key) {
     return key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.select ||
         key == LogicalKeyboardKey.numpadEnter ||
+        key == LogicalKeyboardKey.space ||
+        key == LogicalKeyboardKey.gameButtonA ||
         key == LogicalKeyboardKey.gameButtonStart;
   }
 

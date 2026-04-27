@@ -1,5 +1,6 @@
 import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui';
@@ -252,9 +253,7 @@ class _TrackChipState extends State<_TrackChip> {
     return Focus(
       onFocusChange: (hasFocus) => setState(() => _focused = hasFocus),
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.select)) {
+        if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
           widget.onPressed();
           return KeyEventResult.handled;
         }

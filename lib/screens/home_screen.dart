@@ -24,6 +24,7 @@ import 'package:reelriot_tv/screens/update_screen.dart';
 import 'dart:async';
 import 'package:reelriot_tv/widgets/context_menu_dialog.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:reelriot_tv/widgets/home/home_nav_rail.dart';
 import 'package:reelriot_tv/widgets/home/home_top_nav.dart';
 import 'package:reelriot_tv/widgets/home/home_media_row.dart';
@@ -149,50 +150,62 @@ class HomeScreenState extends State<HomeScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) => _onBackInvoke(didPop),
-      child: Scaffold(
-        backgroundColor: const Color(0xFF000000),
-        body: Row(
-          children: [
-            HomeNavRail(
-              selectedIndex: _selectedIndex,
-              navNodes: _navNodes,
-              tabs: tabs,
-              onTabSelected: (index) {
-                if (mounted) setState(() => _selectedIndex = index);
-                final tabLabel = tabs[index].label;
-                if (tabLabel == 'Sports') {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    _sportsKey.currentState?.load();
-                  });
-                } else if (tabLabel == 'Favorites') {
-                  _favoritesKey.currentState?.refresh();
-                } else if (tabLabel == 'Profile') {
-                  _settingsKey.currentState?.refresh();
-                }
-              },
-              onTabReset: (index) {
-                if (tabs[index].label == 'Home') {
-                  _homeKey.currentState?.resetToTop();
-                } else if (tabs[index].label == 'Sports') {
-                  _sportsKey.currentState?.load();
-                } else if (tabs[index].label == 'Profile') {
-                  _settingsKey.currentState?.refresh();
-                }
-              },
+      child: FocusTraversalGroup(
+        policy: ReadingOrderTraversalPolicy(),
+        child: Focus(
+          onKeyEvent: (node, event) {
+            if (event is KeyDownEvent && TvKeys.isBack(event.logicalKey)) {
+              _onBackInvoke(false);
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: Scaffold(
+            backgroundColor: const Color(0xFF000000),
+            body: Row(
+              children: [
+                HomeNavRail(
+                  selectedIndex: _selectedIndex,
+                  navNodes: _navNodes,
+                  tabs: tabs,
+                  onTabSelected: (index) {
+                    if (mounted) setState(() => _selectedIndex = index);
+                    final tabLabel = tabs[index].label;
+                    if (tabLabel == 'Sports') {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        _sportsKey.currentState?.load();
+                      });
+                    } else if (tabLabel == 'Favorites') {
+                      _favoritesKey.currentState?.refresh();
+                    } else if (tabLabel == 'Profile') {
+                      _settingsKey.currentState?.refresh();
+                    }
+                  },
+                  onTabReset: (index) {
+                    if (tabs[index].label == 'Home') {
+                      _homeKey.currentState?.resetToTop();
+                    } else if (tabs[index].label == 'Sports') {
+                      _sportsKey.currentState?.load();
+                    } else if (tabs[index].label == 'Profile') {
+                      _settingsKey.currentState?.refresh();
+                    }
+                  },
+                ),
+                Expanded(
+                  child: IndexedStack(
+                    index: _selectedIndex,
+                    children: [
+                      const SearchScreen(),
+                      _buildMainView(),
+                      if (SettingsService().sportsEnabled) RepaintBoundary(child: SportsScreen(key: _sportsKey)),
+                      SettingsScreen(key: _settingsKey),
+                      FavoritesScreen(key: _favoritesKey),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            Expanded(
-              child: IndexedStack(
-                index: _selectedIndex,
-                children: [
-                  const SearchScreen(),
-                  _buildMainView(),
-                  if (SettingsService().sportsEnabled) RepaintBoundary(child: SportsScreen(key: _sportsKey)),
-                  SettingsScreen(key: _settingsKey),
-                  FavoritesScreen(key: _favoritesKey),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1334,9 +1347,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
           Focus(
             autofocus: true,
             onKeyEvent: (_, event) {
-              if (event is KeyDownEvent &&
-                  (event.logicalKey == LogicalKeyboardKey.enter ||
-                      event.logicalKey == LogicalKeyboardKey.select)) {
+              if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
                 Navigator.of(ctx).pop(saved);
                 return KeyEventResult.handled;
               }
@@ -1356,9 +1367,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
           const SizedBox(width: 8),
           Focus(
             onKeyEvent: (_, event) {
-              if (event is KeyDownEvent &&
-                  (event.logicalKey == LogicalKeyboardKey.enter ||
-                      event.logicalKey == LogicalKeyboardKey.select)) {
+              if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
                 Navigator.of(ctx).pop(Duration.zero);
                 return KeyEventResult.handled;
               }
