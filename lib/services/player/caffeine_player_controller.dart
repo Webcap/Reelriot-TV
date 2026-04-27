@@ -108,6 +108,10 @@ class CaffeinePlayerController extends ChangeNotifier {
   }) {
     if (_isDisposed) return;
     
+    if (type != CaffeinePlayerEventType.progress) {
+      debugPrint('[CaffeinePlayerController] 📢 Emitting event: $type');
+    }
+
     final event = CaffeinePlayerEvent(
       type,
       position: position,

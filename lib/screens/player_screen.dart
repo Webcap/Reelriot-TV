@@ -382,6 +382,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     _controller!.addEventsListener((event) async {
       if (_isDisposed) return;
+      
+      // LOG EVERY EVENT FOR DEBUGGING (skip progress to avoid spam)
+      if (event.type != CaffeinePlayerEventType.progress) {
+        debugPrint('[PlayerScreen] 🔔 Player Event: ${event.type}${event.message != null ? " (${event.message})" : ""}');
+      }
+
       if (event.type == CaffeinePlayerEventType.finished) {
         debugPrint(
           '[PlayerScreen] 🎉 Video finished, saving final progress (100%) and closing',
@@ -442,6 +448,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _bufferingStartTime = null;
         }
       } else if (event.type == CaffeinePlayerEventType.error) {
+        debugPrint('[PlayerScreen] ❌ RECEIVED ERROR: ${event.message}');
         AnalyticsService.instance.trackQoSEvent('Playback Error', {
           'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
           'id': widget.item is Map
@@ -492,6 +499,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         isPlaylistStuck ||
         errorStr.contains('socket') ||
         errorStr.contains('ffurl') ||
+        errorStr.contains('tcp') ||
+        errorStr.contains('resolve') ||
+        errorStr.contains('hostname') ||
         errorStr.contains('unexpected end');
 
     final is403 = errorStr.contains('403') || errorStr.contains('forbidden');
@@ -631,8 +641,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         await _fallbackToNextProvider();
       } else {
         String friendlyMessage = message;
-        if (errorStr.contains('socket') || errorStr.contains('connection')) {
-          friendlyMessage = 'Network Connection Lost. Please check your internet.';
+        if (errorStr.contains('socket') || 
+            errorStr.contains('connection') ||
+            errorStr.contains('tcp') ||
+            errorStr.contains('resolve')) {
+          friendlyMessage = 'Server Connection Failed. The host could not be reached.';
         } else if (errorStr.contains('404')) {
           friendlyMessage = 'Content not found on this server.';
         } else if (errorStr.contains('403') || errorStr.contains('forbidden')) {
@@ -812,7 +825,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // The ?headers= query params are instructions for the PROXY to use when
     // fetching from upstream CDNs — they are NOT client-to-proxy auth headers.
     // The proxy itself requires vidlink.pro Origin/Referer from the client.
-    if (url.contains('storm.vodvidl.site') || url.contains('vidlink')) {
+    if (url.contains('storm.vodvidl.site') || 
+        url.contains('vidlink') || 
+        url.contains('vidlvod') || 
+        url.contains('vidl')) {
       headers['Referer'] = 'https://vidlink.pro/';
       headers['Origin'] = 'https://vidlink.pro';
     }
@@ -1175,6 +1191,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    debugPrint('[PlayerScreen] 🛑 Disposing PlayerScreen...');
     _isDisposed = true;
     _trackSessionEnd();
     _saveTimer?.cancel();
