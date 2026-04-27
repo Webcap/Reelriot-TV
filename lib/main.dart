@@ -15,17 +15,26 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() async {
-  await bootstrap('.env');
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    FlutterError.onError = (details) {
+      FlutterError.presentError(details);
+      debugPrint('[FlutterError] ${details.exception}');
+    };
+    await bootstrap('.env');
+  }, (error, stack) {
+    debugPrint('[ZonedError] $error\n$stack');
+  });
 }
 
 Future<void> bootstrap(String envFile) async {
   // If in release mode, override debugPrint to do nothing
-  if (kReleaseMode) {
-    debugPrint = (String? message, {int? wrapWidth}) {};
-  }
+  // if (kReleaseMode) {
+  //   debugPrint = (String? message, {int? wrapWidth}) {};
+  // }
 
   debugPrint('[Main] 🚀 Bootstrapping with $envFile');
-  WidgetsFlutterBinding.ensureInitialized();
+  // WidgetsFlutterBinding already called in main
   MediaKit.ensureInitialized();
 
   // Load env first as it's required by subsequent service initializations

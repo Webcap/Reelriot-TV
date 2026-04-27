@@ -1,0 +1,12 @@
+{
+    "id": "com.reelriot.tv",
+    "version": "1.0.0",
+    "vendor": "Reelriot",
+    "type": "web",
+    "main": "index.html",
+    "title": "Reelriot TV",
+    "icon": "icon.png",
+    "largeIcon": "largeIcon.png",
+    "bgColor": "#000000",
+    "resolution": "1920x1080"
+}

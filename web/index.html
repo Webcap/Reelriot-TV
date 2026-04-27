@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="reelriot_tv">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Reelriot TV</title>
+  <link rel="manifest" href="manifest.json">
+  <script type="text/javascript" src="webOS.js"></script>
+  <script type="text/javascript">
+    window.addEventListener('error', function(event) {
+      if (event.target && (event.target.src || event.target.href)) {
+        console.error('[webOS] 404 Failed to load resource:', event.target.src || event.target.href);
+      }
+    }, true);
+
+    window.addEventListener('keydown', function(event) {
+      console.log('[webOS] Key Pressed:', event.key, 'KeyCode:', event.keyCode);
+      
+      // 461 is the keycode for the LG Remote Back Button
+      if (event.keyCode === 461) {
+        // Mapping it to 'Escape' to trigger Flutter's back navigation
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          'key': 'Escape',
+          'keyCode': 27,
+          'which': 27,
+          'bubbles': true
+        }));
+      }
+    });
+    console.log('[webOS] Remote listener initialized');
+  </script>
+  <style>
+    body {
+      background-color: black !important;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+    #browser-test {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #333;
+      font-family: sans-serif;
+      font-size: 24px;
+      z-index: -1; /* Behind Flutter */
+    }
+    #loading-text {
+      position: fixed;
+      bottom: 50px;
+      left: 50px;
+      color: white;
+      font-family: sans-serif;
+      z-index: 9999;
+    }
+  </style>
+</head>
+<body>
+  <div id="browser-test">FLUTTER ENGINE STARTING...</div>
+  <div id="loading-text">[HTML] Browser is rendering...</div>
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script type="text/javascript">console.log('[webOS] Loading flutter_bootstrap.js...');</script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

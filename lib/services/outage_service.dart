@@ -55,10 +55,12 @@ class OutageService {
 
       final res = await http.get(uri).timeout(_requestTimeout);
 
-      if (res.statusCode == 200) {
+      // If we get a response (even 401 or 404), the server is alive.
+      // We only consider it an "outage" if we can't reach the server at all.
+      if (res.statusCode == 200 || res.statusCode == 401 || res.statusCode == 404) {
         _setOnline();
       } else {
-        _setOffline('Service returned status ${res.statusCode}. Please try again later.');
+        _setOffline('Service returned status ${res.statusCode}.');
       }
     } on TimeoutException {
       _setOffline('The Caffeine API is taking too long to respond. Please try again shortly.');

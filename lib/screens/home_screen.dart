@@ -81,6 +81,13 @@ class HomeScreenState extends State<HomeScreen> {
     super.initState();
     _navNodes = List.generate(5, (_) => FocusNode());
     SettingsService().addListener(_onSettingsChanged);
+    
+    // Request initial focus on the Home tab (index 1)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_navNodes.length > 1) {
+        _navNodes[1].requestFocus();
+      }
+    });
   }
 
   void _onSettingsChanged() {
@@ -178,7 +185,7 @@ class HomeScreenState extends State<HomeScreen> {
                 index: _selectedIndex,
                 children: [
                   const SearchScreen(),
-                  RepaintBoundary(child: _MainHomeView(key: _homeKey)),
+                  _buildMainView(),
                   if (SettingsService().sportsEnabled) RepaintBoundary(child: SportsScreen(key: _sportsKey)),
                   SettingsScreen(key: _settingsKey),
                   FavoritesScreen(key: _favoritesKey),
@@ -187,6 +194,19 @@ class HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildMainView() {
+    // If we have no session and the API is 401-ing, show a friendly message
+    // instead of a blank screen.
+    return RepaintBoundary(
+      child: Stack(
+        children: [
+          _MainHomeView(key: _homeKey),
+          // We can add a "Please Sign In" overlay here if needed
+        ],
       ),
     );
   }
@@ -947,6 +967,34 @@ class _MainHomeViewState extends State<_MainHomeView> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator(color: Color(0xFFE60000)));
+
+    // Fallback if API returned 401/404 and left us with no content
+    if (_trending == null && _popular == null && _topRated == null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white24, size: 64),
+            const SizedBox(height: 24),
+            const Text(
+              'No Content Found',
+              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Your API returned 401 Unauthorized or 404.\nPlease ensure your device is paired.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white54, fontSize: 16),
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton(
+              onPressed: () => _loadContent(),
+              child: const Text('Retry Connection'),
+            ),
+          ],
+        ),
+      );
+    }
 
     double s(double v) => ResponsiveUtils.scale(context, v);
 

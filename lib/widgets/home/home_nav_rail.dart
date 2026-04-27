@@ -70,6 +70,8 @@ class HomeNavRail extends StatelessWidget {
                     focusNode: navNodes[i],
                     onKeyEvent: (node, event) {
                       if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                      
+                      // Handle Selection
                       if (event.logicalKey == LogicalKeyboardKey.enter ||
                           event.logicalKey == LogicalKeyboardKey.select) {
                         if (selectedIndex == i) {
@@ -79,6 +81,28 @@ class HomeNavRail extends StatelessWidget {
                         }
                         return KeyEventResult.handled;
                       }
+
+                      // Handle Vertical Navigation
+                      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                        if (i < navNodes.length - 1) {
+                          navNodes[i + 1].requestFocus();
+                          return KeyEventResult.handled;
+                        }
+                      }
+                      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                        if (i > 0) {
+                          navNodes[i - 1].requestFocus();
+                          return KeyEventResult.handled;
+                        }
+                      }
+
+                      // Handle Moving Focus to Content (Right)
+                      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                        // Request focus to the next group (the main content area)
+                        FocusScope.of(context).focusInDirection(TraversalDirection.right);
+                        return KeyEventResult.handled;
+                      }
+
                       return KeyEventResult.ignored;
                     },
                     child: Builder(
