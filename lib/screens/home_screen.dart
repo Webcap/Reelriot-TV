@@ -807,11 +807,23 @@ class _MainHomeViewState extends State<_MainHomeView> {
     }
 
     for (var originalShow in watchingShows) {
+      final showTitle = originalShow['name'] ?? originalShow['title'] ?? 'Unknown Show';
+      final isLive = originalShow['type'] == 'live' || originalShow['media_type'] == 'live';
+      final isSports = showTitle.contains(' at ') || showTitle.contains(' vs ');
+
+      // Skip live games or sports from "Up Next" episode calculation
+      if (isLive || isSports) continue;
+
       // Rule: Only show episodes in Up Next if the previous episode was completed
       if (originalShow['is_completed'] == true) {
         try {
           final show = Map<String, dynamic>.from(originalShow);
-          final showId = show['id'];
+          final dynamic rawId = show['id'] ?? show['media_id'];
+          if (rawId == null) continue;
+          
+          final showId = rawId is int ? rawId : int.tryParse(rawId.toString());
+          if (showId == null) continue;
+
           final seasonNum = show['season_num'] as int? ?? 1;
           final episodeNum = show['episode_num'] as int? ?? 1;
 
@@ -848,7 +860,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
             }
           }
         } catch (e) {
-          debugPrint('[HomeScreen] ❌ Error calculating next episode: $e');
+          debugPrint('[HomeScreen] ❌ Error calculating next episode for "$showTitle": $e');
         }
       }
       if (upNextItems.length >= 10) break;

@@ -134,14 +134,14 @@ class ApiService {
   Future<core.TvShowDetail> fetchTvDetail(int tvId) async {
     final url = core.Endpoints.tvDetailsUrl(tmdbBaseUrl, _tmdbKey, tvId, language);
     final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
-    if (res.statusCode != 200) throw Exception('Failed to load show');
+    if (res.statusCode != 200) throw Exception('Failed to load show (Status: ${res.statusCode}, ID: $tvId)');
     return core.TvShowDetail.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
   Future<core.TvSeasonDetailResponse> fetchSeasonDetail(int tvId, int seasonNumber) async {
     final url = core.Endpoints.tvSeasonDetailUrl(tmdbBaseUrl, _tmdbKey, tvId, seasonNumber, language);
     final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
-    if (res.statusCode != 200) throw Exception('Failed to load season');
+    if (res.statusCode != 200) throw Exception('Failed to load season (Status: ${res.statusCode}, ID: $tvId, Season: $seasonNumber)');
     return core.TvSeasonDetailResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
