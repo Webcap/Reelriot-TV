@@ -280,7 +280,8 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
             '[VideoLoader] 🚀 Launching PlayerScreen with URL: ${response.links!.first.url}',
           );
           if (!mounted) return;
-          Navigator.of(context).pushReplacement(
+          
+          final result = await Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => PlayerScreen(
                 url: response.links!.first.url,
@@ -299,7 +300,22 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
               ),
             ),
           );
-          return;
+
+          if (result == true) {
+            debugPrint('[VideoLoader] 🔄 Player signaled fallback. Continuing provider loop...');
+            if (mounted) {
+              setState(() {
+                _providerStates[i].status = ProviderStatus.failed;
+                _isDone = false;
+              });
+            }
+            continue; // Go to next iteration of for-loop
+          } else {
+            // User manually popped or finished video, so we also close the loader
+            debugPrint('[VideoLoader] 🔚 Player session ended. Closing loader.');
+            if (mounted) Navigator.of(context).pop();
+            return;
+          }
         } else {
           debugPrint(
             '[VideoLoader] ❌ Provider $providerName returned no links or success=false',
