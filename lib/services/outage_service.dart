@@ -23,16 +23,36 @@ class OutageService {
 
   Timer? _timer;
   bool _checking = false;
+  int _pauseCount = 0;
 
   static const Duration _pollInterval = Duration(seconds: 30);
   static const Duration _requestTimeout = Duration(seconds: 8);
 
   /// Starts periodic polling. Safe to call multiple times (idempotent).
   void start() {
+    if (_pauseCount > 0) return;
     if (_timer != null && _timer!.isActive) return;
     debugPrint('[OutageService] 🚦 Started polling Caffeine API health');
     _check(); // Immediate first check
     _timer = Timer.periodic(_pollInterval, (_) => _check());
+  }
+
+  /// Temporarily suspends polling. Increments a pause counter.
+  void pause() {
+    _pauseCount++;
+    debugPrint('[OutageService] ⏸️ Pausing polling (count: $_pauseCount)');
+    stop();
+  }
+
+  /// Resumes polling if no more pauses are active.
+  void resume() {
+    if (_pauseCount > 0) {
+      _pauseCount--;
+      debugPrint('[OutageService] ▶️ Resuming polling (remaining pauses: $_pauseCount)');
+      if (_pauseCount == 0) {
+        start();
+      }
+    }
   }
 
   /// Forces an immediate re-check and returns when complete.

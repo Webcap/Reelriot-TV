@@ -327,8 +327,8 @@ Future<Map<String, dynamic>> _fetchWithRetry({int maxRetries = 2}) async {
 
 Future<Map<String, dynamic>> _fetchAggregatedSports() async {
   try {
-    final base = caffeineApiUrl.endsWith('/') ? caffeineApiUrl : '$caffeineApiUrl/';
-    final url = '${base}sports/scoreboard/all';
+    final base = caffeineApiUrl.replaceFirst(RegExp(r'/$'), '');
+    final url = '$base/sports/scoreboard/all';
     final res = await http.get(
       Uri.parse(url),
       headers: {

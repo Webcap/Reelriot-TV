@@ -104,8 +104,8 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
 
   Future<void> _loadSummary() async {
     try {
-      final String base = widget.baseUrl ?? caffeineApiUrl;
-      final String url = '${base}sports/${widget.sport}/${widget.league}/summary/${widget.eventId}';
+      final String base = (widget.baseUrl ?? caffeineApiUrl).replaceFirst(RegExp(r'/$'), '');
+      final String url = '$base/sports/${widget.sport}/${widget.league}/summary/${widget.eventId}';
       debugPrint('[SportsGameDetailScreen] Fetching summary from: $url');
       
       final client = widget.client ?? http.Client();

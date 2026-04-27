@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reelriot_tv/services/outage_service.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
@@ -104,6 +105,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     WakelockManager.enable();
+    OutageService.instance.pause();
     _setupController();
     _startProgressTimer();
 
@@ -1180,6 +1182,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _saveCurrentProgress(); // Best effort save
     _visibilitySubscription?.cancel();
     WakelockManager.disable();
+    OutageService.instance.resume();
 
     // Safety check before controller methods
     try {

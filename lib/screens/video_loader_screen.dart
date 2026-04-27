@@ -1,4 +1,5 @@
 import 'package:caffeine_core/caffeine_core.dart' as core;
+import 'package:reelriot_tv/services/outage_service.dart';
 import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
 import 'package:reelriot_tv/constants.dart';
 import 'package:reelriot_tv/models/provider_load_state.dart';
@@ -62,6 +63,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   void initState() {
     super.initState();
     WakelockManager.enable();
+    OutageService.instance.pause();
 
     // Prioritize preferred provider if specified
     if (widget.preferredProvider != null) {
@@ -330,6 +332,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   @override
   void dispose() {
     WakelockManager.disable();
+    OutageService.instance.resume();
     super.dispose();
   }
 
