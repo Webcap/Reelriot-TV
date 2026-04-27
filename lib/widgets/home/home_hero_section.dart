@@ -190,6 +190,7 @@ class HomeHeroSection extends StatelessWidget {
               Row(
                 children: [
                   HomeHeroButton(
+                    focusNode: focusNode,
                     label: 'Watch Now',
                     icon: Icons.play_arrow_outlined,
                     style: HeroButtonStyle.primary,

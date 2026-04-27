@@ -4,13 +4,15 @@ import 'package:reelriot_tv/services/settings_service.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:reelriot_tv/widgets/long_press_focus.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/api_service.dart';
 import '../services/update_service.dart';
 import '../env.dart';
 import 'update_screen.dart';
 import '../utils/avatar_utils.dart';
+import '../utils/responsive_utils.dart';
+
+enum _SettingsCategory { account, playback, general, about }
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback? onMounted;
@@ -22,7 +24,9 @@ class SettingsScreen extends StatefulWidget {
 
 class SettingsScreenState extends State<SettingsScreen> {
   final _settings = SettingsService();
-  final FocusNode _focusNode = FocusNode();
+  final FocusNode _sidebarFocusNode = FocusNode();
+  final FocusNode _contentFocusNode = FocusNode();
+  _SettingsCategory _selectedCategory = _SettingsCategory.account;
   bool _loading = false;
   String? _name;
   String? _email;
@@ -34,7 +38,7 @@ class SettingsScreenState extends State<SettingsScreen> {
   late String _currentAudioLanguage;
 
   void requestFocus() {
-    _focusNode.requestFocus();
+    _sidebarFocusNode.requestFocus();
   }
 
   final List<Map<String, String>> _languages = [
@@ -110,7 +114,8 @@ class SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     _authSubscription?.cancel();
-    _focusNode.dispose();
+    _sidebarFocusNode.dispose();
+    _contentFocusNode.dispose();
     super.dispose();
   }
 
@@ -217,393 +222,457 @@ class SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final session = Supabase.instance.client.auth.currentSession;
     final isSignedIn = session != null;
+    double s(double v) => ResponsiveUtils.scale(context, v);
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 100), // Align with nav rail items
-      child: SingleChildScrollView(
+    if (!isSignedIn) {
+      return Center(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            Icon(Icons.settings_outlined, color: Colors.white24, size: s(120)),
+            SizedBox(height: s(32)),
             Text(
               'Settings',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: TextStyle(color: Colors.white, fontSize: s(48), fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 32),
-            if (isSignedIn) ...[
-              if (_loading)
-                const CircularProgressIndicator(color: Colors.white)
-              else ...[
-                // Profile Section
-                StreamBuilder<Map<String, dynamic>?>(
-                  stream: _profileStream,
-                  builder: (context, snapshot) {
-                    final data = snapshot.data;
-                    final dbProfileId = data?['profile_id']?.toString();
-                    
-                    // Smart fallback: If DB says 0 or null, check if _avatar (from metadata) has a better value
-                    final avatarId = (dbProfileId != null && dbProfileId != '0') 
-                        ? dbProfileId 
-                        : (_avatar ?? '0');
-                        
-                    final name = data?['name']?.toString() ?? _name ?? 'User';
-
-                    return Container(
-                      padding: const EdgeInsets.all(24),
-                      margin: const EdgeInsets.symmetric(horizontal: 48),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white12),
-                      ),
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 100,
-                            height: 100,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFDC2626).withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(22),
-                              border: Border.all(color: Colors.white24, width: 2),
-                              image: DecorationImage(
-                                image: NetworkImage(AvatarUtils.getAvatarUrl(avatarId)),
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            name,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _email ?? '',
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                ),
-                const SizedBox(height: 24),
-                // Stats Section
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 48),
+            SizedBox(height: s(16)),
+            Text(
+              'Sign in to manage your account and preferences',
+              style: TextStyle(color: Colors.white54, fontSize: s(24)),
+            ),
+            SizedBox(height: s(48)),
+            LongPressFocus(
+              focusNode: _sidebarFocusNode,
+              onTap: () => Navigator.of(context).pushNamed('/pairing'),
+              child: Builder(builder: (context) {
+                final focused = Focus.of(context).hasFocus;
+                return Container(
+                  padding: EdgeInsets.symmetric(horizontal: s(48), vertical: s(24)),
+                  decoration: BoxDecoration(
+                    color: focused ? Colors.white : const Color(0xFFDC2626),
+                    borderRadius: BorderRadius.circular(s(12)),
+                    border: Border.all(color: focused ? Colors.white : Colors.transparent, width: 2),
+                  ),
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: _StatCard(
-                          label: 'Movie Watch Time',
-                          value: _formatDuration(_movieWatchTimeMs),
-                          icon: Icons.movie_outlined,
-                          subtitle: '(Last 2 weeks)',
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _StatCard(
-                          label: 'TV Watch Time',
-                          value: _formatDuration(_tvWatchTimeMs),
-                          icon: Icons.tv_rounded,
-                          subtitle: '(Last 2 weeks)',
+                      Icon(Icons.login, color: focused ? Colors.black : Colors.white, size: s(28)),
+                      SizedBox(width: s(16)),
+                      Text(
+                        'Sign In',
+                        style: TextStyle(
+                          color: focused ? Colors.black : Colors.white,
+                          fontSize: s(24),
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 32),
-                // Language Section
-                Text(
-                  'Language',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  margin: const EdgeInsets.symmetric(horizontal: 48),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white12),
-                  ),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.center,
-                    children: _languages.map((lang) {
-                      final isSelected = _currentLanguage == lang['code'];
-                      return Focus(
-                        onKeyEvent: (_, event) {
-                          if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
-                            _updateLanguage(lang['code']!);
-                            return KeyEventResult.handled;
-                          }
-                          return KeyEventResult.ignored;
-                        },
-                        child: Builder(builder: (context) {
-                          final focused = Focus.of(context).hasFocus;
-                          return ChoiceChip(
-                            label: Text(lang['name']!),
-                            selected: isSelected,
-                            onSelected: (selected) {
-                              if (selected) _updateLanguage(lang['code']!);
-                            },
-                            backgroundColor: focused ? Colors.white24 : Colors.transparent,
-                            selectedColor: const Color(0xFFDC2626),
-                            labelStyle: TextStyle(
-                              color: isSelected || focused ? Colors.white : Colors.white70,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          );
-                        }),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // Region Section
-                Text(
-                  'Watch Region',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  margin: const EdgeInsets.symmetric(horizontal: 48),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white12),
-                  ),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.center,
-                    children: _regions.map((reg) {
-                      final isSelected = _currentRegion == reg['code'];
-                      return Focus(
-                        onKeyEvent: (_, event) {
-                          if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
-                            _updateRegion(reg['code']!);
-                            return KeyEventResult.handled;
-                          }
-                          return KeyEventResult.ignored;
-                        },
-                        child: Builder(builder: (context) {
-                          final focused = Focus.of(context).hasFocus;
-                          return ChoiceChip(
-                            label: Text(reg['name']!),
-                            selected: isSelected,
-                            onSelected: (selected) {
-                              if (selected) _updateRegion(reg['code']!);
-                            },
-                            backgroundColor: focused ? Colors.white24 : Colors.transparent,
-                            selectedColor: const Color(0xFFDC2626),
-                            labelStyle: TextStyle(
-                              color: isSelected || focused ? Colors.white : Colors.white70,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          );
-                        }),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // Audio Language Section
-                Text(
-                  'Default Audio Language',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  margin: const EdgeInsets.symmetric(horizontal: 48),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white12),
-                  ),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.center,
-                    children: _languages.map((lang) {
-                      final isSelected = _currentAudioLanguage == lang['code'];
-                      return Focus(
-                        onKeyEvent: (_, event) {
-                          if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
-                            _updateAudioLanguage(lang['code']!);
-                            return KeyEventResult.handled;
-                          }
-                          return KeyEventResult.ignored;
-                        },
-                        child: Builder(builder: (context) {
-                          final focused = Focus.of(context).hasFocus;
-                          return ChoiceChip(
-                            label: Text(lang['name']!),
-                            selected: isSelected,
-                            onSelected: (selected) {
-                              if (selected) _updateAudioLanguage(lang['code']!);
-                            },
-                            backgroundColor:
-                                focused ? Colors.white24 : Colors.transparent,
-                            selectedColor: const Color(0xFFDC2626),
-                            labelStyle: TextStyle(
-                              color: isSelected || focused
-                                  ? Colors.white
-                                  : Colors.white70,
-                              fontWeight:
-                                  isSelected ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          );
-                        }),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // Subtitles Toggle
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 48),
-                  child: Focus(
-                    onKeyEvent: (_, event) {
-                      if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
-                        _toggleExternalSubtitles(!_settings.useExternalSubtitles);
-                        return KeyEventResult.handled;
-                      }
-                      return KeyEventResult.ignored;
-                    },
-                    child: Builder(builder: (context) {
-                      final focused = Focus.of(context).hasFocus;
-                      final enabled = _settings.useExternalSubtitles;
-                      return Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: focused ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: focused ? Colors.white38 : Colors.white12),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              enabled ? Icons.subtitles : Icons.subtitles_off,
-                              color: enabled ? const Color(0xFFDC2626) : Colors.white24,
-                              size: 32,
-                            ),
-                            const SizedBox(width: 16),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'External Subtitles (OpenSubtitles)',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Automatically download & select best available tracks',
-                                    style: TextStyle(
-                                      color: Colors.white54,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch(
-                              value: enabled,
-                              onChanged: (val) => _toggleExternalSubtitles(val),
-                              activeThumbColor: const Color(0xFFDC2626),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 32),
-              // Update Section
-              LongPressFocus(
-                onTap: () => _checkForUpdate(context),
-                child: Builder(builder: (context) {
-                  final focused = Focus.of(context).hasFocus;
-                  return ElevatedButton.icon(
-                    onPressed: () => _checkForUpdate(context),
-                    icon: _loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Icon(Icons.system_update_alt),
-                    label: const Text('Check for update'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: focused ? Colors.white : Colors.white10,
-                      foregroundColor: focused ? Colors.black : Colors.white,
-                      side: focused ? const BorderSide(color: Colors.white, width: 2) : const BorderSide(color: Colors.white12),
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                    ),
-                  );
-                }),
-              ),
-              const SizedBox(height: 16),
-              LongPressFocus(
-                onTap: () => _signOut(context),
-                child: Builder(builder: (context) {
-                  final focused = Focus.of(context).hasFocus;
-                  return ElevatedButton.icon(
-                    onPressed: () => _signOut(context),
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Sign out'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: focused ? Colors.white : const Color(0xFFDC2626),
-                      foregroundColor: focused ? Colors.black : Colors.white,
-                      side: focused ? const BorderSide(color: Colors.white, width: 2) : BorderSide.none,
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                    ),
-                  );
-                }),
-              ),
-            ] else
-              LongPressFocus(
-                focusNode: _focusNode,
-                onTap: () => Navigator.of(context).pushNamed('/pairing'),
-                child: Builder(builder: (context) {
-                  final focused = Focus.of(context).hasFocus;
-                  return ElevatedButton.icon(
-                    onPressed: () => Navigator.of(context).pushNamed('/pairing'),
-                    icon: const Icon(Icons.login),
-                    label: const Text('Sign in'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: focused ? Colors.white : const Color(0xFFDC2626),
-                      foregroundColor: focused ? Colors.black : Colors.white,
-                      side: focused ? const BorderSide(color: Colors.white, width: 2) : BorderSide.none,
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                    ),
-                  );
-                }),
-              ),
+                );
+              }),
+            ),
           ],
         ),
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Sidebar
+        _buildSidebar(s),
+        // Divider
+        Container(
+          width: 1,
+          height: double.infinity,
+          color: Colors.white.withValues(alpha: 0.1),
+          margin: EdgeInsets.symmetric(vertical: s(100)),
+        ),
+        // Content Area
+        Expanded(
+          child: _buildContent(s),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSidebar(double Function(double) s) {
+    return Container(
+      width: s(420),
+      padding: EdgeInsets.only(top: s(100), left: s(64), right: s(32)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Settings',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: s(56),
+              fontWeight: FontWeight.w900,
+              letterSpacing: -1,
+            ),
+          ),
+          SizedBox(height: s(64)),
+          _SidebarItem(
+            label: 'Account',
+            icon: Icons.person_outline,
+            isSelected: _selectedCategory == _SettingsCategory.account,
+            onTap: () => setState(() => _selectedCategory = _SettingsCategory.account),
+            s: s,
+            focusNode: _sidebarFocusNode,
+          ),
+          _SidebarItem(
+            label: 'Playback',
+            icon: Icons.play_circle_outline,
+            isSelected: _selectedCategory == _SettingsCategory.playback,
+            onTap: () => setState(() => _selectedCategory = _SettingsCategory.playback),
+            s: s,
+          ),
+          _SidebarItem(
+            label: 'General',
+            icon: Icons.language,
+            isSelected: _selectedCategory == _SettingsCategory.general,
+            onTap: () => setState(() => _selectedCategory = _SettingsCategory.general),
+            s: s,
+          ),
+          _SidebarItem(
+            label: 'About',
+            icon: Icons.info_outline,
+            isSelected: _selectedCategory == _SettingsCategory.about,
+            onTap: () => setState(() => _selectedCategory = _SettingsCategory.about),
+            s: s,
+          ),
+          const Spacer(),
+          _SidebarItem(
+            label: 'Sign Out',
+            icon: Icons.logout,
+            isSelected: false,
+            onTap: () => _signOut(context),
+            s: s,
+            isDestructive: true,
+          ),
+          SizedBox(height: s(64)),
+        ],
       ),
+    );
+  }
+
+  Widget _buildContent(double Function(double) s) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0.02, 0),
+              end: Offset.zero,
+            ).animate(animation),
+            child: child,
+          ),
+        );
+      },
+      child: Container(
+        key: ValueKey(_selectedCategory),
+        padding: EdgeInsets.only(top: s(100), left: s(64), right: s(96)),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _getCategoryTitle(),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: s(40),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: s(48)),
+              _buildCategoryView(s),
+              SizedBox(height: s(100)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getCategoryTitle() {
+    switch (_selectedCategory) {
+      case _SettingsCategory.account: return 'Account';
+      case _SettingsCategory.playback: return 'Playback';
+      case _SettingsCategory.general: return 'General';
+      case _SettingsCategory.about: return 'About';
+    }
+  }
+
+  Widget _buildCategoryView(double Function(double) s) {
+    switch (_selectedCategory) {
+      case _SettingsCategory.account: return _buildAccountView(s);
+      case _SettingsCategory.playback: return _buildPlaybackView(s);
+      case _SettingsCategory.general: return _buildGeneralView(s);
+      case _SettingsCategory.about: return _buildAboutView(s);
+    }
+  }
+
+  Widget _buildAccountView(double Function(double) s) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Profile Card
+        StreamBuilder<Map<String, dynamic>?>(
+          stream: _profileStream,
+          builder: (context, snapshot) {
+            final data = snapshot.data;
+            final dbProfileId = data?['profile_id']?.toString();
+            final avatarId = (dbProfileId != null && dbProfileId != '0') ? dbProfileId : (_avatar ?? '0');
+            final name = data?['name']?.toString() ?? _name ?? 'User';
+
+            return Container(
+              padding: EdgeInsets.all(s(32)),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(s(24)),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: s(120),
+                    height: s(120),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(s(24)),
+                      image: DecorationImage(
+                        image: NetworkImage(AvatarUtils.getAvatarUrl(avatarId)),
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: s(24)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: TextStyle(color: Colors.white, fontSize: s(32), fontWeight: FontWeight.bold),
+                        ),
+                        SizedBox(height: s(4)),
+                        Text(
+                          _email ?? '',
+                          style: TextStyle(color: Colors.white54, fontSize: s(20)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+        SizedBox(height: s(48)),
+        Text('Watch History (Last 14 days)', style: TextStyle(color: Colors.white70, fontSize: s(24), fontWeight: FontWeight.bold)),
+        SizedBox(height: s(24)),
+        Row(
+          children: [
+            Expanded(
+              child: _StatCard(
+                label: 'Movie Watch Time',
+                value: _formatDuration(_movieWatchTimeMs),
+                icon: Icons.movie_outlined,
+                s: s,
+              ),
+            ),
+            SizedBox(width: s(24)),
+            Expanded(
+              child: _StatCard(
+                label: 'TV Watch Time',
+                value: _formatDuration(_tvWatchTimeMs),
+                icon: Icons.tv_rounded,
+                s: s,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPlaybackView(double Function(double) s) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSettingHeader('Default Audio Language', s),
+        _buildLanguageSelector(_currentAudioLanguage, _updateAudioLanguage, s),
+        SizedBox(height: s(48)),
+        _buildSettingHeader('Subtitles', s),
+        _buildSubtitleToggle(s),
+      ],
+    );
+  }
+
+  Widget _buildGeneralView(double Function(double) s) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSettingHeader('App Language', s),
+        _buildLanguageSelector(_currentLanguage, _updateLanguage, s),
+        SizedBox(height: s(48)),
+        _buildSettingHeader('Watch Region', s),
+        _buildRegionSelector(s),
+      ],
+    );
+  }
+
+  Widget _buildAboutView(double Function(double) s) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: EdgeInsets.all(s(32)),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(s(24)),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.tv, color: const Color(0xFFDC2626), size: s(48)),
+                  SizedBox(width: s(24)),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Reelriot TV', style: TextStyle(color: Colors.white, fontSize: s(28), fontWeight: FontWeight.bold)),
+                      Text('Version 1.2.0 (Build 452)', style: TextStyle(color: Colors.white54, fontSize: s(20))),
+                    ],
+                  ),
+                ],
+              ),
+              SizedBox(height: s(32)),
+              Text(
+                'Experience the next generation of home entertainment with Reelriot. Streaming redefined for the big screen.',
+                style: TextStyle(color: Colors.white70, fontSize: s(18), height: 1.5),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: s(48)),
+        LongPressFocus(
+          onTap: () => _checkForUpdate(context),
+          child: Builder(builder: (context) {
+            final focused = Focus.of(context).hasFocus;
+            return Container(
+              padding: EdgeInsets.symmetric(horizontal: s(32), vertical: s(24)),
+              decoration: BoxDecoration(
+                color: focused ? Colors.white : Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(s(12)),
+                border: Border.all(color: focused ? Colors.white : Colors.white24, width: 2),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _loading 
+                    ? SizedBox(width: s(24), height: s(24), child: CircularProgressIndicator(strokeWidth: 2, color: focused ? Colors.black : Colors.white))
+                    : Icon(Icons.system_update_alt, color: focused ? Colors.black : Colors.white, size: s(24)),
+                  SizedBox(width: s(16)),
+                  Text(
+                    'Check for Updates',
+                    style: TextStyle(
+                      color: focused ? Colors.black : Colors.white,
+                      fontSize: s(22),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSettingHeader(String title, double Function(double) s) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: s(16)),
+      child: Text(title, style: TextStyle(color: Colors.white70, fontSize: s(24), fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _buildLanguageSelector(String current, Function(String) onSelected, double Function(double) s) {
+    return Wrap(
+      spacing: s(12),
+      runSpacing: s(12),
+      children: _languages.map((lang) {
+        final isSelected = current == lang['code'];
+        return _OptionPill(
+          label: lang['name']!,
+          isSelected: isSelected,
+          onTap: () => onSelected(lang['code']!),
+          s: s,
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildRegionSelector(double Function(double) s) {
+    return Wrap(
+      spacing: s(12),
+      runSpacing: s(12),
+      children: _regions.map((reg) {
+        final isSelected = _currentRegion == reg['code'];
+        return _OptionPill(
+          label: reg['name']!,
+          isSelected: isSelected,
+          onTap: () => _updateRegion(reg['code']!),
+          s: s,
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildSubtitleToggle(double Function(double) s) {
+    final enabled = _settings.useExternalSubtitles;
+    return LongPressFocus(
+      onTap: () => _toggleExternalSubtitles(!enabled),
+      child: Builder(builder: (context) {
+        final focused = Focus.of(context).hasFocus;
+        return Container(
+          padding: EdgeInsets.all(s(24)),
+          decoration: BoxDecoration(
+            color: focused ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(s(16)),
+            border: Border.all(color: focused ? Colors.white38 : Colors.white12),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                enabled ? Icons.subtitles : Icons.subtitles_off,
+                color: enabled ? const Color(0xFFDC2626) : Colors.white24,
+                size: s(32),
+              ),
+              SizedBox(width: s(24)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('External Subtitles (OpenSubtitles)', style: TextStyle(color: Colors.white, fontSize: s(22), fontWeight: FontWeight.bold)),
+                    Text('Automatically download best matches', style: TextStyle(color: Colors.white54, fontSize: s(18))),
+                  ],
+                ),
+              ),
+              Switch(
+                value: enabled,
+                onChanged: (v) => _toggleExternalSubtitles(v),
+                activeThumbColor: const Color(0xFFDC2626),
+              ),
+            ],
+          ),
+        );
+      }),
     );
   }
 
@@ -719,58 +788,158 @@ class SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
+class _SidebarItem extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final double Function(double) s;
+  final bool isDestructive;
+  final FocusNode? focusNode;
+
+  const _SidebarItem({
+    required this.label,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+    required this.s,
+    this.isDestructive = false,
+    this.focusNode,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LongPressFocus(
+      focusNode: focusNode,
+      onTap: onTap,
+      child: Builder(builder: (context) {
+        final focused = Focus.of(context).hasFocus;
+        return Container(
+          width: double.infinity,
+          margin: EdgeInsets.only(bottom: s(8)),
+          padding: EdgeInsets.symmetric(horizontal: s(24), vertical: s(16)),
+          decoration: BoxDecoration(
+            color: focused ? Colors.white : (isSelected ? Colors.white.withValues(alpha: 0.05) : Colors.transparent),
+            borderRadius: BorderRadius.circular(s(12)),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                color: focused 
+                    ? Colors.black 
+                    : (isDestructive ? const Color(0xFFDC2626) : (isSelected ? Colors.white : Colors.white54)),
+                size: s(24),
+              ),
+              SizedBox(width: s(20)),
+              Text(
+                label,
+                style: TextStyle(
+                  color: focused 
+                      ? Colors.black 
+                      : (isDestructive ? const Color(0xFFDC2626) : (isSelected ? Colors.white : Colors.white54)),
+                  fontSize: s(22),
+                  fontWeight: isSelected || focused ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _OptionPill extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final double Function(double) s;
+
+  const _OptionPill({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+    required this.s,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LongPressFocus(
+      onTap: onTap,
+      child: Builder(builder: (context) {
+        final focused = Focus.of(context).hasFocus;
+        return Container(
+          padding: EdgeInsets.symmetric(horizontal: s(24), vertical: s(12)),
+          decoration: BoxDecoration(
+            color: isSelected 
+                ? (focused ? Colors.white : const Color(0xFFDC2626)) 
+                : (focused ? Colors.white.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.05)),
+            borderRadius: BorderRadius.circular(s(32)),
+            border: Border.all(
+              color: focused ? Colors.white : (isSelected ? Colors.transparent : Colors.white12),
+              width: 2,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isSelected 
+                  ? (focused ? Colors.black : Colors.white) 
+                  : (focused ? Colors.white : Colors.white70),
+              fontSize: s(18),
+              fontWeight: isSelected || focused ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
 class _StatCard extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
-  final String? subtitle;
+  final double Function(double) s;
 
   const _StatCard({
     required this.label,
     required this.value,
     required this.icon,
-    this.subtitle,
+    required this.s,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(s(24)),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(s(16)),
         border: Border.all(color: Colors.white10),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: const Color(0xFFDC2626), size: 28),
-          const SizedBox(height: 8),
+          Icon(icon, color: const Color(0xFFDC2626), size: s(32)),
+          SizedBox(height: s(16)),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white,
-              fontSize: 20,
+              fontSize: s(32),
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 2),
+          SizedBox(height: s(4)),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white54,
-              fontSize: 12,
+              fontSize: s(16),
             ),
           ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              subtitle!,
-              style: const TextStyle(
-                color: Colors.white38,
-                fontSize: 10,
-              ),
-            ),
-          ],
         ],
       ),
     );

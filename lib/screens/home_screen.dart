@@ -1081,7 +1081,6 @@ class _MainHomeViewState extends State<_MainHomeView> {
     return Stack(
       children: [
         HomeHeroSection(
-          focusNode: _entryFocusNode,
           backgroundOnly: true,
           focusedMovie: _focusedMovie,
           trending: _trending,
@@ -1148,6 +1147,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
               ),
               if (_updateInfo != null) HomeUpdateCard(updateInfo: _updateInfo!),
               HomeHeroSection(
+                focusNode: _entryFocusNode,
                 contentOnly: true,
                 focusedMovie: _focusedMovie,
                 trending: _trending,

@@ -10,6 +10,7 @@ class HomeHeroButton extends StatelessWidget {
   final IconData icon;
   final HeroButtonStyle style;
   final VoidCallback onTap;
+  final FocusNode? focusNode;
 
   const HomeHeroButton({
     super.key,
@@ -17,6 +18,7 @@ class HomeHeroButton extends StatelessWidget {
     required this.icon,
     required this.style,
     required this.onTap,
+    this.focusNode,
   });
 
   @override
@@ -24,6 +26,7 @@ class HomeHeroButton extends StatelessWidget {
     double s(double v) => ResponsiveUtils.scale(context, v);
 
     return Focus(
+      focusNode: focusNode,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
           onTap();
