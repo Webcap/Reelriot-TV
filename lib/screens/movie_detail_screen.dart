@@ -12,6 +12,7 @@ import 'package:reelriot_tv/services/bookmark_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:reelriot_tv/services/ad_service.dart';
+import 'package:reelriot_tv/utils/quality_utils.dart';
 
 class MovieDetailScreen extends StatefulWidget {
   const MovieDetailScreen({super.key, required this.movieId});
@@ -611,6 +612,12 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                            ),
                                          );
                                        },
+                                       quality: QualityUtils.getQualityBadgeSync(
+                                         releaseDate: part.releaseDate,
+                                         isMovie: true,
+                                       ),
+                                       mediaId: part.id,
+                                       isMovie: true,
                                      ),
                                    );
                                  },
@@ -636,6 +643,12 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                          MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: rec.id)),
                                        );
                                      },
+                                     quality: QualityUtils.getQualityBadgeSync(
+                                       releaseDate: rec.releaseDate,
+                                       isMovie: true,
+                                     ),
+                                     mediaId: rec.id,
+                                     isMovie: true,
                                    );
                                  },
                                ),

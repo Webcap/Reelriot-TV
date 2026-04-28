@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reelriot_tv/services/ad_service.dart';
+import 'package:reelriot_tv/utils/quality_utils.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -526,13 +527,22 @@ class _ResultTile extends StatelessWidget {
                   child: SizedBox(
                     width: 70,
                     height: 105,
-                    child: (poster != null && poster.isNotEmpty)
-                        ? Image.network(
-                            'https://image.tmdb.org/t/p/w185$poster',
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => Container(color: Colors.grey[900]),
-                          )
-                        : Container(color: Colors.grey[900]),
+                    child: Stack(
+                      children: [
+                        (poster != null && poster.isNotEmpty)
+                            ? Image.network(
+                                'https://image.tmdb.org/t/p/w185$poster',
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => Container(color: Colors.grey[900]),
+                              )
+                            : Container(color: Colors.grey[900]),
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: _buildMiniQualityBadge(item),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(width: 24),
@@ -591,6 +601,57 @@ class _ResultTile extends StatelessWidget {
           ),
         );
       }),
+    );
+  }
+
+  Widget _buildMiniQualityBadge(dynamic item) {
+    final bool isMovie = item is MovieListItem;
+    final String? date = isMovie ? item.releaseDate : (item as TvListItem).firstAirDate;
+    
+    return FutureBuilder<String?>(
+      future: QualityUtils.getQualityBadgeAsync(
+        mediaId: item.id,
+        releaseDate: date,
+        isMovie: isMovie,
+      ),
+      builder: (context, snapshot) {
+        final badge = snapshot.data ?? QualityUtils.getQualityBadgeSync(releaseDate: date, isMovie: isMovie);
+        
+        if (badge == null || badge.isEmpty) return const SizedBox.shrink();
+
+        Color badgeColor;
+        if (badge == 'CAM') {
+          badgeColor = const Color(0xFFEC1D24);
+        } else if (badge == 'SOON') {
+          badgeColor = const Color(0xFFF59E0B);
+        } else {
+          badgeColor = Colors.white.withValues(alpha: 0.2);
+        }
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          decoration: BoxDecoration(
+            color: badgeColor,
+            borderRadius: BorderRadius.circular(2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Text(
+            badge,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 8,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
+          ),
+        );
+      },
     );
   }
 }

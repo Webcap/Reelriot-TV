@@ -37,8 +37,10 @@ class PlayerScreen extends StatefulWidget {
     this.referrer,
     this.providerCode,
     this.allProviders,
+    this.quality,
     this.headers,
     this.externalSubtitles,
+    this.nextEpisode,
   });
 
   final String url;
@@ -53,8 +55,10 @@ class PlayerScreen extends StatefulWidget {
   final String? referrer;
   final String? providerCode;
   final List<Map<String, String>>? allProviders;
+  final String? quality;
   final Map<String, String>? headers;
   final List<CaffeinePlayerSubtitlesSource>? externalSubtitles;
+  final Map<String, dynamic>? nextEpisode;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -1372,6 +1376,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     });
                   },
                   onShowSettings: _showSettings,
+                  nextEpisode: widget.nextEpisode,
+                  quality: widget.quality,
+                  onNextEpisode: () async {
+                    await _saveCurrentProgress();
+                    if (context.mounted) {
+                      Navigator.of(context).pop({'action': 'next'});
+                    }
+                  },
                 ),
 
               // Loading overlay: stays in the tree to allow for the fade-out

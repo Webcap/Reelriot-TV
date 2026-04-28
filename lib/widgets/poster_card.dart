@@ -2,6 +2,8 @@ import 'package:reelriot_tv/constants.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:reelriot_tv/widgets/long_press_focus.dart';
+import 'package:reelriot_tv/utils/quality_utils.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PosterCard extends StatefulWidget {
   const PosterCard({
@@ -14,6 +16,9 @@ class PosterCard extends StatefulWidget {
     this.onFocus,
     this.focusNode,
     this.isSponsored = false,
+    this.quality,
+    this.mediaId,
+    this.isMovie,
   });
 
   final String? posterPath;
@@ -24,12 +29,45 @@ class PosterCard extends StatefulWidget {
   final VoidCallback? onFocus;
   final FocusNode? focusNode;
   final bool isSponsored;
+  final String? quality;
+  final int? mediaId;
+  final bool? isMovie;
 
   @override
   State<PosterCard> createState() => _PosterCardState();
 }
 
 class _PosterCardState extends State<PosterCard> {
+  String? _overrideQuality;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkQualityOverride();
+  }
+
+  Future<void> _checkQualityOverride() async {
+    // Only check if we have the necessary info and it's not already a fixed quality
+    // We only care about movies as TV shows are HD by default
+    if (widget.mediaId != null && widget.isMovie == true) {
+      try {
+        final response = await Supabase.instance.client
+            .from('media_quality_overrides')
+            .select('quality')
+            .eq('media_id', widget.mediaId.toString())
+            .maybeSingle();
+            
+        if (response != null && response['quality'] != null && mounted) {
+          setState(() {
+            _overrideQuality = response['quality'] as String;
+          });
+        }
+      } catch (e) {
+        // Silent fail for overrides
+      }
+    }
+  }
+
   String get _imageUrl {
     if (widget.posterPath == null || widget.posterPath!.isEmpty) return '';
     if (widget.isSponsored) return widget.posterPath!; // Direct URL for ads
@@ -129,23 +167,13 @@ class _PosterCardState extends State<PosterCard> {
                         Positioned(
                           top: s(12),
                           left: s(12),
-                          child: Container(
-                            padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.75),
-                              borderRadius: BorderRadius.circular(s(8)),
-                              border: Border.all(color: Colors.white24),
-                            ),
-                            child: Text(
-                              'SPONSORED',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: s(14),
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: s(1),
-                              ),
-                            ),
-                          ),
+                          child: _buildSponsoredBadge(),
+                        ),
+                      if ((_overrideQuality ?? widget.quality) != null && !widget.isSponsored)
+                        Positioned(
+                          top: s(12),
+                          right: s(12),
+                          child: _buildQualityBadge(_overrideQuality ?? widget.quality!),
                         ),
                     ],
                   ),
@@ -153,6 +181,73 @@ class _PosterCardState extends State<PosterCard> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildSponsoredBadge() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    double s(double v) => (v * screenWidth) / 1920;
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(s(8)),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Text(
+        'SPONSORED',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: s(14),
+          fontWeight: FontWeight.w900,
+          letterSpacing: s(1),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQualityBadge(String quality) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    double s(double v) => (v * screenWidth) / 1920;
+
+    Color bgColor = Colors.black.withValues(alpha: 0.75);
+    Color borderColor = Colors.white24;
+    final q = quality.toUpperCase();
+
+    if (q == 'CAM') {
+      bgColor = const Color(0xFFE60000).withValues(alpha: 0.9);
+      borderColor = Colors.redAccent.withValues(alpha: 0.5);
+    } else if (q == 'SOON') {
+      bgColor = Colors.amber.withValues(alpha: 0.9);
+      borderColor = Colors.amberAccent.withValues(alpha: 0.5);
+    }
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: s(10), vertical: s(4)),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(s(8)),
+        border: Border.all(color: borderColor),
+        boxShadow: q == 'CAM' || q == 'SOON'
+            ? [
+                BoxShadow(
+                  color: bgColor.withValues(alpha: 0.3),
+                  blurRadius: s(8),
+                  spreadRadius: s(1),
+                )
+              ]
+            : null,
+      ),
+      child: Text(
+        q,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: s(14),
+          fontWeight: FontWeight.w900,
+          letterSpacing: s(0.5),
+        ),
       ),
     );
   }

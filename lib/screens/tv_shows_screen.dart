@@ -2,6 +2,7 @@ import 'package:caffeine_core/caffeine_core.dart';
 import 'package:reelriot_tv/screens/tv_detail_screen.dart';
 import 'package:reelriot_tv/services/api_service.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
 
 class TvShowsScreen extends StatefulWidget {
@@ -100,6 +101,12 @@ class _TvShowsScreenState extends State<TvShowsScreen> {
                   posterPath: t.posterPath,
                   title: t.name ?? 'TV',
                   onTap: () => _openDetail(t.id),
+                  quality: QualityUtils.getQualityBadgeSync(
+                    releaseDate: t.firstAirDate,
+                    isMovie: false,
+                  ),
+                  mediaId: t.id,
+                  isMovie: false,
                 );
               },
             ),

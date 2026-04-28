@@ -2,6 +2,7 @@ import 'package:caffeine_core/caffeine_core.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/widgets/home/home_hero_button.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
 
 class HomeAiRecommendationsRow extends StatelessWidget {
@@ -103,6 +104,12 @@ class HomeAiRecommendationsRow extends StatelessWidget {
                             onFocus: () => onFocus(m.id),
                             onLongPress: () => onLongPress(m),
                             onTap: () => onTap(m),
+                            quality: QualityUtils.getQualityBadgeSync(
+                              releaseDate: m.releaseDate,
+                              isMovie: true, // Recommendations are currently movies
+                            ),
+                            mediaId: m.id,
+                            isMovie: true,
                           ),
                         );
                       },

@@ -3,6 +3,7 @@ import 'package:reelriot_tv/services/api_service.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:reelriot_tv/screens/movie_detail_screen.dart';
 import 'package:reelriot_tv/screens/tv_detail_screen.dart';
+import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui';
 
@@ -83,6 +84,7 @@ class _GenreScreenState extends State<GenreScreen> {
           overview: t.overview,
           mediaType: 'tv',
           voteAverage: t.voteAverage,
+          releaseDate: t.firstAirDate,
         )));
       }
 
@@ -184,6 +186,12 @@ class _GenreScreenState extends State<GenreScreen> {
                                 // but for now, we just reset processing state.
                               }
                             },
+                            quality: QualityUtils.getQualityBadgeSync(
+                              releaseDate: item.releaseDate,
+                              isMovie: widget.isMovie,
+                            ),
+                            mediaId: item.id,
+                            isMovie: widget.isMovie,
                           );
                         },
                       ),

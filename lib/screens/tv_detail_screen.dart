@@ -14,6 +14,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reelriot_tv/services/ad_service.dart';
 import 'package:reelriot_tv/widgets/long_press_focus.dart';
 import 'package:reelriot_tv/widgets/context_menu_dialog.dart';
+import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'dart:ui';
 
 class TvDetailScreen extends StatefulWidget {
@@ -933,6 +934,12 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                 MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: rec.id)),
                               );
                             },
+                            quality: QualityUtils.getQualityBadgeSync(
+                              releaseDate: rec.firstAirDate,
+                              isMovie: false,
+                            ),
+                            mediaId: rec.id,
+                            isMovie: false,
                           );
                         },
                       ),

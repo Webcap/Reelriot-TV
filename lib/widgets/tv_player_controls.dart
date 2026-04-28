@@ -9,12 +9,18 @@ class TvPlayerControls extends StatefulWidget {
   final CaffeinePlayerController controller;
   final Function(bool) onVisibilityChanged;
   final VoidCallback onShowSettings;
+  final Map<String, dynamic>? nextEpisode;
+  final String? quality;
+  final VoidCallback? onNextEpisode;
 
   const TvPlayerControls({
     super.key,
     required this.controller,
     required this.onVisibilityChanged,
     required this.onShowSettings,
+    this.nextEpisode,
+    this.quality,
+    this.onNextEpisode,
   });
 
   @override
@@ -32,6 +38,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   final FocusNode _settingsFocusNode = FocusNode();
   final FocusNode _rewindFocusNode = FocusNode();
   final FocusNode _ffFocusNode = FocusNode();
+  final FocusNode _nextEpisodeFocusNode = FocusNode();
   StreamSubscription? _visibilitySubscription;
   int? _lastSeekTimestamp;
   int _seekAccelerationFactor = 1;
@@ -61,6 +68,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
     _settingsFocusNode.dispose();
     _rewindFocusNode.dispose();
     _ffFocusNode.dispose();
+    _nextEpisodeFocusNode.dispose();
     _visibilitySubscription?.cancel();
     widget.controller.removeEventsListener(_onPlayerEvent);
     super.dispose();
@@ -196,8 +204,10 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
                           const SizedBox(height: 8),
                           Row(
                             children: [
-                              _buildInfoBadge('HD'),
-                              const SizedBox(width: 12),
+                              if (widget.quality != null) ...[
+                                _buildInfoBadge(widget.quality!),
+                                const SizedBox(width: 12),
+                              ],
                               Text(
                                 widget.controller.watchingText ?? '',
                                 style: TextStyle(
@@ -266,6 +276,10 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
                                   _buildFastForwardButton(),
                                   const SizedBox(width: 48),
                                   _buildSettingsButton(),
+                                  if (widget.nextEpisode != null) ...[
+                                    const SizedBox(width: 24),
+                                    _buildNextEpisodeButton(),
+                                  ],
                                   const Spacer(),
                                   _buildTimeText(playerState.duration),
                                 ],
@@ -286,19 +300,42 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   }
 
   Widget _buildInfoBadge(String text) {
+    Color bgColor = Colors.white10;
+    Color borderColor = Colors.white24;
+    Color textColor = Colors.white;
+
+    final q = text.toUpperCase();
+    if (q == 'CAM') {
+      bgColor = const Color(0xFFE60000); // Marvel/Reelriot Red
+      borderColor = Colors.redAccent;
+    } else if (q == 'SOON') {
+      bgColor = Colors.amber.withValues(alpha: 0.9);
+      borderColor = Colors.amberAccent;
+    }
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white10,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.white24),
+        color: bgColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: borderColor, width: 1.5),
+        boxShadow: q == 'CAM' || q == 'SOON'
+            ? [
+                BoxShadow(
+                  color: bgColor.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                )
+              ]
+            : null,
       ),
       child: Text(
         text,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 14,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.5,
         ),
       ),
     );
@@ -533,6 +570,10 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
           _ffFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
+        if (TvKeys.isRight(event.logicalKey) && widget.nextEpisode != null) {
+          _nextEpisodeFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
         return KeyEventResult.ignored;
       },
       child: Builder(
@@ -584,6 +625,20 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       },
       onLeft: () => _playPauseFocusNode.requestFocus(),
       onRight: () => _settingsFocusNode.requestFocus(),
+    );
+  }
+
+  Widget _buildNextEpisodeButton() {
+    return _buildControlButton(
+      focusNode: _nextEpisodeFocusNode,
+      icon: Icons.skip_next_rounded,
+      onPressed: () {
+        if (widget.onNextEpisode != null) {
+          widget.onNextEpisode!();
+        }
+      },
+      onLeft: () => _settingsFocusNode.requestFocus(),
+      onRight: () => KeyEventResult.handled,
     );
   }
 

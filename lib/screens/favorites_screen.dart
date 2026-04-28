@@ -4,6 +4,7 @@ import 'package:reelriot_tv/screens/movie_detail_screen.dart';
 import 'package:reelriot_tv/screens/tv_detail_screen.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:reelriot_tv/widgets/long_press_focus.dart';
+import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -185,6 +186,12 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
               HomeScreenState.of(context)?.setIndex(1);
             }
           },
+          quality: QualityUtils.getQualityBadgeSync(
+            releaseDate: isMovie ? (item as MovieListItem).releaseDate : (item as TvListItem).firstAirDate,
+            isMovie: isMovie,
+          ),
+          mediaId: item.id,
+          isMovie: isMovie,
         );
       },
     );

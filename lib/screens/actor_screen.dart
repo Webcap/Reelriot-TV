@@ -4,6 +4,7 @@ import 'package:reelriot_tv/screens/movie_detail_screen.dart';
 import 'package:reelriot_tv/screens/tv_detail_screen.dart';
 import 'package:reelriot_tv/services/api_service.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -202,6 +203,12 @@ class _ActorScreenState extends State<ActorScreen> {
                           );
                         }
                       },
+                      quality: QualityUtils.getQualityBadgeSync(
+                        releaseDate: item.mediaType == 'movie' ? item.releaseDate : item.firstAirDate,
+                        isMovie: item.mediaType == 'movie',
+                      ),
+                      mediaId: item.id,
+                      isMovie: item.mediaType == 'movie',
                     );
                   },
                   childCount: _credits!.length > 24 ? 24 : _credits!.length, // Limit for better performance on first load

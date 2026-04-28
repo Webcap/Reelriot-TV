@@ -415,6 +415,14 @@ class _MainHomeViewState extends State<_MainHomeView> {
     _scrollController = ScrollController()..addListener(_onScroll);
     _loadContent();
     _listenToAuthChanges();
+    _historyService.addListener(_onHistoryChanged);
+  }
+
+  void _onHistoryChanged() {
+    if (mounted) {
+      debugPrint('[HomeScreen] 🔄 History changed, reloading content quietly');
+      _reloadHistory(forceRefresh: true);
+    }
   }
 
   Future<void> _checkForUpdate() async {
@@ -963,6 +971,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     _entryFocusNode.dispose();
     _authSubscription?.cancel();
     _debounceTimer?.cancel();
+    _historyService.removeListener(_onHistoryChanged);
     super.dispose();
   }
 
@@ -1133,8 +1142,6 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 );
               }
               await _historyService.waitForPendingSaves();
-              await Future.delayed(const Duration(seconds: 2));
-              _reloadHistory(forceRefresh: true);
             } finally {
               _isProcessing = false;
               if (mounted) setState(() {});
@@ -1200,8 +1207,6 @@ class _MainHomeViewState extends State<_MainHomeView> {
                       );
                     }
                     await _historyService.waitForPendingSaves();
-                    await Future.delayed(const Duration(seconds: 2));
-                    _reloadHistory(forceRefresh: true);
                   } finally {
                     _isProcessing = false;
                     if (mounted) setState(() {});
@@ -1378,8 +1383,6 @@ class _MainHomeViewState extends State<_MainHomeView> {
       );
     }
     await _historyService.waitForPendingSaves();
-    await Future.delayed(const Duration(seconds: 2));
-    if (mounted) _loadContent(quiet: true, forceRefresh: true);
   }
 
   void _navigateToGenre(Map<String, dynamic> g) {
@@ -1598,8 +1601,6 @@ class _MainHomeViewState extends State<_MainHomeView> {
           }
 
           await _historyService.waitForPendingSaves();
-          await Future.delayed(const Duration(seconds: 2));
-          if (mounted) _loadContent(quiet: true, forceRefresh: true);
         } finally {
           _isProcessing = false;
           if (mounted) setState(() {});

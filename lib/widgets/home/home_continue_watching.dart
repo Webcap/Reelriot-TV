@@ -1,6 +1,7 @@
 import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/widgets/home/home_hero_button.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
 
 class HomeContinueWatchingRow extends StatelessWidget {
@@ -78,6 +79,12 @@ class HomeContinueWatchingRow extends StatelessWidget {
                   onFocus: () => onFocus(mediaId, isMovie),
                   onLongPress: () => onLongPress(h),
                   onTap: () => onTap(h),
+                  quality: QualityUtils.getQualityBadgeSync(
+                    releaseDate: h['release_date'] as String?,
+                    isMovie: isMovie,
+                  ),
+                  mediaId: mediaId,
+                  isMovie: isMovie,
                 ),
               );
             },

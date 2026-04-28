@@ -2,7 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:flutter/foundation.dart';
 
-class WatchHistoryService {
+class WatchHistoryService extends ChangeNotifier {
   static final WatchHistoryService _instance = WatchHistoryService._internal();
 
   factory WatchHistoryService({SupabaseClient? client}) {
@@ -79,6 +79,7 @@ class WatchHistoryService {
     } finally {
       _isSaving = false;
       _activeSaveProcess = null;
+      notifyListeners();
     }
   }
 
@@ -645,5 +646,12 @@ class WatchHistoryService {
       debugPrint('[WatchHistory] ❌ Error fetching recently watched shows: $e');
       return [];
     }
+  }
+
+  /// Manually clears cache and notifies listeners to trigger a UI refresh.
+  void refresh() {
+    _cachedHistory.clear();
+    _lastFetchTime.clear();
+    notifyListeners();
   }
 }

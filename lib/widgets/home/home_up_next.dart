@@ -59,6 +59,9 @@ class HomeUpNextRow extends StatelessWidget {
                   onFocus: () => onFocus(show['id']),
                   onLongPress: () => onLongPress(show),
                   onTap: () => onTap(show),
+                  quality: 'HD', // Up Next is TV shows
+                  mediaId: show['id'],
+                  isMovie: false,
                 ),
               );
             },

@@ -10,6 +10,7 @@ import 'package:reelriot_tv/services/subtitle_service.dart';
 import 'package:reelriot_tv/models/sub_languages.dart';
 import 'package:reelriot_tv/services/watch_history_service.dart';
 import 'package:reelriot_tv/widgets/provider_loading_widget.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reelriot_tv/utils/video_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -60,11 +61,24 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   int _currentProviderIndex = 0;
   bool _isDone = false;
 
+  // Track current episode state for "Next Episode" looping
+  int? _currentSeason;
+  int? _currentEpisode;
+  int? _currentEpisodeId;
+  String? _currentEpisodeName;
+  Duration? _currentStartPosition;
+
   @override
   void initState() {
     super.initState();
     WakelockManager.enable();
     OutageService.instance.pause();
+
+    _currentSeason = widget.season;
+    _currentEpisode = widget.episode;
+    _currentEpisodeId = widget.episodeId;
+    _currentEpisodeName = widget.episodeName;
+    _currentStartPosition = widget.startPosition;
 
     // Prioritize preferred provider if specified
     if (widget.preferredProvider != null) {
@@ -94,15 +108,101 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     });
   }
 
+  Future<Map<String, dynamic>?> _fetchNextEpisode() async {
+    if (widget.tvShow == null || _currentSeason == null || _currentEpisode == null) {
+      return null;
+    }
+
+    try {
+      final seasonDetail = await _api.fetchSeasonDetail(
+        widget.tvShow!.id,
+        _currentSeason!,
+      );
+
+      // Check if there is another episode in this season
+      for (var ep in seasonDetail.episodes) {
+        if (ep.episodeNumber == _currentEpisode! + 1) {
+          return {
+            'season': _currentSeason,
+            'episode': ep.episodeNumber,
+            'episodeId': ep.id,
+            'episodeName': ep.name,
+          };
+        }
+      }
+
+      // Check if there is a next season
+      final tvDetail = await _api.fetchTvDetail(widget.tvShow!.id);
+      if (_currentSeason! < (tvDetail.numberOfSeasons ?? 0)) {
+        final nextSeasonDetail = await _api.fetchSeasonDetail(
+          widget.tvShow!.id,
+          _currentSeason! + 1,
+        );
+        if (nextSeasonDetail.episodes.isNotEmpty) {
+          final firstEp = nextSeasonDetail.episodes.first;
+          return {
+            'season': _currentSeason! + 1,
+            'episode': firstEp.episodeNumber,
+            'episodeId': firstEp.id,
+            'episodeName': firstEp.name,
+          };
+        }
+      }
+    } catch (e) {
+      debugPrint('[VideoLoader] ⚠️ Error fetching next episode: $e');
+    }
+    return null;
+  }
+
+  Future<String> _getQualityBadge() async {
+    final mediaId = widget.movie?.id ?? widget.tvShow?.id;
+    if (mediaId == null) return 'HD';
+
+    // 1. Check for TV Show (Always HD for now as per web logic)
+    if (widget.tvShow != null) return 'HD';
+
+    // 2. Check for Supabase Override
+    try {
+      final response = await Supabase.instance.client
+          .from('media_quality_overrides')
+          .select('quality')
+          .eq('media_id', mediaId.toString())
+          .maybeSingle();
+      if (response != null && response['quality'] != null) {
+        return response['quality'] as String;
+      }
+    } catch (e) {
+      debugPrint('[VideoLoader] ⚠️ Error fetching quality override: $e');
+    }
+
+    // 3. Calculate based on release date
+    final releaseDateStr = widget.movie?.releaseDate;
+    if (releaseDateStr == null || releaseDateStr.isEmpty) return 'HD';
+
+    try {
+      final releaseDate = DateTime.parse(releaseDateStr);
+      final now = DateTime.now();
+
+      if (releaseDate.isAfter(now)) return 'SOON';
+
+      final diffDays = now.difference(releaseDate).inDays;
+      if (diffDays <= 30) return 'CAM';
+    } catch (e) {
+      debugPrint('[VideoLoader] ⚠️ Error parsing release date: $e');
+    }
+
+    return 'HD';
+  }
+
   void _loadVideo() async {
     final mediaId = widget.movie?.id ?? widget.tvShow?.id;
     final mediaName = widget.movie?.title ?? widget.tvShow?.name;
     debugPrint('[VideoLoader] 🎬 Loading media: $mediaName (ID: $mediaId)');
     if (widget.tvShow != null) {
       debugPrint(
-        '[VideoLoader] 📺 TV Show: S${widget.season}E${widget.episode}',
+        '[VideoLoader] 📺 TV Show: S$_currentSeason E$_currentEpisode',
       );
-      if (widget.season == null || widget.episode == null) {
+      if (_currentSeason == null || _currentEpisode == null) {
         debugPrint(
           '[VideoLoader] ❌ Cannot load TV stream: season or episode missing',
         );
@@ -118,19 +218,37 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
       }
     }
 
+    // Reset provider states for a fresh load (used when transitioning to next episode)
+    setState(() {
+      _isDone = false;
+      _currentProviderIndex = 0;
+      for (var state in _providerStates) {
+        state.status = ProviderStatus.pending;
+      }
+    });
+
+    // Pre-fetch "Up Next" metadata and Quality Badge
+    final nextEpDataFuture = _fetchNextEpisode();
+    final qualityBadgeFuture = _getQualityBadge();
+
+    final nextEpData = await nextEpDataFuture;
+    final qualityBadge = await qualityBadgeFuture;
+
     for (int i = 0; i < _providers.length; i++) {
       if (!mounted) return;
 
       Duration? startPos;
       if (i == 0) {
-        if (widget.startPosition != null) {
-          startPos = widget.startPosition;
+        if (_currentStartPosition != null) {
+          startPos = _currentStartPosition;
+          // Clear it after first use so subsequent provider retries don't force it
+          _currentStartPosition = null;
         } else {
           startPos = await _historyService.getSavedProgress(
             mediaId!,
             widget.movie != null,
-            season: widget.season,
-            episode: widget.episode,
+            season: _currentSeason,
+            episode: _currentEpisode,
           );
         }
       }
@@ -157,8 +275,8 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
         } else {
           response = await _api.fetchTvStream(
             widget.tvShow!.id,
-            widget.season!,
-            widget.episode!,
+            _currentSeason!,
+            _currentEpisode!,
             provider: providerCode,
           );
         }
@@ -198,8 +316,8 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
                 tmdbId: tmdbId,
                 languageCode: searchLangs,
                 apiKey: _settings.opensubtitlesKey,
-                seasonNumber: widget.season,
-                episodeNumber: widget.episode,
+                seasonNumber: _currentSeason,
+                episodeNumber: _currentEpisode,
               );
 
               if (extSubs.isNotEmpty) {
@@ -271,6 +389,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
             '[VideoLoader] 🏁 Total processed subtitles: ${subs.length}',
           );
 
+          if (!mounted) return;
           setState(() {
             _providerStates[i].status = ProviderStatus.success;
             _isDone = true;
@@ -279,7 +398,6 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
           debugPrint(
             '[VideoLoader] 🚀 Launching PlayerScreen with URL: ${response.links!.first.url}',
           );
-          if (!mounted) return;
           
           final result = await Navigator.of(context).push(
             MaterialPageRoute(
@@ -288,13 +406,15 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
                 title: widget.movie?.title ?? widget.tvShow?.name ?? 'Video',
                 item: widget.movie ?? widget.tvShow,
                 isMovie: widget.movie != null,
-                season: widget.season,
-                episode: widget.episode,
-                episodeId: widget.episodeId,
-                episodeName: widget.episodeName,
+                season: _currentSeason,
+                episode: _currentEpisode,
+                episodeId: _currentEpisodeId,
+                episodeName: _currentEpisodeName,
+                nextEpisode: nextEpData,
                 startPosition: startPos,
                 providerCode: providerCode,
                 allProviders: _providers,
+                quality: qualityBadge,
                 headers: response.links!.first.headers,
                 externalSubtitles: subs,
               ),
@@ -302,27 +422,43 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
           );
 
           if (result == true) {
-            debugPrint('[VideoLoader] 🔄 Player signaled fallback. Continuing provider loop...');
+            debugPrint('[VideoLoader] 🔄 Player signaled fallback. Retrying...');
             if (mounted) {
               setState(() {
                 _providerStates[i].status = ProviderStatus.failed;
                 _isDone = false;
               });
             }
-            continue; // Go to next iteration of for-loop
-          } else {
-            // User manually popped or finished video, so we also close the loader
-            debugPrint('[VideoLoader] 🔚 Player session ended. Closing loader.');
-            if (mounted) Navigator.of(context).pop();
-            return;
+            continue; 
+          } else if (result is Map && result['action'] == 'next') {
+            debugPrint('[VideoLoader] ⏭️ Player signaled Next Episode.');
+            if (nextEpData != null && mounted) {
+              setState(() {
+                _currentSeason = nextEpData['season'];
+                _currentEpisode = nextEpData['episode'];
+                _currentEpisodeId = nextEpData['episodeId'];
+                _currentEpisodeName = nextEpData['episodeName'];
+                _currentStartPosition = null;
+              });
+              // Loop back to start loading the next one
+              _loadVideo();
+              return;
+            }
           }
+
+          // User manually popped or finished video, so we also close the loader
+          debugPrint('[VideoLoader] 🔚 Player session ended. Closing loader.');
+          if (mounted) Navigator.of(context).pop();
+          return;
         } else {
           debugPrint(
             '[VideoLoader] ❌ Provider $providerName returned no links or success=false',
           );
-          setState(() {
-            _providerStates[i].status = ProviderStatus.failed;
-          });
+          if (mounted) {
+            setState(() {
+              _providerStates[i].status = ProviderStatus.failed;
+            });
+          }
         }
       } catch (e) {
         debugPrint('[VideoLoader] ⚠️ Error with provider $providerName: $e');

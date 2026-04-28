@@ -1,6 +1,7 @@
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
 
 class HomeAiringTodayRow extends StatelessWidget {
@@ -71,6 +72,12 @@ class HomeAiringTodayRow extends StatelessWidget {
                   onFocus: () => onFocus(m.id),
                   onLongPress: () => onLongPress(m),
                   onTap: () => onTap(m),
+                   quality: QualityUtils.getQualityBadgeSync(
+                    releaseDate: m.releaseDate,
+                    isMovie: false, // Airing Today is always TV
+                  ),
+                  mediaId: m.id,
+                  isMovie: false,
                 ),
               );
             },
