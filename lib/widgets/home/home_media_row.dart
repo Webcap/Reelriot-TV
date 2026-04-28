@@ -56,10 +56,10 @@ class HomeMediaRow extends StatelessWidget {
                   onTap: () => onTap(m),
                    quality: QualityUtils.getQualityBadgeSync(
                     releaseDate: m.releaseDate,
-                    isMovie: m.mediaType == 'movie' || m.title != null,
+                    isMovie: m.mediaType != 'tv',
                   ),
                   mediaId: m.id,
-                  isMovie: m.mediaType == 'movie' || m.title != null,
+                  isMovie: m.mediaType != 'tv',
                   releaseDate: m.releaseDate,
                 ),
               );

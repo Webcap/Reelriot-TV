@@ -600,6 +600,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 posterPath: t.posterPath,
                 backdropPath: t.backdropPath,
                 overview: t.overview,
+                mediaType: 'tv',
+                releaseDate: t.firstAirDate,
               )).toList();
             }
             
@@ -609,6 +611,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
               posterPath: t.posterPath,
               backdropPath: t.backdropPath,
               overview: t.overview,
+              mediaType: 'tv',
+              releaseDate: t.firstAirDate,
             )).toList();
 
             _topRated = topRated.results.map((t) => MovieListItem(
@@ -617,6 +621,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
               posterPath: t.posterPath,
               backdropPath: t.backdropPath,
               overview: t.overview,
+              mediaType: 'tv',
+              releaseDate: t.firstAirDate,
             )).toList();
 
             _airingToday = airingToday.results.map((t) => MovieListItem(
@@ -625,6 +631,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
               posterPath: t.posterPath,
               backdropPath: t.backdropPath,
               overview: t.overview,
+              mediaType: 'tv',
+              releaseDate: t.firstAirDate,
             )).toList();
           });
           _startAutoSlide();
