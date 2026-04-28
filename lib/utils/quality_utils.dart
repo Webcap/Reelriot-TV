@@ -17,7 +17,7 @@ class QualityUtils {
       if (release.isAfter(now)) return 'SOON';
 
       final diffDays = now.difference(release).inDays;
-      return diffDays <= 30 ? 'CAM' : 'HD';
+      return diffDays <= 45 ? 'CAM' : 'HD';
     } catch (e) {
       debugPrint('[QualityUtils] Error parsing date: $e');
       return null;
