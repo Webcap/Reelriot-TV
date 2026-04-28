@@ -940,6 +940,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                             ),
                             mediaId: rec.id,
                             isMovie: false,
+                            releaseDate: rec.firstAirDate,
                           );
                         },
                       ),

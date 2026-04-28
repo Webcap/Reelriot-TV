@@ -191,7 +191,8 @@ class _GenreScreenState extends State<GenreScreen> {
                               isMovie: widget.isMovie,
                             ),
                             mediaId: item.id,
-                            isMovie: widget.isMovie,
+                            isMovie: item.mediaType != 'tv',
+                            releaseDate: item.releaseDate,
                           );
                         },
                       ),

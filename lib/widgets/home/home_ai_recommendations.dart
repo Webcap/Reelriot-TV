@@ -110,6 +110,7 @@ class HomeAiRecommendationsRow extends StatelessWidget {
                             ),
                             mediaId: m.id,
                             isMovie: true,
+                            releaseDate: m.releaseDate,
                           ),
                         );
                       },

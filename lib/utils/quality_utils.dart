@@ -1,3 +1,4 @@
+import 'package:reelriot_tv/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -47,6 +48,14 @@ class QualityUtils {
     }
 
     // 3. Fallback to synchronous logic
-    return getQualityBadgeSync(releaseDate: releaseDate, isMovie: isMovie);
+    final syncQuality = getQualityBadgeSync(releaseDate: releaseDate, isMovie: isMovie);
+    
+    // 4. If it's a movie and marked as CAM, check for digital release on TMDB
+    if (isMovie && syncQuality == 'CAM') {
+      final isDigital = await ApiService().isDigitalRelease(mediaId);
+      if (isDigital) return 'HD';
+    }
+
+    return syncQuality;
   }
 }

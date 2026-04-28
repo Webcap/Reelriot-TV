@@ -192,6 +192,7 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
           ),
           mediaId: item.id,
           isMovie: isMovie,
+          releaseDate: isMovie ? (item as MovieListItem).releaseDate : (item as TvListItem).firstAirDate,
         );
       },
     );

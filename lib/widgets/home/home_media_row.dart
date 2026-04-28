@@ -60,6 +60,7 @@ class HomeMediaRow extends StatelessWidget {
                   ),
                   mediaId: m.id,
                   isMovie: m.mediaType == 'movie' || m.title != null,
+                  releaseDate: m.releaseDate,
                 ),
               );
             },

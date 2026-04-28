@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'package:reelriot_tv/constants.dart';
@@ -234,5 +235,49 @@ class ApiService {
       throw Exception('Failed to load TV (Status: ${res.statusCode}, URL: $url)');
     }
     return core.TvListResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
+  Future<bool> isDigitalRelease(int movieId) async {
+    try {
+      final url = core.Endpoints.movieDetailsUrl(tmdbBaseUrl, _tmdbKey, movieId, language);
+      final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+      if (res.statusCode != 200) return false;
+      
+      final data = jsonDecode(res.body);
+      final homepage = data['homepage'] as String? ?? '';
+      final productionCompanies = data['production_companies'] as List? ?? [];
+
+      const streamers = ["netflix.com", "amazon.com", "apple.com", "disneyplus.com", "hbomax.com", "paramountplus.com", "peacocktv.com"];
+      if (streamers.any((s) => homepage.contains(s))) return true;
+
+      const digitalStudios = ["Netflix", "Amazon Studios", "Apple", "Disney", "Paramount+", "Peacock", "Hulu", "HBO"];
+      if (productionCompanies.any((c) => digitalStudios.any((s) => (c['name'] as String).contains(s)))) return true;
+
+      // Also check release dates for type 4 (Digital) or 5 (Physical)
+      final releaseUrl = '$tmdbBaseUrl/movie/$movieId/release_dates?api_key=$_tmdbKey';
+      final releaseRes = await http.get(Uri.parse(releaseUrl)).timeout(const Duration(seconds: 10));
+      if (releaseRes.statusCode == 200) {
+        final releaseData = jsonDecode(releaseRes.body);
+        final results = releaseData['results'] as List? ?? [];
+        for (var country in results) {
+          final dates = country['release_dates'] as List? ?? [];
+          for (var d in dates) {
+            final type = d['type'] as int?;
+            if (type == 4 || type == 5) {
+              final releaseDateStr = d['release_date'] as String?;
+              if (releaseDateStr != null) {
+                final rDate = DateTime.parse(releaseDateStr);
+                if (rDate.isBefore(DateTime.now())) return true;
+              }
+            }
+          }
+        }
+      }
+
+      return false;
+    } catch (e) {
+      debugPrint('[ApiService] Error checking digital release: $e');
+      return false;
+    }
   }
 }

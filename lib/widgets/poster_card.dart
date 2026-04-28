@@ -19,6 +19,7 @@ class PosterCard extends StatefulWidget {
     this.quality,
     this.mediaId,
     this.isMovie,
+    this.releaseDate,
   });
 
   final String? posterPath;
@@ -32,6 +33,7 @@ class PosterCard extends StatefulWidget {
   final String? quality;
   final int? mediaId;
   final bool? isMovie;
+  final String? releaseDate;
 
   @override
   State<PosterCard> createState() => _PosterCardState();
@@ -51,15 +53,15 @@ class _PosterCardState extends State<PosterCard> {
     // We only care about movies as TV shows are HD by default
     if (widget.mediaId != null && widget.isMovie == true) {
       try {
-        final response = await Supabase.instance.client
-            .from('media_quality_overrides')
-            .select('quality')
-            .eq('media_id', widget.mediaId.toString())
-            .maybeSingle();
-            
-        if (response != null && response['quality'] != null && mounted) {
+        final badge = await QualityUtils.getQualityBadgeAsync(
+          mediaId: widget.mediaId!,
+          releaseDate: widget.releaseDate,
+          isMovie: true,
+        );
+        
+        if (badge != null && badge != widget.quality && mounted) {
           setState(() {
-            _overrideQuality = response['quality'] as String;
+            _overrideQuality = badge;
           });
         }
       } catch (e) {

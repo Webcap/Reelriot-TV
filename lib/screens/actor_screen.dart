@@ -208,7 +208,8 @@ class _ActorScreenState extends State<ActorScreen> {
                         isMovie: item.mediaType == 'movie',
                       ),
                       mediaId: item.id,
-                      isMovie: item.mediaType == 'movie',
+                      isMovie: item.mediaType != 'tv',
+                      releaseDate: item.mediaType == 'movie' ? item.releaseDate : item.firstAirDate,
                     );
                   },
                   childCount: _credits!.length > 24 ? 24 : _credits!.length, // Limit for better performance on first load

@@ -107,6 +107,7 @@ class _TvShowsScreenState extends State<TvShowsScreen> {
                   ),
                   mediaId: t.id,
                   isMovie: false,
+                  releaseDate: t.firstAirDate,
                 );
               },
             ),

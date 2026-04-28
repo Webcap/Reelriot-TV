@@ -85,6 +85,7 @@ class HomeContinueWatchingRow extends StatelessWidget {
                   ),
                   mediaId: mediaId,
                   isMovie: isMovie,
+                  releaseDate: h['release_date'] as String?,
                 ),
               );
             },

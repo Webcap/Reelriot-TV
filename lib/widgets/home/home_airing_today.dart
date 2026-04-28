@@ -78,6 +78,7 @@ class HomeAiringTodayRow extends StatelessWidget {
                   ),
                   mediaId: m.id,
                   isMovie: false,
+                  releaseDate: m.releaseDate,
                 ),
               );
             },

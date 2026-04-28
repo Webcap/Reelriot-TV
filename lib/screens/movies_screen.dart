@@ -107,6 +107,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
                   ),
                   mediaId: m.id,
                   isMovie: true,
+                  releaseDate: m.releaseDate,
                 );
               },
             ),

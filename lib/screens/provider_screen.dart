@@ -5,6 +5,7 @@ import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:reelriot_tv/screens/movie_detail_screen.dart';
 import 'package:reelriot_tv/screens/tv_detail_screen.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
+import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -191,6 +192,13 @@ class _ProviderScreenState extends State<ProviderScreen> {
                           return PosterCard(
                             posterPath: item.posterPath,
                             title: item.title ?? 'Unknown',
+                            quality: QualityUtils.getQualityBadgeSync(
+                              releaseDate: item.releaseDate,
+                              isMovie: item.mediaType != 'tv',
+                            ),
+                            mediaId: item.id,
+                            isMovie: item.mediaType != 'tv',
+                            releaseDate: item.releaseDate,
                             onTap: () async {
                               if (_isProcessing) return;
                               _isProcessing = true;

@@ -618,6 +618,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                        ),
                                        mediaId: part.id,
                                        isMovie: true,
+                                       releaseDate: part.releaseDate,
                                      ),
                                    );
                                  },
@@ -649,6 +650,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                      ),
                                      mediaId: rec.id,
                                      isMovie: true,
+                                     releaseDate: rec.releaseDate,
                                    );
                                  },
                                ),

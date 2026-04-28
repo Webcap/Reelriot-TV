@@ -1,6 +1,7 @@
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/widgets/home/home_hero_button.dart';
+import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
 
 class HomeHeroSection extends StatelessWidget {
@@ -142,21 +143,68 @@ class HomeHeroSection extends StatelessWidget {
             key: ValueKey('hero_content_${focusedMovie!.id}'),
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Brand Label
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEC1D24),
-                  borderRadius: BorderRadius.circular(s(4)),
-                ),
-                child: Text(
-                  focusedMovie?.mediaType == 'live' ? 'LIVE NOW' : 'TRENDING', 
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: s(15),
-                    fontWeight: FontWeight.bold,
+              // Brand Labels
+              Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEC1D24),
+                      borderRadius: BorderRadius.circular(s(4)),
+                    ),
+                    child: Text(
+                      focusedMovie?.mediaType == 'live' ? 'LIVE NOW' : 'TRENDING', 
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: s(15),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                ),
+                  if (focusedMovie != null && focusedMovie!.mediaType != 'live') ...[
+                    SizedBox(width: s(16)),
+                    FutureBuilder<String?>(
+                      future: QualityUtils.getQualityBadgeAsync(
+                        mediaId: focusedMovie!.id,
+                        releaseDate: (focusedMovie is MovieDetail) ? (focusedMovie as MovieDetail).releaseDate : null,
+                        isMovie: focusedMovie!.mediaType == 'movie',
+                      ),
+                      builder: (context, snapshot) {
+                        final badge = snapshot.data ?? QualityUtils.getQualityBadgeSync(
+                          releaseDate: (focusedMovie is MovieDetail) ? (focusedMovie as MovieDetail).releaseDate : null,
+                          isMovie: focusedMovie!.mediaType == 'movie',
+                        );
+                        
+                        if (badge == null || badge.isEmpty) return const SizedBox.shrink();
+
+                        Color badgeColor = Colors.white.withValues(alpha: 0.15);
+                        if (badge == 'CAM') {
+                          badgeColor = const Color(0xFFEC1D24).withValues(alpha: 0.8);
+                        } else if (badge == 'SOON') {
+                          badgeColor = const Color(0xFFF59E0B).withValues(alpha: 0.8);
+                        }
+
+                        return Container(
+                          padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+                          decoration: BoxDecoration(
+                            color: badgeColor,
+                            borderRadius: BorderRadius.circular(s(4)),
+                            border: Border.all(color: Colors.white24, width: s(1)),
+                          ),
+                          child: Text(
+                            badge,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: s(15),
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: s(0.5),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ],
               ),
               SizedBox(height: s(18)),
               Text(

@@ -62,6 +62,7 @@ class HomeUpNextRow extends StatelessWidget {
                   quality: 'HD', // Up Next is TV shows
                   mediaId: show['id'],
                   isMovie: false,
+                  releaseDate: show['first_air_date'],
                 ),
               );
             },
