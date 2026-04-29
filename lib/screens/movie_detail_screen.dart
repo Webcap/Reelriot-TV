@@ -13,6 +13,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:reelriot_tv/services/ad_service.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
+import 'package:reelriot_tv/widgets/native_ad_banner.dart';
+import '../models/ad.dart' as model;
 
 class MovieDetailScreen extends StatefulWidget {
   const MovieDetailScreen({super.key, required this.movieId});
@@ -36,6 +38,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   final WatchHistoryService _historyService = WatchHistoryService();
   MovieCollection? _collection;
   bool _isProcessing = false;
+  model.Ad? _bannerAd;
 
   @override
   void initState() {
@@ -59,6 +62,20 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
             _isWatched = p['is_finished'] as bool? ?? false;
           }
         }),
+        Supabase.instance.client
+            .from('sponsorships')
+            .select('*')
+            .eq('is_active', true)
+            .eq('placement', 'banner')
+            .limit(1)
+            .maybeSingle()
+            .then((data) {
+          if (data != null && mounted) {
+            setState(() {
+              _bannerAd = model.Ad.fromJson(data);
+            });
+          }
+        }).catchError((_) {}),
       ]);
 
       // Fetch collection if it exists
@@ -655,6 +672,10 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                  },
                                ),
                              ),
+                           ],
+                           if (_bannerAd != null) ...[
+                             SizedBox(height: s(64)),
+                             NativeAdBanner(ad: _bannerAd!),
                            ],
                         ],
                       ),

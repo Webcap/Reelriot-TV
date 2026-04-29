@@ -16,6 +16,8 @@ import 'package:reelriot_tv/widgets/long_press_focus.dart';
 import 'package:reelriot_tv/widgets/context_menu_dialog.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'dart:ui';
+import 'package:reelriot_tv/widgets/native_ad_banner.dart';
+import '../models/ad.dart' as model;
 
 class TvDetailScreen extends StatefulWidget {
   const TvDetailScreen({super.key, required this.tvId});
@@ -105,6 +107,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
   List<Map<String, dynamic>>? _seasonHistory;
   bool _isProcessing = false;
   final Set<int> _recentlyCompletedIds = {};
+  model.Ad? _bannerAd;
 
 
   double _scale(BuildContext context, double value) {
@@ -130,6 +133,20 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
         _api.fetchTvRecommendations(widget.tvId).then((r) => recs = r.results).catchError((_) => recs = []),
         _api.fetchTvCredits(widget.tvId).then((c) => credits = c).catchError((_) => credits = CreditsResponse(id: widget.tvId, cast: [])),
         WatchHistoryService().getLastWatchedEpisodeForShow(widget.tvId).then((h) => lastWatched = h),
+        Supabase.instance.client
+            .from('sponsorships')
+            .select('*')
+            .eq('is_active', true)
+            .eq('placement', 'banner')
+            .limit(1)
+            .maybeSingle()
+            .then((data) {
+          if (data != null && mounted) {
+            setState(() {
+              _bannerAd = model.Ad.fromJson(data);
+            });
+          }
+        }).catchError((_) {}),
       ]);
 
       if (mounted) {
@@ -657,180 +674,186 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                     )
                   else
                     Column(
-                      children: episodes.map((ep) {
-                        final history = _seasonHistory?.firstWhere(
-                          (h) => h['episode_num'] == ep.episodeNumber,
-                          orElse: () => {},
-                        );
-                        final elapsed = (history != null && history.isNotEmpty) ? history['elapsed_ms'] as int? ?? 0 : 0;
-                        final duration = (history != null && history.isNotEmpty) ? history['duration_ms'] as int? ?? 0 : 0;
-                        final progress = duration > 0 ? (elapsed / duration).clamp(0.0, 1.0) : 0.0;
-                        final isWatched = (history != null && history['is_completed'] == true) || progress > 0.95;
+                      children: [
+                        ...episodes.map((ep) {
+                          final history = _seasonHistory?.firstWhere(
+                            (h) => h['episode_num'] == ep.episodeNumber,
+                            orElse: () => {},
+                          );
+                          final elapsed = (history != null && history.isNotEmpty) ? history['elapsed_ms'] as int? ?? 0 : 0;
+                          final duration = (history != null && history.isNotEmpty) ? history['duration_ms'] as int? ?? 0 : 0;
+                          final progress = duration > 0 ? (elapsed / duration).clamp(0.0, 1.0) : 0.0;
+                          final isWatched = (history != null && history['is_completed'] == true) || progress > 0.95;
 
-                        return Padding(
-                          padding: EdgeInsets.only(bottom: s(16)),
-                          child: LongPressFocus(
-                            onLongPress: () => _showEpisodeContextMenu(ep, isWatched),
-                            onTap: () => _handlePlay(ep.seasonNumber, ep.episodeNumber, ep.id, ep.name, elapsed: elapsed),
-                            onFocusChange: (focused) {
-                              if (focused) setState(() {});
-                            },
-                            child: Builder(
-                              builder: (context) {
-                                final focused = Focus.of(context).hasFocus;
-                                return AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  decoration: BoxDecoration(
-                                    color: focused ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.04),
-                                    borderRadius: BorderRadius.circular(s(16)),
-                                    border: Border.all(
-                                      color: focused ? Colors.white : Colors.white.withValues(alpha: 0.1),
-                                      width: s(1.5),
+                          return Padding(
+                            padding: EdgeInsets.only(bottom: s(16)),
+                            child: LongPressFocus(
+                              onLongPress: () => _showEpisodeContextMenu(ep, isWatched),
+                              onTap: () => _handlePlay(ep.seasonNumber, ep.episodeNumber, ep.id, ep.name, elapsed: elapsed),
+                              onFocusChange: (focused) {
+                                if (focused) setState(() {});
+                              },
+                              child: Builder(
+                                builder: (context) {
+                                  final focused = Focus.of(context).hasFocus;
+                                  return AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    decoration: BoxDecoration(
+                                      color: focused ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.04),
+                                      borderRadius: BorderRadius.circular(s(16)),
+                                      border: Border.all(
+                                        color: focused ? Colors.white : Colors.white.withValues(alpha: 0.1),
+                                        width: s(1.5),
+                                      ),
                                     ),
-                                  ),
-                                  child: Stack(
-                                    children: [
-                                      Padding(
-                                        padding: EdgeInsets.all(s(16)),
-                                        child: Row(
-                                          children: [
-                                            ClipRRect(
-                                              borderRadius: BorderRadius.circular(s(8)),
-                                              child: Container(
-                                                width: s(180),
-                                                height: s(100),
-                                                color: Colors.white.withValues(alpha: 0.05),
-                                                child: ep.stillPath != null
-                                                    ? CachedNetworkImage(
-                                                        imageUrl: '$tmdbImageBaseUrl/w300${ep.stillPath}',
-                                                        fit: BoxFit.cover,
-                                                      )
-                                                    : Icon(Icons.tv, color: Colors.white24, size: s(32)),
+                                    child: Stack(
+                                      children: [
+                                        Padding(
+                                          padding: EdgeInsets.all(s(16)),
+                                          child: Row(
+                                            children: [
+                                              ClipRRect(
+                                                borderRadius: BorderRadius.circular(s(8)),
+                                                child: Container(
+                                                  width: s(180),
+                                                  height: s(100),
+                                                  color: Colors.white.withValues(alpha: 0.05),
+                                                  child: ep.stillPath != null
+                                                      ? CachedNetworkImage(
+                                                          imageUrl: '$tmdbImageBaseUrl/w300${ep.stillPath}',
+                                                          fit: BoxFit.cover,
+                                                        )
+                                                      : Icon(Icons.tv, color: Colors.white24, size: s(32)),
+                                                ),
                                               ),
-                                            ),
-                                            SizedBox(width: s(24)),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Row(
-                                                    children: [
-                                                      Expanded(
-                                                        child: Text(
-                                                          '${ep.episodeNumber}. ${ep.name ?? "Episode ${ep.episodeNumber}"}',
-                                                          style: TextStyle(
-                                                            color: Colors.white,
-                                                            fontSize: s(22),
-                                                            fontWeight: FontWeight.bold,
-                                                          ),
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow.ellipsis,
-                                                        ),
-                                                      ),
-                                                      AnimatedSwitcher(
-                                                        duration: const Duration(milliseconds: 400),
-                                                        transitionBuilder: (child, animation) => ScaleTransition(
-                                                          scale: CurvedAnimation(parent: animation, curve: Curves.elasticOut),
-                                                          child: child,
-                                                        ),
-                                                        child: isWatched
-                                                            ? Padding(
-                                                                key: const ValueKey('watched'),
-                                                                padding: EdgeInsets.only(left: s(8)),
-                                                                child: Icon(Icons.check_circle, color: const Color(0xFFEC1D24), size: s(24)),
-                                                              )
-                                                            : const SizedBox.shrink(key: ValueKey('not_watched')),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  if (ep.airDate != null || ep.voteAverage != null) ...[
-                                                    SizedBox(height: s(6)),
+                                              SizedBox(width: s(24)),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
                                                     Row(
                                                       children: [
-                                                        if (ep.airDate != null && ep.airDate!.isNotEmpty) ...[
-                                                          Icon(Icons.calendar_month, color: Colors.white54, size: s(16)),
-                                                          SizedBox(width: s(6)),
-                                                          Text(
-                                                            ep.airDate!,
-                                                            style: TextStyle(color: Colors.white54, fontSize: s(16)),
+                                                        Expanded(
+                                                          child: Text(
+                                                            '${ep.episodeNumber}. ${ep.name ?? "Episode ${ep.episodeNumber}"}',
+                                                            style: TextStyle(
+                                                              color: Colors.white,
+                                                              fontSize: s(22),
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                            maxLines: 1,
+                                                            overflow: TextOverflow.ellipsis,
                                                           ),
-                                                        ],
-                                                        if ((ep.airDate != null && ep.airDate!.isNotEmpty) &&
-                                                            (ep.voteAverage != null && ep.voteAverage! > 0))
-                                                          SizedBox(width: s(24)),
-                                                        if (ep.voteAverage != null && ep.voteAverage! > 0) ...[
-                                                          Icon(Icons.star, color: Colors.orangeAccent, size: s(16)),
-                                                          SizedBox(width: s(6)),
-                                                          Text(
-                                                            ep.voteAverage!.toStringAsFixed(1),
-                                                            style: TextStyle(color: Colors.white54, fontSize: s(16)),
+                                                        ),
+                                                        AnimatedSwitcher(
+                                                          duration: const Duration(milliseconds: 400),
+                                                          transitionBuilder: (child, animation) => ScaleTransition(
+                                                            scale: CurvedAnimation(parent: animation, curve: Curves.elasticOut),
+                                                            child: child,
                                                           ),
-                                                        ],
+                                                          child: isWatched
+                                                              ? Padding(
+                                                                  key: const ValueKey('watched'),
+                                                                  padding: EdgeInsets.only(left: s(8)),
+                                                                  child: Icon(Icons.check_circle, color: const Color(0xFFEC1D24), size: s(24)),
+                                                                )
+                                                              : const SizedBox.shrink(key: ValueKey('not_watched')),
+                                                        ),
                                                       ],
                                                     ),
-                                                  ],
-                                                  if (ep.overview != null && ep.overview!.isNotEmpty) ...[
-                                                    SizedBox(height: s(8)),
-                                                    Text(
-                                                      ep.overview!,
-                                                      style: TextStyle(
-                                                        color: Colors.white.withValues(alpha: 0.6),
-                                                        fontSize: s(16),
-                                                        height: 1.4,
+                                                    if (ep.airDate != null || ep.voteAverage != null) ...[
+                                                      SizedBox(height: s(6)),
+                                                      Row(
+                                                        children: [
+                                                          if (ep.airDate != null && ep.airDate!.isNotEmpty) ...[
+                                                            Icon(Icons.calendar_month, color: Colors.white54, size: s(16)),
+                                                            SizedBox(width: s(6)),
+                                                            Text(
+                                                              ep.airDate!,
+                                                              style: TextStyle(color: Colors.white54, fontSize: s(16)),
+                                                            ),
+                                                          ],
+                                                          if ((ep.airDate != null && ep.airDate!.isNotEmpty) &&
+                                                              (ep.voteAverage != null && ep.voteAverage! > 0))
+                                                            SizedBox(width: s(24)),
+                                                          if (ep.voteAverage != null && ep.voteAverage! > 0) ...[
+                                                            Icon(Icons.star, color: Colors.orangeAccent, size: s(16)),
+                                                            SizedBox(width: s(6)),
+                                                            Text(
+                                                              ep.voteAverage!.toStringAsFixed(1),
+                                                              style: TextStyle(color: Colors.white54, fontSize: s(16)),
+                                                            ),
+                                                          ],
+                                                        ],
                                                       ),
-                                                      maxLines: 2,
-                                                      overflow: TextOverflow.ellipsis,
-                                                    ),
-                                                  ],
-                                                  if (progress > 0 && !isWatched) ...[
-                                                    SizedBox(height: s(12)),
-                                                    Stack(
-                                                      children: [
-                                                        Container(
-                                                          height: s(4),
-                                                          width: s(200),
-                                                          decoration: BoxDecoration(
-                                                            color: Colors.white.withValues(alpha: 0.1),
-                                                            borderRadius: BorderRadius.circular(s(2)),
-                                                          ),
+                                                    ],
+                                                    if (ep.overview != null && ep.overview!.isNotEmpty) ...[
+                                                      SizedBox(height: s(8)),
+                                                      Text(
+                                                        ep.overview!,
+                                                        style: TextStyle(
+                                                          color: Colors.white.withValues(alpha: 0.6),
+                                                          fontSize: s(16),
+                                                          height: 1.4,
                                                         ),
-                                                        Container(
-                                                          height: s(4),
-                                                          width: s(200 * progress),
-                                                          decoration: BoxDecoration(
-                                                            color: const Color(0xFFEC1D24),
-                                                            borderRadius: BorderRadius.circular(s(2)),
+                                                        maxLines: 2,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ],
+                                                    if (progress > 0 && !isWatched) ...[
+                                                      SizedBox(height: s(12)),
+                                                      Stack(
+                                                        children: [
+                                                          Container(
+                                                            height: s(4),
+                                                            width: s(200),
+                                                            decoration: BoxDecoration(
+                                                              color: Colors.white.withValues(alpha: 0.1),
+                                                              borderRadius: BorderRadius.circular(s(2)),
+                                                            ),
                                                           ),
-                                                        ),
-                                                      ],
-                                                    ),
+                                                          Container(
+                                                            height: s(4),
+                                                            width: s(200 * progress),
+                                                            decoration: BoxDecoration(
+                                                              color: const Color(0xFFEC1D24),
+                                                              borderRadius: BorderRadius.circular(s(2)),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ],
                                                   ],
-                                                ],
+                                                ),
                                               ),
-                                            ),
-                                            if (focused)
-                                              Padding(
-                                                padding: EdgeInsets.only(left: s(16)),
-                                                child: Icon(Icons.play_circle_fill, color: Colors.white, size: s(48)),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                      if (_recentlyCompletedIds.contains(ep.id))
-                                        Positioned.fill(
-                                          child: ClipRRect(
-                                            borderRadius: BorderRadius.circular(s(16)),
-                                            child: _EpisodeShine(s: s),
+                                              if (focused)
+                                                Padding(
+                                                  padding: EdgeInsets.only(left: s(16)),
+                                                  child: Icon(Icons.play_circle_fill, color: Colors.white, size: s(48)),
+                                                ),
+                                            ],
                                           ),
                                         ),
-                                    ],
-                                  ),
-                                );
-                              },
+                                        if (_recentlyCompletedIds.contains(ep.id))
+                                          Positioned.fill(
+                                            child: ClipRRect(
+                                              borderRadius: BorderRadius.circular(s(16)),
+                                              child: _EpisodeShine(s: s),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
-                          ),
-                        );
-                      }).toList(),
+                          );
+                        }),
+                        if (_bannerAd != null) ...[
+                          SizedBox(height: s(64)),
+                          NativeAdBanner(ad: _bannerAd!),
+                        ],
+                      ],
                     ),
                   SizedBox(height: s(64)),
                   // Cast List

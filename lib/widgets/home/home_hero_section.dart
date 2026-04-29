@@ -153,7 +153,7 @@ class HomeHeroSection extends StatelessWidget {
                       borderRadius: BorderRadius.circular(s(4)),
                     ),
                     child: Text(
-                      focusedMovie?.mediaType == 'live' ? 'LIVE NOW' : 'TRENDING', 
+                      focusedMovie?.mediaType == 'ad' ? 'SPONSORED' : (focusedMovie?.mediaType == 'live' ? 'LIVE NOW' : 'TRENDING'), 
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: s(15),
@@ -161,7 +161,7 @@ class HomeHeroSection extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (focusedMovie != null && focusedMovie!.mediaType != 'live') ...[
+                  if (focusedMovie != null && focusedMovie!.mediaType != 'live' && focusedMovie!.mediaType != 'ad') ...[
                     SizedBox(width: s(16)),
                     FutureBuilder<String?>(
                       future: QualityUtils.getQualityBadgeAsync(
@@ -239,8 +239,8 @@ class HomeHeroSection extends StatelessWidget {
                 children: [
                   HomeHeroButton(
                     focusNode: focusNode,
-                    label: 'Watch Now',
-                    icon: Icons.play_arrow_outlined,
+                    label: focusedMovie?.mediaType == 'ad' ? 'Learn More' : 'Watch Now',
+                    icon: focusedMovie?.mediaType == 'ad' ? Icons.info_outline : Icons.play_arrow_outlined,
                     style: HeroButtonStyle.primary,
                     onTap: onWatchNow,
                   ),

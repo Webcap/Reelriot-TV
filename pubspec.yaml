@@ -93,6 +93,7 @@ flutter:
     - .env.prod
     - assets/svg/
     - assets/images/
+    - assets/images/simulated/
     - assets/images/posters/
 
 

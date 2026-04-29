@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:reelriot_tv/constants.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -191,20 +192,26 @@ class _PosterCardState extends State<PosterCard> {
     final screenWidth = MediaQuery.of(context).size.width;
     double s(double v) => (v * screenWidth) / 1920;
 
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.75),
-        borderRadius: BorderRadius.circular(s(8)),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Text(
-        'SPONSORED',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: s(14),
-          fontWeight: FontWeight.w900,
-          letterSpacing: s(1),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(s(8)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: s(8), sigmaY: s(8)),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(s(8)),
+            border: Border.all(color: Colors.white24),
+          ),
+          child: Text(
+            'SPONSORED',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: s(14),
+              fontWeight: FontWeight.w900,
+              letterSpacing: s(1),
+            ),
+          ),
         ),
       ),
     );

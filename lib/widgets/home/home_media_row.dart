@@ -3,6 +3,8 @@ import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:reelriot_tv/widgets/native_ad_poster_card.dart' as native;
+import '../../models/ad.dart' as model;
 
 class HomeMediaRow extends StatelessWidget {
   final String title;
@@ -47,21 +49,33 @@ class HomeMediaRow extends StatelessWidget {
               final m = items![index];
               return Padding(
                 padding: EdgeInsets.only(right: s(36)),
-                child: PosterCard(
-                  posterPath: m.posterPath,
-                  title: m.title ?? '',
-                  isSponsored: m.isSponsored,
-                  onFocus: () => onFocus(m.id),
-                  onLongPress: () => onLongPress(m),
-                  onTap: () => onTap(m),
-                   quality: QualityUtils.getQualityBadgeSync(
-                    releaseDate: m.releaseDate,
-                    isMovie: m.mediaType != 'tv',
-                  ),
-                  mediaId: m.id,
-                  isMovie: m.mediaType != 'tv',
-                  releaseDate: m.releaseDate,
-                ),
+                child: m.isSponsored
+                  ? native.NativeAdPosterCard(
+                      ad: model.Ad(
+                        id: m.id.toString(),
+                        title: m.title ?? '',
+                        description: m.overview ?? '',
+                        imageUrl: m.posterPath ?? '',
+                        cta: 'Learn More',
+                        link: 'https://reelriot.app',
+                        placement: 'poster',
+                      ),
+                    )
+                  : PosterCard(
+                      posterPath: m.posterPath,
+                      title: m.title ?? '',
+                      isSponsored: m.isSponsored,
+                      onFocus: () => onFocus(m.id),
+                      onLongPress: () => onLongPress(m),
+                      onTap: () => onTap(m),
+                      quality: QualityUtils.getQualityBadgeSync(
+                        releaseDate: m.releaseDate,
+                        isMovie: m.mediaType != 'tv',
+                      ),
+                      mediaId: m.id,
+                      isMovie: m.mediaType != 'tv',
+                      releaseDate: m.releaseDate,
+                    ),
               );
             },
           ),

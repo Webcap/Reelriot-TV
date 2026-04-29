@@ -23,11 +23,15 @@ import 'package:reelriot_tv/services/update_service.dart';
 import 'package:reelriot_tv/screens/update_screen.dart';
 import 'dart:async';
 import 'package:reelriot_tv/widgets/context_menu_dialog.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:reelriot_tv/widgets/native_ad_banner.dart';
+import 'package:reelriot_tv/widgets/native_ad_poster_card.dart';
+import 'package:reelriot_tv/models/ad.dart' as model;
+import 'package:reelriot_tv/widgets/home/home_media_row.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:reelriot_tv/widgets/home/home_nav_rail.dart';
 import 'package:reelriot_tv/widgets/home/home_top_nav.dart';
-import 'package:reelriot_tv/widgets/home/home_media_row.dart';
 import 'package:reelriot_tv/widgets/home/home_continue_watching.dart';
 import 'package:reelriot_tv/widgets/home/home_genres.dart';
 import 'package:reelriot_tv/widgets/home/home_providers.dart';
@@ -374,6 +378,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
   bool _isHeroInView = true;
   StreamSubscription<AuthState>? _authSubscription;
   final Map<int, String> _liveStreamUrls = {};
+  final Map<int, String> _adUrls = {};
   UpdateInfo? _updateInfo;
   Timer? _debounceTimer;
 
@@ -736,8 +741,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
               .eq('is_active', true);
           
           for (var ad in results) {
+            final adId = ad['id'].toString().hashCode;
+            _adUrls[adId] = ad['link'] ?? '';
             ads.add(MovieListItem(
-              id: ad['id'].toString().hashCode,
+              id: adId,
               title: ad['title'],
               overview: ad['description'],
               posterPath: ad['image_url'],
@@ -1140,6 +1147,17 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 return;
               }
 
+              if (_focusedMovie!.mediaType == 'ad') {
+                final url = _adUrls[_focusedMovie!.id];
+                if (url != null && url.isNotEmpty) {
+                  final uri = Uri.parse(url);
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                }
+                return;
+              }
+
               if (_selectedCategory == 'TV Shows') {
                 await Navigator.of(context).push(
                   MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: _focusedMovie!.id)),
@@ -1202,6 +1220,17 @@ class _MainHomeViewState extends State<_MainHomeView> {
                           ),
                         ),
                       );
+                      return;
+                    }
+
+                    if (_focusedMovie!.mediaType == 'ad') {
+                      final url = _adUrls[_focusedMovie!.id];
+                      if (url != null && url.isNotEmpty) {
+                        final uri = Uri.parse(url);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      }
                       return;
                     }
 
@@ -1380,6 +1409,17 @@ class _MainHomeViewState extends State<_MainHomeView> {
   }
 
   void _navigateToDetail(MovieListItem m) async {
+    if (m.mediaType == 'ad' || m.isSponsored) {
+      final url = _adUrls[m.id];
+      if (url != null && url.isNotEmpty) {
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      }
+      return;
+    }
+
     final isTv = _selectedCategory == 'TV Shows';
     if (isTv) {
       await Navigator.of(context).push(

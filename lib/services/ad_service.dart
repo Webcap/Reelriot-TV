@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:startapp_sdk/startapp.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/ad.dart';
+import 'settings_service.dart';
 
 class AdService extends ChangeNotifier {
   static final AdService instance = AdService._internal();
@@ -20,6 +23,34 @@ class AdService extends ChangeNotifier {
 
   StartAppInterstitialAd? _interstitialAd;
   bool _isInterstitialAdLoading = false;
+
+  List<Ad> _nativeAds = [];
+  List<Ad> get nativeAds {
+    final simulate = SettingsService().simulateAds;
+    final isDev = kDebugMode; // Simple dev check for TV
+
+    if (simulate && isDev && _nativeAds.isEmpty) {
+      return Ad.getSimulatedAds();
+    }
+    return _nativeAds;
+  }
+
+  Future<void> fetchNativeAds() async {
+    try {
+      final supabase = Supabase.instance.client;
+      final response = await supabase
+          .from('sponsorships')
+          .select()
+          .eq('is_active', true)
+          .order('priority', ascending: false);
+
+      _nativeAds = (response as List).map((e) => Ad.fromJson(e)).toList();
+      debugPrint('Fetched ${_nativeAds.length} native ads from Supabase (TV)');
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error fetching native ads (TV): $e');
+    }
+  }
 
   // Getters
   StartAppSdk? get sdk => _sdk;
@@ -45,6 +76,9 @@ class AdService extends ChangeNotifier {
 
     _isInitialized = true;
     debugPrint('Start.io SDK Initialized with ID: $startAppId (Enabled: $_isEnabled)');
+
+    // Fetch native ads
+    fetchNativeAds();
 
     if (_isEnabled && !kIsWeb) {
       loadInterstitialAd();
