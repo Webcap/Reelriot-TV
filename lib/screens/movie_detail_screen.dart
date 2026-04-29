@@ -39,6 +39,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   MovieCollection? _collection;
   bool _isProcessing = false;
   model.Ad? _bannerAd;
+  String? _qualityBadge;
 
   @override
   void initState() {
@@ -91,14 +92,15 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
         }
       }
 
-      if (mounted) {
-        setState(() {
-          _movie = m;
-          _recommendations = recs;
-          _credits = credits;
-        });
-        _checkFavorite();
-      }
+        if (mounted) {
+          setState(() {
+            _movie = m;
+            _recommendations = recs;
+            _credits = credits;
+          });
+          _checkFavorite();
+          _loadQuality();
+        }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     }
@@ -199,6 +201,16 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
         );
       }
     }
+  }
+
+  Future<void> _loadQuality() async {
+    if (_movie == null) return;
+    final q = await QualityUtils.getQualityBadgeAsync(
+      mediaId: _movie!.id,
+      releaseDate: _movie!.releaseDate,
+      isMovie: true,
+    );
+    if (mounted) setState(() => _qualityBadge = q);
   }
 
   Future<void> _toggleWatched() async {
@@ -391,6 +403,32 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                           SizedBox(height: s(24)),
                                           Row(
                                             children: [
+                                              if (_qualityBadge != null) ...[
+                                                Container(
+                                                  padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
+                                                  decoration: BoxDecoration(
+                                                    color: _qualityBadge == 'CAM' ? Colors.red.withValues(alpha: 0.9) : 
+                                                           _qualityBadge == 'SOON' ? Colors.amber.withValues(alpha: 0.9) :
+                                                           Colors.white.withValues(alpha: 0.15),
+                                                    borderRadius: BorderRadius.circular(s(6)),
+                                                    border: Border.all(
+                                                      color: _qualityBadge == 'CAM' ? Colors.redAccent.withValues(alpha: 0.5) : 
+                                                             _qualityBadge == 'SOON' ? Colors.amberAccent.withValues(alpha: 0.5) :
+                                                             Colors.white24,
+                                                      width: s(1.5)
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    _qualityBadge!.toUpperCase(),
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: s(18),
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                                SizedBox(width: s(24)),
+                                              ],
                                                Container(
                                                  padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
                                                  decoration: BoxDecoration(

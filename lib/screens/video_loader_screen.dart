@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:reelriot_tv/utils/wakelock_manager.dart';
+import 'package:reelriot_tv/utils/quality_utils.dart';
 
 class VideoLoaderScreen extends StatefulWidget {
   final core.MovieDetail? movie;
@@ -158,40 +159,11 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     final mediaId = widget.movie?.id ?? widget.tvShow?.id;
     if (mediaId == null) return 'HD';
 
-    // 1. Check for TV Show (Always HD for now as per web logic)
-    if (widget.tvShow != null) return 'HD';
-
-    // 2. Check for Supabase Override
-    try {
-      final response = await Supabase.instance.client
-          .from('media_quality_overrides')
-          .select('quality')
-          .eq('media_id', mediaId.toString())
-          .maybeSingle();
-      if (response != null && response['quality'] != null) {
-        return response['quality'] as String;
-      }
-    } catch (e) {
-      debugPrint('[VideoLoader] ⚠️ Error fetching quality override: $e');
-    }
-
-    // 3. Calculate based on release date
-    final releaseDateStr = widget.movie?.releaseDate;
-    if (releaseDateStr == null || releaseDateStr.isEmpty) return 'HD';
-
-    try {
-      final releaseDate = DateTime.parse(releaseDateStr);
-      final now = DateTime.now();
-
-      if (releaseDate.isAfter(now)) return 'SOON';
-
-      final diffDays = now.difference(releaseDate).inDays;
-      if (diffDays <= 30) return 'CAM';
-    } catch (e) {
-      debugPrint('[VideoLoader] ⚠️ Error parsing release date: $e');
-    }
-
-    return 'HD';
+    return await QualityUtils.getQualityBadgeAsync(
+      mediaId: mediaId,
+      releaseDate: widget.movie?.releaseDate,
+      isMovie: widget.movie != null,
+    ) ?? 'HD';
   }
 
   void _loadVideo() async {
