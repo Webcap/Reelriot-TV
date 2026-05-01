@@ -694,6 +694,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (host.contains('vixsrc')) return 'Vixsrc';
       if (host.contains('vidsrc')) return 'Vidsrc';
       if (host.contains('vidzee')) return 'Vidzee';
+      if (host.contains('vidfun')) return 'VidFun';
       if (host.contains('flixhq')) return 'FlixHQ';
       
       // If it's the proxy, try to decode the real URL
@@ -804,7 +805,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Standard headers for all requests
     final Map<String, String> headers = {
       'User-Agent':
-          'Mozilla/5.0 (Linux; Android 14; Chromecast Build/UTTC.250917.004) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
       'Accept': '*/*',
       'Connection': 'keep-alive',
       'Sec-Fetch-Mode': 'cors',
@@ -877,25 +878,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     // --- PROXY AUTH OVERRIDE ---
-    // The ?headers= query params are instructions for the PROXY to use when
-    // fetching from upstream CDNs — they are NOT client-to-proxy auth headers.
-    // The proxy itself requires vidlink.pro Origin/Referer from the client.
-    if (url.contains('storm.vodvidl.site') || 
-        url.contains('vidlink') || 
-        url.contains('vidlvod') || 
-        url.contains('vidl')) {
-      headers['Referer'] = 'https://vidlink.pro/';
-      headers['Origin'] = 'https://vidlink.pro';
-    }
+    // If the URL already contains instructions for the proxy (like VidLink's storm.vodvidl.site),
+    // we should trust those Referers/Origins if they were extracted from the URL above.
+    // Otherwise, we apply our known-good overrides for specific domains.
+    if (!url.contains('headers=')) {
+      if (url.contains('storm.vodvidl.site') || 
+          url.contains('vidlink') || 
+          url.contains('vidlvod') || 
+          url.contains('vidl')) {
+        headers['Referer'] = 'https://vidlink.pro/';
+        headers['Origin'] = 'https://vidlink.pro';
+      }
 
-    if (url.contains('vixsrc.to') || url.contains('vixsrc')) {
-      headers['Referer'] = 'https://vixsrc.to';
-      headers['Origin'] = 'https://vixsrc.to';
-    }
+      if (url.contains('vixsrc.to') || url.contains('vixsrc')) {
+        headers['Referer'] = 'https://vixsrc.to/';
+        headers['Origin'] = 'https://vixsrc.to';
+      }
 
-    if (url.contains('instreams.live')) {
-      headers['Referer'] = 'https://instreams.click/';
-      headers['Origin'] = 'https://instreams.click';
+      if (url.contains('instreams.live')) {
+        headers['Referer'] = 'https://instreams.click/';
+        headers['Origin'] = 'https://instreams.click';
+      }
     }
 
     // Log final resolved headers for debugging (only if not already proxied to avoid spam)
@@ -921,7 +924,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       String extension = "";
       final pureUrl = targetUrl.split("?")[0];
-      if (pureUrl.endsWith(".m3u8")) {
+      
+      // Force .m3u8 for known HLS providers that don't always use the extension
+      final isHlsProvider = targetUrl.contains('vixsrc') || 
+                           targetUrl.contains('vidlink') || 
+                           targetUrl.contains('vidsrc');
+
+      if (pureUrl.endsWith(".m3u8") || (isHlsProvider && !pureUrl.endsWith(".ts") && !pureUrl.endsWith(".mp4"))) {
         extension = "/video.m3u8";
       } else if (pureUrl.endsWith(".ts")) {
         extension = "/segment.ts";

@@ -55,6 +55,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     {'code': 'vixsrc', 'name': 'Vixsrc'},
     {'code': 'vidsrcsu', 'name': 'Vidsrc.su'},
     {'code': 'vidzee', 'name': 'Vidzee'},
+    {'code': 'vidfun', 'name': 'VidFun'},
     {'code': 'flixhq', 'name': 'FlixHQ'},
   ];
 

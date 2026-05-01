@@ -179,7 +179,10 @@ class ApiService {
   Future<core.ProviderStreamResponse> fetchMovieStream(int movieId, {String provider = 'vixsrc'}) async {
     final url = core.Endpoints.streamMovieUrl(caffeineBaseUrl, provider, movieId.toString(), language: audioLanguage, country: region);
     final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 30));
-    if (res.statusCode != 200) throw Exception('Stream failed');
+    if (res.statusCode != 200) {
+      debugPrint('[ApiService] ❌ Movie stream fetch failed for $provider: ${res.statusCode} ${res.body}');
+      throw Exception('Stream failed with status ${res.statusCode}');
+    }
     return core.ProviderStreamResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
@@ -187,7 +190,10 @@ class ApiService {
       int tmdbId, int season, int episode, {String provider = 'vixsrc'}) async {
     final url = core.Endpoints.streamTvUrl(caffeineBaseUrl, provider, tmdbId.toString(), season, episode, language: audioLanguage, country: region);
     final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 30));
-    if (res.statusCode != 200) throw Exception('Stream failed');
+    if (res.statusCode != 200) {
+      debugPrint('[ApiService] ❌ TV stream fetch failed for $provider: ${res.statusCode} ${res.body}');
+      throw Exception('Stream failed with status ${res.statusCode}');
+    }
     return core.ProviderStreamResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
