@@ -622,12 +622,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (_retryCount >= 2) {
             debugPrint('[PlayerScreen] 🛡️ Using proxy fallback for retry $_retryCount');
             // When using proxy, we use a minimal set of headers for the client-to-proxy request,
-            // but we MUST preserve Authorization to satisfy global API key middleware.
+            // but we MUST preserve or add Authorization to satisfy global API key middleware.
             finalHeaders = {
               'User-Agent': finalHeaders['User-Agent'] ?? '',
               'Accept': '*/*',
-              if (finalHeaders.containsKey('Authorization'))
-                'Authorization': finalHeaders['Authorization']!,
+              'Authorization': 'Bearer $caffeineApiKey',
             };
           }
 
