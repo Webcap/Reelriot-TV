@@ -126,12 +126,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _mainFocusNode.requestFocus();
 
       // Watchdog: The Chromecast Amlogic AVC decoder can stall during initialization.
-      _initWatchdogTimer = Timer(const Duration(seconds: 6), () {
+      // Watchdog: The Chromecast Amlogic AVC decoder can stall during initialization.
+      // We relax this to 12s for sports/HLS as they can have longer handshakes.
+      _initWatchdogTimer = Timer(Duration(seconds: _isSports ? 12 : 6), () {
         if (!mounted || _isDisposed || _hasInitialized || _isHandlingException) {
           return;
         }
         debugPrint(
-          '[PlayerScreen] ⚠️ Init watchdog fired — player not initialized after 6s, forcing reset',
+          '[PlayerScreen] ⚠️ Init watchdog fired — player not initialized after ${(_isSports ? 12 : 6)}s, forcing reset',
         );
         _forcePlayerReset();
       });
@@ -297,7 +299,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     final duration = _controller!.duration;
-    if (duration == Duration.zero) {
+    // Skip saving progress for live sports or if duration is invalid
+    if (_isSports || duration == Duration.zero) {
       return;
     }
 

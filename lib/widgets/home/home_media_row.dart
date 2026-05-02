@@ -13,6 +13,8 @@ class HomeMediaRow extends StatelessWidget {
   final Function(MovieListItem item) onTap;
   final Function(MovieListItem item) onLongPress;
 
+  final bool isSocial;
+
   const HomeMediaRow({
     super.key,
     required this.title,
@@ -20,6 +22,7 @@ class HomeMediaRow extends StatelessWidget {
     required this.onFocus,
     required this.onTap,
     required this.onLongPress,
+    this.isSocial = false,
   });
 
   @override
@@ -30,13 +33,21 @@ class HomeMediaRow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: s(48),
-            fontWeight: FontWeight.w800,
-          ),
+        Row(
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: s(48),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            if (isSocial) ...[
+              SizedBox(width: s(24)),
+              Icon(Icons.trending_up, color: const Color(0xFFE60000), size: s(48)),
+            ],
+          ],
         ),
         SizedBox(height: s(42)),
         SizedBox(

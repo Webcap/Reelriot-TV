@@ -29,6 +29,26 @@ class ApiService {
     return core.fetchConfig(caffeineBaseUrl, apiKey: caffeineApiKey);
   }
 
+  /// Fetches the unified discovery feed (Community Trending, AI Picks, etc.)
+  Future<Map<String, dynamic>> fetchDiscovery({String? userId, String? mediaType, String? region}) async {
+    var url = '$caffeineBaseUrl/v1/discovery';
+    final params = <String, String>{};
+    if (userId != null && userId != 'null') params['userId'] = userId;
+    if (mediaType != null) params['mediaType'] = mediaType;
+    if (region != null) params['region'] = region;
+    
+    if (params.isNotEmpty) {
+      final query = Uri(queryParameters: params).query;
+      url += '?$query';
+    }
+
+    final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 15));
+    if (res.statusCode != 200) {
+      throw Exception('Failed to load discovery feed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   /// TV App polls this to see if it's been linked.
   Future<http.Response> pollPairing(String code) async {
     final url = Uri.parse('$caffeineBaseUrl/tv/pair?code=${Uri.encodeComponent(code)}');

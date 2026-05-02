@@ -181,17 +181,22 @@ class CaffeinePlayerController extends ChangeNotifier {
     
     // Force seekable to true for better HLS/Proxy support
     (player.platform as dynamic).setProperty('force-seekable', 'yes');
-    (player.platform as dynamic).setProperty('demuxer-max-bytes', '50000000');
-    (player.platform as dynamic).setProperty('demuxer-max-back-bytes', '25000000');
+    (player.platform as dynamic).setProperty('demuxer-max-bytes', '128000000'); // 128MB
+    (player.platform as dynamic).setProperty('demuxer-max-back-bytes', '64000000'); // 64MB
+    
+    // HLS specific optimizations
+    (player.platform as dynamic).setProperty('hls-bitrate', '5000000'); // Cap at 5Mbps for stability
+    (player.platform as dynamic).setProperty('cache-pause', 'yes');
+    (player.platform as dynamic).setProperty('stream-buffer-size', '8192k');
 
     if (liveStream) {
       // Stability optimizations for live streams
-      (player.platform as dynamic).setProperty('demuxer-readahead-secs', '10');
-      (player.platform as dynamic).setProperty('cache-secs', '15');
+      (player.platform as dynamic).setProperty('demuxer-readahead-secs', '45'); // Further increase readahead
+      (player.platform as dynamic).setProperty('cache-secs', '60'); // Further increase cache
     } else {
       // Buffer settings for regular media
-      (player.platform as dynamic).setProperty('demuxer-max-bytes', '64M');
-      (player.platform as dynamic).setProperty('demuxer-max-back-bytes', '32M');
+      (player.platform as dynamic).setProperty('demuxer-max-bytes', '512M');
+      (player.platform as dynamic).setProperty('demuxer-max-back-bytes', '256M');
     }
 
     // Handle subtitles

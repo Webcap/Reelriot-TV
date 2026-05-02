@@ -70,22 +70,26 @@ class WatchHistoryService extends ChangeNotifier {
   }
 
   Future<void> _runSaveLoop() async {
+    bool changed = false;
     try {
       while (_pendingSave != null) {
         final data = _pendingSave!;
         _pendingSave = null;
-        await _executeSave(data);
+        final result = await _executeSave(data);
+        if (result) changed = true;
       }
     } finally {
       _isSaving = false;
       _activeSaveProcess = null;
-      notifyListeners();
+      if (changed) {
+        notifyListeners();
+      }
     }
   }
 
-  Future<void> _executeSave(Map<String, dynamic> data) async {
+  Future<bool> _executeSave(Map<String, dynamic> data) async {
     final user = _supabase.auth.currentUser;
-    if (user == null) return;
+    if (user == null) return false;
 
     try {
       final dynamic item = data['item'];
@@ -128,7 +132,7 @@ class WatchHistoryService extends ChangeNotifier {
           backdropPath = item['backdrop_path'];
           mType = item['mediaType'] ?? item['type'] ?? item['media_type'];
         } else {
-          return;
+          return false;
         }
       } else {
         if (item is TvShowDetail) {
@@ -149,22 +153,23 @@ class WatchHistoryService extends ChangeNotifier {
           backdropPath = item['backdrop_path'];
           mType = item['mediaType'] ?? item['type'] ?? item['media_type'];
         } else {
-          return;
+          return false;
         }
       }
       
       final bool isSportsTitle = title != null && (title.contains(' at ') || title.contains(' vs '));
       if (mType == 'live' || mediaId == -100 || isSportsTitle) {
         debugPrint('[WatchHistory] ℹ️ Skipping watch history for live/sports content: $title');
-        return;
+        return false;
       }
       
-      if (mediaId == null) return;
+      if (mediaId == null) return false;
 
-      final now = DateTime.now().toIso8601String();
-
+      // Only clear cache if we're actually going to save/update something
       _cachedHistory.clear();
       _lastFetchTime.clear();
+
+      final now = DateTime.now().toIso8601String();
 
       if (isFinished) {
         // --- COMPLETED ---
@@ -211,7 +216,7 @@ class WatchHistoryService extends ChangeNotifier {
           if (lastWatchedStr.isNotEmpty) {
             final lastWatched = DateTime.parse(lastWatchedStr);
             if (DateTime.now().difference(lastWatched).inMinutes < 5) {
-              return; 
+              return false; 
             }
           }
         }
@@ -278,8 +283,10 @@ class WatchHistoryService extends ChangeNotifier {
 
       _cachedHistory.clear();
       _lastFetchTime.clear();
+      return true;
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Error in _executeSave: $e');
+      return false;
     }
   }
 

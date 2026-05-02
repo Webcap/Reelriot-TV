@@ -350,6 +350,12 @@ class _PairingScreenState extends State<PairingScreen> {
                   ),
                 ),
                 _buildButton('Get new code', _createCode),
+                const SizedBox(height: 12),
+                _buildButton(
+                  'Browse as Guest', 
+                  () => Navigator.of(context).pushReplacementNamed('/home'),
+                  isSecondary: true,
+                ),
               ],
             ],
           ),
@@ -358,11 +364,11 @@ class _PairingScreenState extends State<PairingScreen> {
     );
   }
 
-  Widget _buildButton(String label, VoidCallback onPressed) {
+  Widget _buildButton(String label, VoidCallback onPressed, {bool isSecondary = false}) {
     return Padding(
       padding: const EdgeInsets.only(top: 24),
       child: LongPressFocus(
-        autofocus: true,
+        autofocus: !isSecondary, // Default focus to the primary action
         onTap: () {
           _log('Button pressed', label);
           onPressed();
@@ -373,15 +379,17 @@ class _PairingScreenState extends State<PairingScreen> {
             duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 20),
             decoration: BoxDecoration(
-              color: focused ? Colors.white : const Color(0xFFDC2626),
+              color: focused 
+                ? Colors.white 
+                : (isSecondary ? Colors.white10 : const Color(0xFFDC2626)),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: focused ? Colors.white : Colors.transparent,
+                color: focused ? Colors.white : Colors.white24,
                 width: 2,
               ),
               boxShadow: focused ? [
                 BoxShadow(
-                  color: const Color(0xFFDC2626).withValues(alpha: 0.4),
+                  color: (isSecondary ? Colors.white : const Color(0xFFDC2626)).withValues(alpha: 0.4),
                   blurRadius: 20,
                   spreadRadius: 2,
                 )

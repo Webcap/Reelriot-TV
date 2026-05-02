@@ -368,6 +368,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
   List<MovieListItem>? _tvRecommendations;
   String? _tvRecommendationsTitle;
   final RecommendationService _recService = RecommendationService();
+  List<DiscoverySection>? _apiSections;
   List<Map<String, dynamic>>? _history;
   List<Map<String, dynamic>>? _watchingShows;
   bool _loading = true;
@@ -381,6 +382,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
   final Map<int, String> _adUrls = {};
   UpdateInfo? _updateInfo;
   Timer? _debounceTimer;
+  bool _isLegacyFallback = false;
+  bool _historyDirty = false;
+  bool _isVisible = true;
 
   final List<Map<String, dynamic>> _movieGenres = [
     {'id': 28, 'name': 'Action', 'color': const Color(0xFFDC2626)},
@@ -423,10 +427,30 @@ class _MainHomeViewState extends State<_MainHomeView> {
     _historyService.addListener(_onHistoryChanged);
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final isCurrent = ModalRoute.of(context)?.isCurrent ?? false;
+    if (isCurrent && _historyDirty) {
+      debugPrint('[HomeScreen] 🔄 Became current and history is dirty, reloading...');
+      _historyDirty = false;
+      _reloadHistory(forceRefresh: true);
+    }
+  }
+
   void _onHistoryChanged() {
-    if (mounted) {
+    if (!mounted) return;
+    
+    // Check if this screen is currently visible/active in the navigator
+    final isCurrent = ModalRoute.of(context)?.isCurrent ?? false;
+    
+    if (isCurrent) {
       debugPrint('[HomeScreen] 🔄 History changed, reloading content quietly');
       _reloadHistory(forceRefresh: true);
+      _historyDirty = false;
+    } else {
+      debugPrint('[HomeScreen] ⏳ History changed while backgrounded, marking as dirty');
+      _historyDirty = true;
     }
   }
 
@@ -470,6 +494,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     });
   }
 
+
   void _onScroll() {
     if (!mounted) return;
     final offset = _scrollController.offset;
@@ -508,201 +533,87 @@ class _MainHomeViewState extends State<_MainHomeView> {
     try {
       if (forceRefresh) {
         await _historyService.waitForPendingSaves();
-        _checkForUpdate();
-      } else {
-         _checkForUpdate();
       }
+      _checkForUpdate();
+
       final isTv = _selectedCategory == 'TV Shows';
+      final userId = Supabase.instance.client.auth.currentUser?.id;
       
-      if (isTv) {
-        final results = await Future.wait([
-          _historyService.getHistory(mediaType: 'tv', forceRefresh: forceRefresh),
-          _api.fetchTrendingTv(),
-          _api.fetchPopularTv(),
-          _api.fetchTopRatedTv(),
-          _api.fetchAiringToday(),
-          _recService.getRecommendations(mediaType: 'tv'),
-          _historyService.getRecentlyWatchedShows(forceRefresh: forceRefresh),
-        ]);
+      // 1. Fetch Discovery Feed with Retries (The Brain)
+      Map<String, dynamic>? discovery;
+      int retryCount = 0;
+      const maxRetries = 3;
 
-        final history = results[0] as List<Map<String, dynamic>>;
-        final trending = results[1] as TvListResponse;
-        final popular = results[2] as TvListResponse;
-        final topRated = results[3] as TvListResponse;
-        final airingToday = results[4] as TvListResponse;
-        final aiResult = results[5] as RecommendationResult;
-        final watchingShows = results[6] as List<Map<String, dynamic>>;
-        debugPrint('[HomeScreen] 📺 Found ${watchingShows.length} watching shows');
-
-        final upNextItems = await _processUpNext(watchingShows);
-
-         List<MovieListItem>? tvRecommendations;
-        String? tvRecommendationsTitle;
- 
-        if (history.isNotEmpty) {
-          // Try up to 3 items from history to get recommendations
-          final historyItems = history.where((h) {
-            final isLive = h['type'] == 'live' || h['media_type'] == 'live';
-            final title = (h['title'] ?? '').toString();
-            final isSports = title.contains(' at ') || title.contains(' vs ');
-            return h['media_id'] != null && !isLive && !isSports;
-          }).take(3);
-          for (final item in historyItems) {
-            try {
-              final recs = await _api.fetchTvRecommendations(item['media_id']);
-              if (recs.results.isNotEmpty) {
-                tvRecommendations = recs.results.map((t) => MovieListItem(
-                  id: t.id,
-                  title: t.name,
-                  posterPath: t.posterPath,
-                  backdropPath: t.backdropPath,
-                  overview: t.overview,
-                )).toList();
-                tvRecommendationsTitle = 'Because you watched ${item['title']}';
-                break; // Success!
-              }
-            } catch (e) {
-              debugPrint('[HomeScreen] ⚠️ Recommendation attempt failed for "${item['title']}" (ID: ${item['media_id']}): $e');
-            }
-          }
-        }
-
-        final trendingList = trending.results.take(5).map((t) => MovieListItem(
-          id: t.id,
-          title: t.name,
-          posterPath: t.posterPath,
-          backdropPath: t.backdropPath,
-          overview: t.overview,
-        )).toList();
-
-        _precacheImages(trendingList);
-
-        if (mounted) {
-          setState(() {
-            _history = history;
-            _aiRecommendations = aiResult.items;
-            _aiAnchorTitle = aiResult.anchorTitle;
-            _tvRecommendations = tvRecommendations;
-            _tvRecommendationsTitle = tvRecommendationsTitle;
-            _watchingShows = upNextItems;
-            
-            if (trendingList.isNotEmpty) {
-              final first = trendingList.first;
-              _focusedMovie = MovieDetail(
-                id: first.id,
-                title: first.title,
-                overview: first.overview,
-                posterPath: first.posterPath,
-                backdropPath: first.backdropPath,
-                voteAverage: first.voteAverage,
-              );
-              
-              _trending = trendingList;
-
-              _weeklyTrending = trending.results.map((t) => MovieListItem(
-                id: t.id,
-                title: t.name,
-                posterPath: t.posterPath,
-                backdropPath: t.backdropPath,
-                overview: t.overview,
-                mediaType: 'tv',
-                releaseDate: t.firstAirDate,
-              )).toList();
-            }
-            
-            _popular = popular.results.map((t) => MovieListItem(
-              id: t.id,
-              title: t.name,
-              posterPath: t.posterPath,
-              backdropPath: t.backdropPath,
-              overview: t.overview,
-              mediaType: 'tv',
-              releaseDate: t.firstAirDate,
-            )).toList();
-
-            _topRated = topRated.results.map((t) => MovieListItem(
-              id: t.id,
-              title: t.name,
-              posterPath: t.posterPath,
-              backdropPath: t.backdropPath,
-              overview: t.overview,
-              mediaType: 'tv',
-              releaseDate: t.firstAirDate,
-            )).toList();
-
-            _airingToday = airingToday.results.map((t) => MovieListItem(
-              id: t.id,
-              title: t.name,
-              posterPath: t.posterPath,
-              backdropPath: t.backdropPath,
-              overview: t.overview,
-              mediaType: 'tv',
-              releaseDate: t.firstAirDate,
-            )).toList();
-          });
-          _startAutoSlide();
-        }
-      } else {
-        final results = await Future.wait([
-          _historyService.getHistory(mediaType: 'movie', forceRefresh: forceRefresh),
-          _api.fetchTrendingMovies(),
-          _api.fetchPopularMovies(),
-          _api.fetchTopRatedMovies(),
-          _api.fetchUpcomingMovies(),
-          _api.fetchNowPlayingMovies(),
-          _recService.getRecommendations(mediaType: 'movie'),
-        ]);
-
-        final history = results[0] as List<Map<String, dynamic>>;
-        final trending = results[1] as MovieListResponse;
-        final popular = results[2] as MovieListResponse;
-        final topRated = results[3] as MovieListResponse;
-        final upcoming = results[4] as MovieListResponse;
-        final nowPlaying = results[5] as MovieListResponse;
-        final aiResult = results[6] as RecommendationResult;
-
-        final today = DateTime.now();
-        bool isReleased(MovieListItem m) {
-          if (m.releaseDate == null || m.releaseDate!.isEmpty) return false;
-          try {
-            return DateTime.parse(m.releaseDate!).isBefore(today.add(const Duration(days: 1)));
-          } catch (_) {
-            return false;
-          }
-        }
-
-        final releasedTrending = trending.results.where(isReleased).toList();
-        final releasedPopular = popular.results.where(isReleased).toList();
-        final trendingList = releasedTrending.take(5).toList();
-
-        _precacheImages(trendingList);
-        
-        if (mounted) {
-          setState(() {
-            _history = history;
-            _aiRecommendations = aiResult.items;
-            _aiAnchorTitle = aiResult.anchorTitle;
-            if (trendingList.isNotEmpty) {
-              final first = trendingList.first;
-              _focusedMovie = MovieDetail(
-                id: first.id,
-                title: first.title,
-                overview: first.overview,
-                posterPath: first.posterPath,
-                backdropPath: first.backdropPath,
-                voteAverage: first.voteAverage,
-              );
-              _trending = trendingList;
-              _weeklyTrending = releasedTrending;
-            }
-            _popular = releasedPopular;
-            _topRated = topRated.results;
-            _upcoming = upcoming.results;
-            _nowPlaying = nowPlaying.results;
-          });
-          _startAutoSlide();
+      while (retryCount < maxRetries) {
+        try {
+          discovery = await _api.fetchDiscovery(
+            userId: userId,
+            mediaType: isTv ? 'tv' : 'movie',
+            region: _api.region,
+          );
+          break; // Success
+        } catch (e) {
+          retryCount++;
+          debugPrint('[HomeScreen] ⚠️ Discovery load attempt $retryCount failed: $e');
+          if (retryCount >= maxRetries) rethrow;
+          await Future.delayed(Duration(seconds: retryCount)); // Backoff
         }
       }
+
+      if (discovery == null) throw Exception('Discovery data is null after retries');
+
+      // 2. Fetch History & Contextual Data in parallel
+      final results = await Future.wait([
+        _historyService.getHistory(mediaType: isTv ? 'tv' : 'movie', forceRefresh: forceRefresh),
+        if (isTv) _historyService.getRecentlyWatchedShows(forceRefresh: forceRefresh) else Future.value(null),
+      ]);
+
+      final history = results[0] as List<Map<String, dynamic>>;
+      final watchingShows = results[1];
+      List<Map<String, dynamic>>? upNextItems;
+      if (isTv && watchingShows != null) {
+        upNextItems = await _processUpNext(watchingShows);
+      }
+
+      // 3. Map Discovery Sections to existing variables
+      List<DiscoverySection> apiSections = (discovery['sections'] as List).map((s) => DiscoverySection.fromJson(s)).toList();
+      debugPrint('[HomeScreen] 📡 Discovery Feed Received: ${apiSections.length} sections');
+      for (var s in apiSections) {
+        debugPrint('[HomeScreen]    - Row: "${s.title}" (${s.items.length} items)');
+      }
+      
+      List<MovieListItem>? trending;
+      List<MovieListItem>? communityTrending;
+      List<MovieListItem>? aiRecs;
+      List<MovieListItem>? popular;
+      List<MovieListItem>? topRated;
+      
+      for (var section in apiSections) {
+        if (section.type == 'community') {
+          communityTrending = section.items;
+          trending ??= section.items.take(5).toList();
+        } else if (section.type == 'ai') {
+          aiRecs = section.items;
+        } else if (section.title.toLowerCase().contains('premiere') || 
+                   section.title.toLowerCase().contains('recent') || 
+                   section.title.toLowerCase().contains('fresh') ||
+                   section.title.toLowerCase().contains('popular')) {
+          popular = section.items;
+          trending ??= section.items.take(5).toList();
+        } else if (section.title.toLowerCase().contains('acclaimed') || 
+                   section.title.toLowerCase().contains('trending') ||
+                   section.type == 'tmdb') {
+          topRated = section.items;
+          trending ??= section.items.take(5).toList();
+        }
+      }
+
+      // Precision Fallbacks: Ensure we have something for the hero section
+      trending ??= popular?.take(5).toList() ?? 
+                  communityTrending?.take(5).toList() ?? 
+                  (apiSections.isNotEmpty ? apiSections.firstWhere((s) => s.items.isNotEmpty, orElse: () => apiSections.first).items.take(5).toList() : null);
+      
+      popular ??= trending;
 
       // --- Featured Live Event ---
       MovieListItem? featuredItem;
@@ -757,7 +668,6 @@ class _MainHomeViewState extends State<_MainHomeView> {
           debugPrint('[HomeScreen] ❌ Error fetching ads: $e');
         }
 
-        // Inject simulated ads if simulation is enabled
         if (kDebugMode && SettingsService().simulateAds) {
           if (ads.isEmpty) {
             ads.add(MovieListItem(
@@ -769,50 +679,57 @@ class _MainHomeViewState extends State<_MainHomeView> {
               mediaType: 'ad',
               isSponsored: true,
             ));
-            ads.add(MovieListItem(
-              id: 999902,
-              title: 'CyberShield VPN',
-              overview: 'Stay secure anywhere with our ultra-fast VPN service.',
-              posterPath: 'https://caffeine.synqholdings.com/assets/images/simulated/poster_ad_2.png',
-              backdropPath: 'https://caffeine.synqholdings.com/assets/images/simulated/poster_ad_2.png',
-              mediaType: 'ad',
-              isSponsored: true,
-            ));
           }
         }
       }
 
       if (mounted) {
         setState(() {
+          _history = history;
+          _watchingShows = upNextItems;
+          _apiSections = apiSections;
+          _trending = trending;
+          _popular = popular;
+          _topRated = topRated;
+          _aiRecommendations = aiRecs;
+          _weeklyTrending = communityTrending; 
+          _nowPlaying = popular;
+          _loading = false;
+
           if (featuredItem != null && _trending != null) {
             _trending!.insert(0, featuredItem);
-            
-            // If the slider was just loaded, refocus on the featured item
-            if (_trendingIndex == 0) {
-              _focusedMovie = MovieDetail(
-                id: featuredItem.id,
-                title: featuredItem.title,
-                overview: featuredItem.overview,
-                posterPath: featuredItem.posterPath,
-                backdropPath: featuredItem.backdropPath,
-                mediaType: featuredItem.mediaType,
-              );
-            }
           }
 
           // Inject ads into rows
           if (ads.isNotEmpty && _popular != null && _popular!.length > 5) {
             _popular!.insert(2, ads[0]);
-            if (ads.length > 1 && _topRated != null && _topRated!.length > 5) {
-              _topRated!.insert(4, ads[1]);
-            }
           }
+
+          if (trending != null && trending.isNotEmpty) {
+            final first = trending.first;
+            _focusedMovie = MovieDetail(
+              id: first.id,
+              title: first.title,
+              overview: first.overview,
+              posterPath: first.posterPath,
+              backdropPath: first.backdropPath,
+              voteAverage: first.voteAverage,
+              mediaType: first.mediaType,
+            );
+          }
+          _isLegacyFallback = false;
+          debugPrint('[HomeScreen] ✅ Discovery Engine loaded successfully');
         });
+        _startAutoSlide();
       }
     } catch (e) {
-      debugPrint('[HomeScreen] ❌ Error loading content: $e');
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      debugPrint('[HomeScreen] ❌ Final Discovery Failure: $e');
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to load discovery feed. Please check your connection.')),
+        );
+      }
     }
   }
 
@@ -1271,135 +1188,40 @@ class _MainHomeViewState extends State<_MainHomeView> {
                       ],
                     ),
               ),
-              HomeAiRecommendationsRow(
-                recommendations: _aiRecommendations,
-                title: _aiRecommendationsTitle,
-                loading: _aiLoading,
-                onRefresh: () async {
-                  final situation = await _showSituationDialog(context);
-                  if (situation != null && situation.isNotEmpty) {
-                    _loadAiRecommendations(situation: situation);
-                  }
-                },
-                onFocus: (id) => _updateFocusedMovie(id),
-                onTap: (m) => _navigateToDetail(m),
-                onLongPress: (m) => _showItemContextMenu(item: m, isMovie: _selectedCategory != 'TV Shows'),
+              // --- UP NEXT ROW (TV ONLY) ---
+              if (_selectedCategory == 'TV Shows')
+                _buildUpNextRow(context, s),
+              // --- DYNAMIC DISCOVERY ROWS ---
+              if (_apiSections != null)
+                ..._apiSections!.map((section) {
+                  if (section.items.isEmpty) return const SizedBox.shrink();
+                  
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      HomeMediaRow(
+                        title: section.title,
+                        items: section.items,
+                        isSocial: section.type == 'social', // We can add a social icon in the row widget
+                        onFocus: (id) => _updateFocusedMovie(id),
+                        onTap: (m) => _navigateToDetail(m),
+                        onLongPress: (m) => _showItemContextMenu(
+                          item: m, 
+                          isMovie: m.mediaType != 'tv'
+                        ),
+                      ),
+                      SizedBox(height: s(96)),
+                    ],
+                  );
+                }),
+              
+              // Fallback to genres and other static rows if needed
+              HomeGenresRow(
+                genres: _selectedCategory == 'TV Shows' ? _tvGenres : _movieGenres,
+                onGenreTap: (g) => _navigateToGenre(g),
               ),
-              if (_selectedCategory == 'TV Shows') ...[
-                if (_tvRecommendations != null && _tvRecommendations!.isNotEmpty) ...[
-                  SizedBox(height: s(96)),
-                  HomeMediaRow(
-                    title: _tvRecommendationsTitle ?? 'Recommended for You',
-                    items: _tvRecommendations,
-                    onFocus: (id) => _updateFocusedMovie(id),
-                    onTap: (m) => _navigateToDetail(m),
-                    onLongPress: (m) => _showItemContextMenu(item: m, isMovie: false),
-                  ),
-                ],
-                if (_watchingShows != null && _watchingShows!.isNotEmpty) ...[
-                  SizedBox(height: s(96)),
-                  RepaintBoundary(child: _buildUpNextRow(context, s)),
-                ],
-                SizedBox(height: s(96)),
-                HomeGenresRow(
-                  genres: _tvGenres,
-                  onGenreTap: (g) => _navigateToGenre(g),
-                ),
-                SizedBox(height: s(96)),
-                HomeMediaRow(
-                  title: 'Popular shows this week',
-                  items: _weeklyTrending,
-                  onFocus: (id) => _updateFocusedMovie(id),
-                  onTap: (m) => _navigateToDetail(m),
-                  onLongPress: (m) => _showItemContextMenu(item: m, isMovie: false),
-                ),
-                SizedBox(height: s(96)),
-                HomeProvidersRow(onProviderTap: (p) => _navigateToProvider(p)),
-                SizedBox(height: s(96)),
-                HomeAiringTodayRow(
-                  airingToday: _airingToday,
-                  dateLabel: _airingToday != null && _airingToday!.isNotEmpty 
-                      ? '${_monthName(DateTime.now().month)} ${DateTime.now().day}, ${DateTime.now().year}' 
-                      : null,
-                  onFocus: (id) => _updateFocusedMovie(id),
-                  onTap: (m) => _navigateToDetail(m),
-                  onLongPress: (m) => _showItemContextMenu(item: m, isMovie: false),
-                ),
-                SizedBox(height: s(96)),
-                HomeMediaRow(
-                  title: 'Top Rated TV Shows',
-                  items: _topRated,
-                  onFocus: (id) => _updateFocusedMovie(id),
-                  onTap: (m) => _navigateToDetail(m),
-                  onLongPress: (m) => _showItemContextMenu(item: m, isMovie: false),
-                ),
-                SizedBox(height: s(96)),
-                HomeMediaRow(
-                  title: 'Popular TV Shows',
-                  items: _popular,
-                  onFocus: (id) => _updateFocusedMovie(id),
-                  onTap: (m) => _navigateToDetail(m),
-                  onLongPress: (m) => _showItemContextMenu(item: m, isMovie: false),
-                ),
-              ] else ...[
-                SizedBox(height: s(96)),
-                HomeMediaRow(
-                  title: 'Popular movies this week',
-                  items: _weeklyTrending,
-                  onFocus: (id) => _updateFocusedMovie(id),
-                  onTap: (m) => _navigateToDetail(m),
-                  onLongPress: (m) => _showItemContextMenu(item: m, isMovie: true),
-                ),
-                SizedBox(height: s(96)),
-                RepaintBoundary(
-                  child: HomeGenresRow(
-                    genres: _movieGenres,
-                    onGenreTap: (g) => _navigateToGenre(g),
-                  ),
-                ),
-                SizedBox(height: s(96)),
-                RepaintBoundary(
-                  child: HomeMediaRow(
-                    title: 'Now Playing',
-                    items: _nowPlaying,
-                    onFocus: (id) => _updateFocusedMovie(id),
-                    onTap: (m) => _navigateToDetail(m),
-                    onLongPress: (m) => _showItemContextMenu(item: m, isMovie: true),
-                  ),
-                ),
-                SizedBox(height: s(96)),
-                RepaintBoundary(child: HomeProvidersRow(onProviderTap: (p) => _navigateToProvider(p))),
-                SizedBox(height: s(96)),
-                RepaintBoundary(
-                  child: HomeMediaRow(
-                    title: 'Top Rated Movies',
-                    items: _topRated,
-                    onFocus: (id) => _updateFocusedMovie(id),
-                    onTap: (m) => _navigateToDetail(m),
-                    onLongPress: (m) => _showItemContextMenu(item: m, isMovie: true),
-                  ),
-                ),
-                SizedBox(height: s(96)),
-                RepaintBoundary(
-                  child: HomeMediaRow(
-                    title: 'Upcoming Movies',
-                    items: _upcoming,
-                    onFocus: (id) => _updateFocusedMovie(id),
-                    onTap: (m) => _navigateToDetail(m),
-                    onLongPress: (m) => _showItemContextMenu(item: m, isMovie: true),
-                  ),
-                ),
-                SizedBox(height: s(96)),
-                RepaintBoundary(
-                  child: HomeMediaRow(
-                    title: 'Popular Movies',
-                    items: _popular,
-                    onFocus: (id) => _updateFocusedMovie(id),
-                    onTap: (m) => _navigateToDetail(m),
-                    onLongPress: (m) => _showItemContextMenu(item: m, isMovie: true),
-                  ),
-                ),
-              ],
+              SizedBox(height: s(96)),
+              HomeProvidersRow(onProviderTap: (p) => _navigateToProvider(p)),
               SizedBox(height: s(150)),
             ],
           ),
@@ -1551,6 +1373,77 @@ class _MainHomeViewState extends State<_MainHomeView> {
     return months[month - 1];
   }
 
+  Widget _buildUpNextRow(BuildContext context, double Function(double) s) {
+    if (_watchingShows == null || _watchingShows!.isEmpty) return const SizedBox.shrink();
+
+    return HomeUpNextRow(
+      watchingShows: _watchingShows!,
+      onFocus: (id) => _updateFocusedMovie(id, isMovie: false),
+      onLongPress: (show) => _showItemContextMenu(
+        item: show,
+        isMovie: false,
+        season: show['season_num'] as int?,
+        episode: show['episode_num'] as int?,
+        showId: show['id'] as int?,
+      ),
+      onTap: (show) async {
+        final season = show['season_num'] as int?;
+        final episode = show['episode_num'] as int?;
+        
+        if (season != null && episode != null) {
+          if (_isProcessing) return;
+          _isProcessing = true;
+          
+          try {
+            final detail = await _api.fetchTvDetail(show['id']);
+            if (!context.mounted) return;
+            
+            final history = await _historyService.getHistory(mediaType: 'tv');
+            final itemHistory = history.firstWhere(
+              (h) => h['media_id'] == show['id'] && h['season_num'] == season && h['episode_num'] == episode,
+              orElse: () => <String, dynamic>{},
+            );
+
+            Duration? startAt;
+            if (itemHistory.isNotEmpty && (itemHistory['position_ms'] ?? 0) > 0) {
+              if (!context.mounted) return;
+              startAt = await _showResumeDialog(
+                context,
+                Duration(milliseconds: itemHistory['position_ms']), 
+                itemHistory['duration_ms'] ?? 0
+              );
+              if (startAt == null) return;
+            }
+
+            if (!context.mounted) return;
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => VideoLoaderScreen(
+                  tvShow: detail,
+                  season: season,
+                  episode: episode,
+                  startPosition: startAt,
+                ),
+              ),
+            );
+            await _historyService.waitForPendingSaves();
+            _loadContent(quiet: true);
+          } finally {
+            _isProcessing = false;
+          }
+        } else {
+          _navigateToDetail(MovieListItem(
+            id: show['id'],
+            title: show['name'] ?? '',
+            mediaType: 'tv',
+            posterPath: show['poster_path'],
+          ));
+        }
+      },
+    );
+  }
+
   Widget _buildContinueWatchingRow(BuildContext context, double Function(double) s) {
     if (_history == null) return const SizedBox.shrink();
     final validHistory = _history!.where((h) => h['media_id'] != null && h['title'] != null).toList();
@@ -1667,67 +1560,6 @@ class _MainHomeViewState extends State<_MainHomeView> {
   }
 
 
-  Widget _buildUpNextRow(BuildContext context, double Function(double) s) {
-    if (_watchingShows == null || _watchingShows!.isEmpty) return const SizedBox.shrink();
-
-    return HomeUpNextRow(
-      watchingShows: _watchingShows!,
-      onFocus: (id) => _updateFocusedMovie(id, isMovie: false),
-      onLongPress: (show) => _showItemContextMenu(
-        item: show,
-        isMovie: false,
-        season: show['season_num'] as int?,
-        episode: show['episode_num'] as int?,
-        showId: show['id'] as int?,
-      ),
-      onTap: (show) async {
-        final season = show['season_num'] as int?;
-        final episode = show['episode_num'] as int?;
-        
-        if (season != null && episode != null) {
-          final detail = await _api.fetchTvDetail(show['id']);
-          if (!mounted) return;
-          
-          final history = await _historyService.getHistory(mediaType: 'tv');
-          final itemHistory = history.firstWhere(
-            (h) => h['media_id'] == show['id'] && h['season_num'] == season && h['episode_num'] == episode,
-            orElse: () => {},
-          );
-
-          Duration? startAt;
-          if (itemHistory.isNotEmpty && (itemHistory['position_ms'] ?? 0) > 0) {
-            if (!context.mounted) return;
-            startAt = await _showResumeDialog(
-              context,
-              Duration(milliseconds: itemHistory['position_ms']), 
-              itemHistory['duration_ms'] ?? 0
-            );
-            if (startAt == null) return;
-          }
-
-          if (!context.mounted) return;
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => VideoLoaderScreen(
-                tvShow: detail,
-                season: season,
-                episode: episode,
-                startPosition: startAt,
-              ),
-            ),
-          );
-        } else {
-          await Navigator.of(context).push(
-            MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: show['id'])),
-          );
-        }
-        await _historyService.waitForPendingSaves();
-        await Future.delayed(const Duration(seconds: 2));
-        if (mounted) _loadContent(quiet: true, forceRefresh: true);
-      },
-    );
-  }
 
   Future<String?> _showSituationDialog(BuildContext context) {
     final controller = TextEditingController();
@@ -1768,8 +1600,24 @@ class _MainHomeViewState extends State<_MainHomeView> {
       ),
     );
   }
+}
 
+class DiscoverySection {
+  final String title;
+  final List<MovieListItem> items;
+  final String type;
+  final String mediaType;
 
+  DiscoverySection({required this.title, required this.items, required this.type, required this.mediaType});
+
+  factory DiscoverySection.fromJson(Map<String, dynamic> json) {
+    return DiscoverySection(
+      title: json['title'] ?? '',
+      type: json['type'] ?? '',
+      mediaType: json['mediaType'] ?? '',
+      items: (json['items'] as List).map((i) => MovieListItem.fromJson(i as Map<String, dynamic>)).toList(),
+    );
+  }
 }
 
 
