@@ -89,8 +89,8 @@ class SettingsService extends ChangeNotifier {
 
   void updateFromConfig(Map<String, dynamic> config) {
     // Check various keys for sports availability
-    _sportsEnabled = (config['enable_ott'] == true ||
-            config['enable_ott'].toString().toLowerCase() == 'true') ||
+    _sportsEnabled = (config['enable_live_sports'] == true ||
+            config['enable_live_sports'].toString().toLowerCase() == 'true') ||
         (config['sports_enabled'] == true ||
             config['sports_enabled'].toString().toLowerCase() == 'true');
 
