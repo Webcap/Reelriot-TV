@@ -30,8 +30,14 @@ class CaffeinePlayerSubtitlesSource {
   final String? name;
   final String? url;
   final String? data;
+  final bool isDefault;
 
-  CaffeinePlayerSubtitlesSource({this.name, this.url, this.data});
+  CaffeinePlayerSubtitlesSource({
+    this.name,
+    this.url,
+    this.data,
+    this.isDefault = false,
+  });
 }
 
 class CaffeinePlayerController extends ChangeNotifier {
@@ -201,18 +207,28 @@ class CaffeinePlayerController extends ChangeNotifier {
 
     // Handle subtitles
     if (subtitles != null && subtitles.isNotEmpty) {
+      CaffeinePlayerSubtitlesSource? defaultSub;
+      
       for (var sub in subtitles) {
-        if (sub.url != null) {
-          player.setSubtitleTrack(SubtitleTrack.uri(
-            sub.url!,
-            title: sub.name,
-          ));
-        } else if (sub.data != null) {
-          player.setSubtitleTrack(SubtitleTrack.data(
-            sub.data!,
-            title: sub.name,
-          ));
+        final track = sub.url != null 
+            ? SubtitleTrack.uri(sub.url!, title: sub.name)
+            : SubtitleTrack.data(sub.data!, title: sub.name);
+            
+        player.setSubtitleTrack(track);
+        if (sub.isDefault) {
+          defaultSub = sub;
         }
+      }
+      
+      // If no default was found, turn off subtitles (prevents last one from staying on)
+      if (defaultSub == null) {
+        player.setSubtitleTrack(SubtitleTrack.no());
+      } else {
+        // Re-select the default one to be sure (since the loop above selects each one)
+        final track = defaultSub.url != null
+            ? SubtitleTrack.uri(defaultSub.url!, title: defaultSub.name)
+            : SubtitleTrack.data(defaultSub.data!, title: defaultSub.name);
+        player.setSubtitleTrack(track);
       }
     }
 
@@ -225,11 +241,16 @@ class CaffeinePlayerController extends ChangeNotifier {
     );
     
     if (startAt > Duration.zero) {
+      debugPrint('[CaffeinePlayer] ⏩ Seeking to start position: $startAt');
+      
+      // Attempt immediate seek
       await player.seek(startAt);
       
+      // Also set up a listener to re-apply seek once metadata/duration is known
       StreamSubscription<Duration>? sub;
       sub = player.stream.duration.listen((d) {
         if (d > Duration.zero) {
+          debugPrint('[CaffeinePlayer] ⏳ Metadata loaded (Duration: $d). Re-applying seek to $startAt');
           player.seek(startAt);
           sub?.cancel();
         }

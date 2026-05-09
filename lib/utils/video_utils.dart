@@ -93,7 +93,7 @@ class VideoUtils {
         final content = await getSubtitleContent(url);
         if (content == null) continue;
 
-        // final isDefault = i == bestPreferredIndex;
+        final isDefault = subtitles[i].isDefault == true || i == bestPreferredIndex;
 
         final uriPath =
             Uri.tryParse(url)?.path.toLowerCase() ?? url.toLowerCase();
@@ -109,6 +109,7 @@ class VideoUtils {
           CaffeinePlayerSubtitlesSource(
             name: subtitles[i].label ?? 'Unknown',
             data: processedContent,
+            isDefault: isDefault,
           ),
         );
       } catch (e) {

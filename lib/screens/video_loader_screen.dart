@@ -210,20 +210,19 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     for (int i = 0; i < _providers.length; i++) {
       if (!mounted) return;
 
+      // 1. Determine start position (cached for retries)
       Duration? startPos;
-      if (i == 0) {
-        if (_currentStartPosition != null) {
-          startPos = _currentStartPosition;
-          // Clear it after first use so subsequent provider retries don't force it
-          _currentStartPosition = null;
-        } else {
-          startPos = await _historyService.getSavedProgress(
-            mediaId!,
-            widget.movie != null,
-            season: _currentSeason,
-            episode: _currentEpisode,
-          );
-        }
+      if (_currentStartPosition != null) {
+        startPos = _currentStartPosition;
+      } else {
+        startPos = await _historyService.getSavedProgress(
+          mediaId!,
+          widget.movie != null,
+          season: _currentSeason,
+          episode: _currentEpisode,
+        );
+        // Cache it so subsequent provider retries use the same position
+        _currentStartPosition = startPos;
       }
 
       final providerCode = _providers[i]['code']!;
