@@ -160,6 +160,13 @@ class CaffeinePlayerController extends ChangeNotifier {
     List<CaffeinePlayerSubtitlesSource>? subtitles,
   }) async {
     if (_isDisposed) return;
+    
+    // Clear old subscriptions to avoid listener leaks (important for provider retries)
+    for (var sub in _subscriptions) {
+      sub.cancel();
+    }
+    _subscriptions.clear();
+
     _isLiveStream = liveStream;
     notifyListeners();
 
@@ -194,6 +201,14 @@ class CaffeinePlayerController extends ChangeNotifier {
     (player.platform as dynamic).setProperty('hls-bitrate', '5000000'); // Cap at 5Mbps for stability
     (player.platform as dynamic).setProperty('cache-pause', 'yes');
     (player.platform as dynamic).setProperty('stream-buffer-size', '8192k');
+
+    // Set initial start position via mpv property (most robust way)
+    if (startAt > Duration.zero) {
+      // mpv 'start' property accepts seconds or HH:MM:SS
+      (player.platform as dynamic).setProperty('start', '${startAt.inSeconds}');
+    } else {
+      (player.platform as dynamic).setProperty('start', '0');
+    }
 
     if (liveStream) {
       // Stability optimizations for live streams
@@ -241,21 +256,29 @@ class CaffeinePlayerController extends ChangeNotifier {
     );
     
     if (startAt > Duration.zero) {
-      debugPrint('[CaffeinePlayer] ⏩ Seeking to start position: $startAt');
+      debugPrint('[CaffeinePlayer] ⏩ Applying startup seek: $startAt');
       
-      // Attempt immediate seek
-      await player.seek(startAt);
+      // 1. First attempt: Standard seek immediately after open
+      player.seek(startAt);
       
-      // Also set up a listener to re-apply seek once metadata/duration is known
+      // 2. Second attempt: Wait for duration to be known (most reliable for HLS)
       StreamSubscription<Duration>? sub;
       sub = player.stream.duration.listen((d) {
-        if (d > Duration.zero) {
-          debugPrint('[CaffeinePlayer] ⏳ Metadata loaded (Duration: $d). Re-applying seek to $startAt');
+        // Only trigger when duration is valid and significantly positive
+        if (d.inSeconds > 1) {
+          debugPrint('[CaffeinePlayer] ⏳ Duration confirmed ($d). Re-applying seek to $startAt');
           player.seek(startAt);
           sub?.cancel();
         }
       });
       _subscriptions.add(sub);
+
+      // 3. Third attempt: Small delay as a safety net for slow decoders
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (!_isDisposed) {
+          player.seek(startAt);
+        }
+      });
     }
 
     _emit(CaffeinePlayerEventType.initialized);
