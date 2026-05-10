@@ -127,13 +127,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       // Watchdog: The Chromecast Amlogic AVC decoder can stall during initialization.
       // Watchdog: The Chromecast Amlogic AVC decoder can stall during initialization.
-      // We relax this to 12s for sports/HLS as they can have longer handshakes.
-      _initWatchdogTimer = Timer(Duration(seconds: _isSports ? 12 : 6), () {
+      // We relax this to 15s for all media types to ensure the hardware decoder has 
+      // enough time to handshake and report dimensions (width > 0).
+      _initWatchdogTimer = Timer(const Duration(seconds: 15), () {
         if (!mounted || _isDisposed || _hasInitialized || _isHandlingException) {
           return;
         }
         debugPrint(
-          '[PlayerScreen] ⚠️ Init watchdog fired — player not initialized after ${(_isSports ? 12 : 6)}s, forcing reset',
+          '[PlayerScreen] ⚠️ Init watchdog fired — player not initialized after 15s, forcing reset',
         );
         _forcePlayerReset();
       });
@@ -404,6 +405,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       } else if (event.type == CaffeinePlayerEventType.initialized) {
         _safeSetState(() {
           _hasInitialized = true;
+          debugPrint('[PlayerScreen] ✅ State updated: _hasInitialized = true. Overlay should fade.');
         });
         _initWatchdogTimer?.cancel();
         _sessionStartTime = DateTime.now();
@@ -780,6 +782,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       final uri = Uri.parse(url);
       if (uri.scheme.isEmpty || uri.host.isEmpty) return '';
+      
+      // CRITICAL: Avoid loopback Referer. If we are hitting our own API, 
+      // do NOT send the API host as the Referer. This triggers WAF/Nginx 
+      // security rules (403 Forbidden).
+      final apiHost = Uri.tryParse(_api.caffeineBaseUrl)?.host;
+      if (apiHost != null && uri.host == apiHost) {
+        return '';
+      }
+
       // Most CDNs (vixsrc, vidlink, vidsrc) require the trailing slash on Referer
       return '${uri.scheme}://${uri.host}/';
     } catch (_) {
@@ -807,12 +818,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Standard headers for all requests
     final Map<String, String> headers = {
       'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
       'Accept': '*/*',
       'Connection': 'keep-alive',
-      'Sec-Fetch-Mode': 'cors',
-      'Sec-Fetch-Site': 'cross-site',
-      'Sec-Fetch-Dest': 'empty',
     };
 
     // Helper to normalize keys to TitleCase for common headers to prevent duplicates
@@ -828,6 +836,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     // Helper to strip trailing slashes from URL-like header values
     String stripTrailingSlash(String value) {
+      if (value.length <= 8) return value; // Too short to be a URL
       return value.endsWith('/') ? value.substring(0, value.length - 1) : value;
     }
 
@@ -857,9 +866,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     } else {
       // Fallback: use a generic Origin if the Referer is missing but we're in HLS
-      if (!headers.containsKey('Origin')) {
+      // However, if we're hitting our own proxy, we skip this to avoid triggering security rules.
+      final apiHost = Uri.tryParse(_api.caffeineBaseUrl)?.host;
+      final targetHost = Uri.tryParse(url)?.host;
+      if (!headers.containsKey('Origin') && targetHost != apiHost) {
         headers['Origin'] = 'https://vidlink.pro';
       }
+    }
+
+    // FINAL PRUNE: Ensure no loopback headers and remove browser-fingerprint headers
+    // that the mobile app shouldn't be sending.
+    final apiHost = Uri.tryParse(_api.caffeineBaseUrl)?.host;
+    if (apiHost != null && Uri.tryParse(url)?.host == apiHost) {
+      headers.removeWhere((k, v) {
+        final key = k.toLowerCase();
+        return key == 'referer' || key == 'origin' || key.startsWith('sec-');
+      });
     }
 
     // Extract headers from URL query if present (as a final override)
@@ -879,25 +901,42 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // Ignore parsing errors
     }
 
-    // --- PROXY AUTH OVERRIDE ---
-    // If the URL already contains instructions for the proxy (like VidLink's storm.vodvidl.site),
-    // we should trust those Referers/Origins if they were extracted from the URL above.
-    // Otherwise, we apply our known-good overrides for specific domains.
+    // If this is a proxied URL, we need to inspect the TARGET domain for overrides
+    String matchUrl = url;
+    if (url.contains('/proxy/stream')) {
+      try {
+        final uri = Uri.parse(url);
+        final encodedTarget = uri.queryParameters['url'];
+        if (encodedTarget != null) {
+          // Standard base64 or URL-safe base64
+          final normalized =
+              encodedTarget.replaceAll('-', '+').replaceAll('_', '/');
+          final decoded = utf8.decode(base64.decode(
+            normalized.padRight(
+              normalized.length + (4 - normalized.length % 4) % 4,
+              '=',
+            ),
+          ));
+          matchUrl = decoded;
+        }
+      } catch (_) {}
+    }
+
     if (!url.contains('headers=')) {
-      if (url.contains('storm.vodvidl.site') || 
-          url.contains('vidlink') || 
-          url.contains('vidlvod') || 
-          url.contains('vidl')) {
+      if (matchUrl.contains('storm.vodvidl.site') ||
+          matchUrl.contains('vidlink') ||
+          matchUrl.contains('vidlvod') ||
+          matchUrl.contains('vidl')) {
         headers['Referer'] = 'https://vidlink.pro/';
         headers['Origin'] = 'https://vidlink.pro';
       }
 
-      if (url.contains('vixsrc.to') || url.contains('vixsrc')) {
+      if (matchUrl.contains('vixsrc.to') || matchUrl.contains('vixsrc')) {
         headers['Referer'] = 'https://vixsrc.to/';
         headers['Origin'] = 'https://vixsrc.to';
       }
 
-      if (url.contains('instreams.live')) {
+      if (matchUrl.contains('instreams.live')) {
         headers['Referer'] = 'https://instreams.click/';
         headers['Origin'] = 'https://instreams.click';
       }

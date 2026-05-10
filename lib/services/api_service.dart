@@ -15,7 +15,7 @@ class ApiService {
   String get audioLanguage => SettingsService().defaultAudioLanguage;
   String get region => SettingsService().region;
   
-  static const String _browserUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  static const String _browserUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
   /// Headers for Caffeine API requests — includes Authorization when a key is set.
   Map<String, String> get _caffeineApiHeaders {

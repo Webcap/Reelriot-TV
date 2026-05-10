@@ -62,7 +62,7 @@ class CaffeinePlayerController extends ChangeNotifier {
     videoController = VideoController(
       player,
       configuration: const VideoControllerConfiguration(
-        hwdec: 'no', // Software decoding is much more stable on Chromecast/Amlogic
+        hwdec: 'auto', // Enable hardware decoding for 1080p stability on Chromecast
       ),
     );
     _setupListeners();
@@ -173,7 +173,7 @@ class CaffeinePlayerController extends ChangeNotifier {
     
     // Standard headers for all requests
     final Map<String, String> defaultHeaders = {
-      'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Chromecast Build/UTTC.250917.004) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
       'Accept': '*/*',
       'Connection': 'keep-alive',
     };
@@ -281,7 +281,25 @@ class CaffeinePlayerController extends ChangeNotifier {
       });
     }
 
-    _emit(CaffeinePlayerEventType.initialized);
+    // Wait for the player to actually have a valid video resolution before emitting initialized.
+    // This ensures the loading spinner doesn't fade to a black screen.
+    StreamSubscription<int?>? widthSub;
+    widthSub = player.stream.width.listen((w) {
+      if (w != null && w > 0 && !_isDisposed) {
+        debugPrint('[CaffeinePlayerController] 📺 Video resolution confirmed: $w x ${player.state.height}');
+        _emit(CaffeinePlayerEventType.initialized);
+        widthSub?.cancel();
+      }
+    });
+    _subscriptions.add(widthSub);
+
+    // Watchdog for initialization
+    Future.delayed(const Duration(seconds: 15), () {
+      if (!_isDisposed && player.state.width == 0) {
+        debugPrint('[CaffeinePlayerController] ⚠️ Initialization timeout (15s). No video frames detected.');
+        _emit(CaffeinePlayerEventType.error, message: 'Source timed out or decoder stalled.');
+      }
+    });
   }
 
   // Bridge for legacy code
