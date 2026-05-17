@@ -296,8 +296,8 @@ class CaffeinePlayerController extends ChangeNotifier {
     // Watchdog for initialization
     Future.delayed(const Duration(seconds: 15), () {
       if (!_isDisposed && player.state.width == 0) {
-        debugPrint('[CaffeinePlayerController] ⚠️ Initialization timeout (15s). No video frames detected.');
-        _emit(CaffeinePlayerEventType.error, message: 'Source timed out or decoder stalled.');
+        debugPrint('[CaffeinePlayerController] ⚠️ Initialization watchdog timeout (15s). No video dimensions detected.');
+        _emit(CaffeinePlayerEventType.error, message: 'Source timed out or hardware decoder stalled.');
       }
     });
   }

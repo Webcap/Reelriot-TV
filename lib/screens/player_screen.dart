@@ -126,7 +126,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _mainFocusNode.requestFocus();
 
       // Watchdog: The Chromecast Amlogic AVC decoder can stall during initialization.
-      // Watchdog: The Chromecast Amlogic AVC decoder can stall during initialization.
       // We relax this to 15s for all media types to ensure the hardware decoder has 
       // enough time to handshake and report dimensions (width > 0).
       _initWatchdogTimer = Timer(const Duration(seconds: 15), () {
@@ -513,7 +512,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         errorStr.contains('hostname') ||
         errorStr.contains('failed to open') ||
         errorStr.contains('could not open') ||
-        errorStr.contains('unexpected end');
+        errorStr.contains('unexpected end') ||
+        errorStr.contains('stalled') ||
+        errorStr.contains('timed out');
 
     final is403 = errorStr.contains('403') || errorStr.contains('forbidden');
 
@@ -1251,6 +1252,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// firing BetterPlayerEventType.initialized.
   Future<void> _forcePlayerReset() async {
     if (_controller == null || _isDisposed || !mounted) return;
+
+    _retryCount++;
+    if (_retryCount >= 4) {
+      debugPrint(
+        '[PlayerScreen] 🛑 Too many resets/stalls, falling back to next provider',
+      );
+      await _fallbackToNextProvider();
+      return;
+    }
 
     await _saveCurrentProgress();
     final currentPosition = _controller?.position ?? _lastKnownPosition;
