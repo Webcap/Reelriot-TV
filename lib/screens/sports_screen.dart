@@ -42,16 +42,34 @@ const _leagues = [
   _League(name: 'MLB', sport: 'baseball', league: 'mlb', icon: Icons.sports_baseball, color: Color(0xFF3B82F6)),
   // ── Hockey ──────────────────────────────────────────────────────────────
   _League(name: 'NHL', sport: 'hockey', league: 'nhl', icon: Icons.sports_hockey, color: Color(0xFF06B6D4)),
-  // ── Soccer ──────────────────────────────────────────────────────────────
+  // ── Soccer — Club Leagues ────────────────────────────────────────────────
   _League(name: 'Premier League', sport: 'soccer', league: 'eng.1', icon: Icons.sports_soccer, color: Color(0xFF22C55E)),
   _League(name: 'La Liga', sport: 'soccer', league: 'esp.1', icon: Icons.sports_soccer, color: Color(0xFFEF4444)),
   _League(name: 'Bundesliga', sport: 'soccer', league: 'ger.1', icon: Icons.sports_soccer, color: Color(0xFFD97706)),
   _League(name: 'Serie A', sport: 'soccer', league: 'ita.1', icon: Icons.sports_soccer, color: Color(0xFF10B981)),
   _League(name: 'Ligue 1', sport: 'soccer', league: 'fra.1', icon: Icons.sports_soccer, color: Color(0xFF0EA5E9)),
+  _League(name: 'Eredivisie', sport: 'soccer', league: 'ned.1', icon: Icons.sports_soccer, color: Color(0xFFFF6B00)),
+  _League(name: 'Primeira Liga', sport: 'soccer', league: 'por.1', icon: Icons.sports_soccer, color: Color(0xFF16A34A)),
   _League(name: 'Champions League', sport: 'soccer', league: 'uefa.champions', icon: Icons.sports_soccer, color: Color(0xFF6366F1)),
   _League(name: 'Europa League', sport: 'soccer', league: 'uefa.europa', icon: Icons.sports_soccer, color: Color(0xFFF97316)),
+  _League(name: 'Conference League', sport: 'soccer', league: 'uefa.europa.conf', icon: Icons.sports_soccer, color: Color(0xFF22D3EE)),
   _League(name: 'MLS', sport: 'soccer', league: 'usa.1', icon: Icons.sports_soccer, color: Color(0xFF38BDF8)),
   _League(name: 'Liga MX', sport: 'soccer', league: 'mex.1', icon: Icons.sports_soccer, color: Color(0xFF84CC16)),
+  // ── Soccer — International / FIFA ────────────────────────────────────────
+  _League(name: 'FIFA World Cup', sport: 'soccer', league: 'fifa.world', icon: Icons.emoji_events, color: Color(0xFFFFD700)),
+  _League(name: 'Club World Cup', sport: 'soccer', league: 'fifa.cwc', icon: Icons.emoji_events, color: Color(0xFFE5C100)),
+  _League(name: 'Int\'l Friendlies', sport: 'soccer', league: 'fifa.friendly', icon: Icons.sports_soccer, color: Color(0xFF9CA3AF)),
+  _League(name: 'WC Qual. CONCACAF', sport: 'soccer', league: 'fifa.worldq.concacaf', icon: Icons.sports_soccer, color: Color(0xFF34D399)),
+  _League(name: 'WC Qual. CONMEBOL', sport: 'soccer', league: 'fifa.worldq.conmebol', icon: Icons.sports_soccer, color: Color(0xFF60A5FA)),
+  _League(name: 'WC Qual. UEFA', sport: 'soccer', league: 'fifa.worldq.uefa', icon: Icons.sports_soccer, color: Color(0xFF818CF8)),
+  // ── Soccer — UEFA & Confederation Tournaments ─────────────────────────────
+  _League(name: 'UEFA Euro', sport: 'soccer', league: 'uefa.euro', icon: Icons.emoji_events, color: Color(0xFF3B82F6)),
+  _League(name: 'Euro Qualifiers', sport: 'soccer', league: 'uefa.euroq', icon: Icons.sports_soccer, color: Color(0xFF60A5FA)),
+  _League(name: 'UEFA Nations League', sport: 'soccer', league: 'uefa.nations', icon: Icons.sports_soccer, color: Color(0xFF2563EB)),
+  _League(name: 'CONCACAF Gold Cup', sport: 'soccer', league: 'concacaf.gold', icon: Icons.emoji_events, color: Color(0xFF10B981)),
+  _League(name: 'CONCACAF Nations', sport: 'soccer', league: 'concacaf.nations.league', icon: Icons.sports_soccer, color: Color(0xFF059669)),
+  _League(name: 'Copa América', sport: 'soccer', league: 'conmebol.america', icon: Icons.emoji_events, color: Color(0xFFF59E0B)),
+  _League(name: 'Copa Libertadores', sport: 'soccer', league: 'conmebol.libertadores', icon: Icons.sports_soccer, color: Color(0xFFD97706)),
   // ── Racing ──────────────────────────────────────────────────────────────
   _League(name: 'Formula 1', sport: 'racing', league: 'f1', icon: Icons.speed, color: Color(0xFFDC2626)),
   _League(name: 'NASCAR Cup', sport: 'racing', league: 'nascar-premier', icon: Icons.speed, color: Color(0xFF78716C)),
