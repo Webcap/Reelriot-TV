@@ -16,7 +16,8 @@ class FavoritesScreen extends StatefulWidget {
   State<FavoritesScreen> createState() => FavoritesScreenState();
 }
 
-class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliveClientMixin {
+class FavoritesScreenState extends State<FavoritesScreen>
+    with AutomaticKeepAliveClientMixin {
   final _supabase = Supabase.instance.client;
   final FocusNode _focusNode = FocusNode();
   List<MovieListItem> _bookmarkedMovies = [];
@@ -52,7 +53,8 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
     if (user == null) return;
 
     // Only show full loading spinner if not quiet or if we have no data yet
-    final showLoading = !quiet || (_bookmarkedMovies.isEmpty && _bookmarkedTv.isEmpty);
+    final showLoading =
+        !quiet || (_bookmarkedMovies.isEmpty && _bookmarkedTv.isEmpty);
 
     if (showLoading) {
       setState(() {
@@ -74,10 +76,15 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
 
         setState(() {
           _bookmarkedMovies = moviesRaw
-              .map((e) => MovieListItem.fromJson(Map<String, dynamic>.from(e as Map)))
+              .map(
+                (e) =>
+                    MovieListItem.fromJson(Map<String, dynamic>.from(e as Map)),
+              )
               .toList();
           _bookmarkedTv = tvRaw
-              .map((e) => TvListItem.fromJson(Map<String, dynamic>.from(e as Map)))
+              .map(
+                (e) => TvListItem.fromJson(Map<String, dynamic>.from(e as Map)),
+              )
               .toList();
         });
       }
@@ -99,7 +106,9 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
     }
 
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: Color(0xFFE60000)));
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFFE60000)),
+      );
     }
 
     if (_error != null) {
@@ -107,11 +116,16 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(_error!, style: const TextStyle(color: Colors.white70, fontSize: 18)),
+            Text(
+              _error!,
+              style: const TextStyle(color: Colors.white70, fontSize: 18),
+            ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _fetchBookmarks,
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE60000)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE60000),
+              ),
               child: const Text('Retry'),
             ),
           ],
@@ -173,13 +187,15 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
         final item = items[index];
         return PosterCard(
           posterPath: item.posterPath,
-          title: isMovie ? (item as MovieListItem).title ?? '' : (item as TvListItem).name ?? '',
+          title: isMovie
+              ? (item as MovieListItem).title ?? ''
+              : (item as TvListItem).name ?? '',
           onTap: () async {
             await Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (context) => isMovie 
-                  ? MovieDetailScreen(movieId: item.id)
-                  : TvDetailScreen(tvId: item.id),
+                builder: (context) => isMovie
+                    ? MovieDetailScreen(movieId: item.id)
+                    : TvDetailScreen(tvId: item.id),
               ),
             );
             if (context.mounted) {
@@ -187,12 +203,16 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
             }
           },
           quality: QualityUtils.getQualityBadgeSync(
-            releaseDate: isMovie ? (item as MovieListItem).releaseDate : (item as TvListItem).firstAirDate,
+            releaseDate: isMovie
+                ? (item as MovieListItem).releaseDate
+                : (item as TvListItem).firstAirDate,
             isMovie: isMovie,
           ),
           mediaId: item.id,
           isMovie: isMovie,
-          releaseDate: isMovie ? (item as MovieListItem).releaseDate : (item as TvListItem).firstAirDate,
+          releaseDate: isMovie
+              ? (item as MovieListItem).releaseDate
+              : (item as TvListItem).firstAirDate,
         );
       },
     );
@@ -208,7 +228,11 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
           const SizedBox(height: 24),
           const Text(
             'Sign in to see your favorites',
-            style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 12),
           const Text(
@@ -220,22 +244,34 @@ class FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliv
           LongPressFocus(
             focusNode: _focusNode,
             onTap: () => Navigator.of(context).pushNamed('/pairing'),
-            child: Builder(builder: (context) {
-              final focused = Focus.of(context).hasFocus;
-              return ElevatedButton(
-                onPressed: () => Navigator.of(context).pushNamed('/pairing'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: focused ? Colors.white : const Color(0xFFE60000),
-                  foregroundColor: focused ? Colors.black : Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: focused ? const BorderSide(color: Colors.white, width: 2) : BorderSide.none,
+            child: Builder(
+              builder: (context) {
+                final focused = Focus.of(context).hasFocus;
+                return ElevatedButton(
+                  onPressed: () => Navigator.of(context).pushNamed('/pairing'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: focused
+                        ? Colors.white
+                        : const Color(0xFFE60000),
+                    foregroundColor: focused ? Colors.black : Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 48,
+                      vertical: 16,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: focused
+                          ? const BorderSide(color: Colors.white, width: 2)
+                          : BorderSide.none,
+                    ),
                   ),
-                ),
-                child: const Text('Sign In / Sign Up', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              );
-            }),
+                  child: const Text(
+                    'Sign In / Sign Up',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
