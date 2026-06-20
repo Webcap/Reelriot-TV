@@ -941,6 +941,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         headers['Referer'] = 'https://instreams.click/';
         headers['Origin'] = 'https://instreams.click';
       }
+
+      if (matchUrl.contains('strmd.st')) {
+        headers['Referer'] = 'https://embed.st/';
+        headers['Origin'] = 'https://embed.st';
+      }
     }
 
     // Log final resolved headers for debugging (only if not already proxied to avoid spam)
