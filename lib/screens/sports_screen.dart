@@ -1479,18 +1479,9 @@ class _GameCardState extends State<_GameCard> {
     final s = widget.scale;
     final g = widget.game;
 
-    return FocusableActionDetector(
-      onShowFocusHighlight: (v) => setState(() => _focused = v),
-      actions: {
-        ActivateIntent: CallbackAction<ActivateIntent>(
-          onInvoke: (intent) {
-            _onTap();
-            return null;
-          },
-        ),
-      },
-      child: InkWell(
-        onTap: _onTap,
+    return InkWell(
+      onTap: _onTap,
+      onFocusChange: (v) => setState(() => _focused = v),
         borderRadius: BorderRadius.circular(s(16)),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
@@ -1608,7 +1599,6 @@ class _GameCardState extends State<_GameCard> {
             ],
           ),
         ),
-      ),
     );
   }
 }
@@ -1707,18 +1697,9 @@ class _FilterChipState extends State<_FilterChip> {
     final s = widget.scale;
     final isSelected = widget.selected;
 
-    return FocusableActionDetector(
-      onShowFocusHighlight: (v) => setState(() => _focused = v),
-      actions: {
-        ActivateIntent: CallbackAction<ActivateIntent>(
-          onInvoke: (intent) {
-            widget.onTap();
-            return null;
-          },
-        ),
-      },
-      child: InkWell(
-        onTap: widget.onTap,
+    return InkWell(
+      onTap: widget.onTap,
+      onFocusChange: (v) => setState(() => _focused = v),
         borderRadius: BorderRadius.circular(s(30)),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
@@ -1758,7 +1739,6 @@ class _FilterChipState extends State<_FilterChip> {
             ),
           ),
         ),
-      ),
     );
   }
 }

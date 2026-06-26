@@ -384,7 +384,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
   Timer? _debounceTimer;
   bool _isLegacyFallback = false;
   bool _historyDirty = false;
-  bool _isVisible = true;
+  final bool _isVisible = true;
 
   final List<Map<String, dynamic>> _movieGenres = [
     {'id': 28, 'name': 'Action', 'color': const Color(0xFFDC2626)},
@@ -1173,7 +1173,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 transitionBuilder: (Widget child, Animation<double> animation) {
                   return SizeTransition(
                     sizeFactor: animation,
-                    axisAlignment: -1.0,
+                    alignment: Alignment.topCenter,
                     child: FadeTransition(opacity: animation, child: child),
                   );
                 },

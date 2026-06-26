@@ -44,11 +44,11 @@ dependencies:
   cached_network_image: ^3.2.2
   supabase_flutter: ^2.3.2
   flutter_dotenv: ^6.0.0
-  shared_preferences: ^2.0.15
-  wakelock_plus: ^1.5.1
+  shared_preferences: ^2.3.2
+  wakelock_plus: ^1.6.1
   startapp_sdk: 1.0.1
   flutter_svg: ^2.0.7
-  package_info_plus: ^9.0.0
+  package_info_plus: ^10.1.0
   mixpanel_flutter: ^2.4.5
   wakelock_plus_tizen: ^2.0.0
   shared_preferences_tizen: ^2.3.2
@@ -67,6 +67,7 @@ dependency_overrides:
     path: ../media-kit/media_kit_video
   media_kit_libs_android_video:
     path: ../media-kit/libs/android/media_kit_libs_android_video
+  package_info_plus_platform_interface: any
 
 dev_dependencies:
   flutter_test:

@@ -83,8 +83,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _hasInitialized =
       false; // Tracks if BetterPlayerEventType.initialized has fired
   Duration? _lastKnownPosition;
-  DateTime? _loadStartTime;
-  DateTime? _bufferingStartTime;
   DateTime? _sessionStartTime;
 
   void _safeSetState(VoidCallback fn) {
@@ -343,15 +341,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // 2. Only rewrite if videostr.net is the actual HOST
     try {
       final uri = Uri.parse(safeUrl);
+      debugPrint('[PlayerScreen] 🔍 Parsed Host: "${uri.host}" for URL: "$safeUrl"');
       if (uri.host == 'videostr.net' || uri.host.endsWith('.videostr.net')) {
         safeUrl = uri.replace(host: 'vidlink.pro').toString();
         // Refresh headers for the new host
         headers = _getMergedHeaders(safeUrl, widget.referrer, widget.headers);
       }
       
-      // 3. For instreams.live, we often need the proxy immediately because of IP-locking
-      if (uri.host.contains('instreams.live')) {
-        debugPrint('[PlayerScreen] 🛡️ Known IP-locked domain (instreams.live), using proxy fallback');
+      // 3. For instreams.live and wfty.st, we often need the proxy immediately because of IP-locking
+      if (uri.host.contains('instreams.live') || uri.host.contains('wfty.st')) {
+        debugPrint('[PlayerScreen] 🛡️ Known IP-locked domain (${uri.host}), using proxy fallback');
         // We use the headers meant for the UPSTREAM to build the proxied URL
         safeUrl = _buildProxiedUrl(safeUrl, headers);
         
@@ -363,7 +362,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           'Accept': '*/*',
         };
       }
-    } catch (_) {}
+    } catch (e, stack) {
+      debugPrint('[PlayerScreen] ❌ Rewrite error: $e\n$stack');
+    }
 
     _controller = CaffeinePlayerController();
     
@@ -376,15 +377,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _controller!.watchingText = widget.item['release_date']?.split('-')[0] ?? '';
     }
 
-    _loadStartTime = DateTime.now();
-    AnalyticsService.instance.trackQoSEvent('Playback Attempt', {
-      'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
-      'id': widget.item is Map
-          ? widget.item['id']?.toString()
-          : widget.item?.id?.toString(),
-      'name': widget.title,
-      'url_host': Uri.tryParse(safeUrl)?.host,
-    });
     debugPrint('[PlayerScreen] 📺 Playing (media_kit): $safeUrl');
 
     _controller!.addEventsListener((event) async {
@@ -409,61 +401,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _initWatchdogTimer?.cancel();
         _sessionStartTime = DateTime.now();
 
-        if (_loadStartTime != null) {
-          final loadTime = DateTime.now()
-              .difference(_loadStartTime!)
-              .inMilliseconds;
-          AnalyticsService.instance.trackQoSEvent('Playback Loaded', {
-            'type': widget.isMovie
-                ? 'movie'
-                : (_isSports ? 'sports' : 'tv_show'),
-            'id': widget.item is Map
-                ? widget.item['id']?.toString()
-                : widget.item?.id?.toString(),
-            'load_time_ms': loadTime,
-          });
-          _loadStartTime = null;
-        }
-
         // Try twice as tracks might load late
         _selectPreferredAudioTrack();
         Future.delayed(
           const Duration(milliseconds: 1500),
           () => _selectPreferredAudioTrack(),
         );
-      } else if (event.type == CaffeinePlayerEventType.bufferingStart) {
-        _bufferingStartTime = DateTime.now();
-        AnalyticsService.instance.trackQoSEvent('Buffering Start', {
-          'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
-          'id': widget.item is Map
-              ? widget.item['id']?.toString()
-              : widget.item?.id?.toString(),
-        });
-      } else if (event.type == CaffeinePlayerEventType.bufferingEnd) {
-        if (_bufferingStartTime != null) {
-          final bufferTime = DateTime.now()
-              .difference(_bufferingStartTime!)
-              .inMilliseconds;
-          AnalyticsService.instance.trackQoSEvent('Buffering End', {
-            'type': widget.isMovie
-                ? 'movie'
-                : (_isSports ? 'sports' : 'tv_show'),
-            'id': widget.item is Map
-                ? widget.item['id']?.toString()
-                : widget.item?.id?.toString(),
-            'buffer_time_ms': bufferTime,
-          });
-          _bufferingStartTime = null;
-        }
       } else if (event.type == CaffeinePlayerEventType.error) {
         debugPrint('[PlayerScreen] ❌ RECEIVED ERROR: ${event.message}');
-        AnalyticsService.instance.trackQoSEvent('Playback Error', {
-          'type': widget.isMovie ? 'movie' : (_isSports ? 'sports' : 'tv_show'),
-          'id': widget.item is Map
-              ? widget.item['id']?.toString()
-              : widget.item?.id?.toString(),
-          'error': event.message,
-        });
         _handleException(event.message ?? 'Unknown error');
       } else if (event.type == CaffeinePlayerEventType.progress) {
         if (!_isDisposed) {
@@ -519,10 +464,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final is403 = errorStr.contains('403') || errorStr.contains('forbidden');
 
     if (isBehindLiveWindow || isPlaylistStuck) {
-      AnalyticsService.instance.trackQoSEvent('HLS Recovery Attempt', {
-        'error_type': isBehindLiveWindow ? 'BehindLiveWindow' : 'PlaylistStuck',
-        'url': widget.url,
-      });
       debugPrint(
         '[PlayerScreen] 🔄 Recovering from HLS specific error: $errorStr',
       );
@@ -946,6 +887,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         headers['Referer'] = 'https://embed.st/';
         headers['Origin'] = 'https://embed.st';
       }
+
+      if (matchUrl.contains('wfty.st')) {
+        headers['Referer'] = 'https://sportsembed.su/';
+        headers['Origin'] = 'https://sportsembed.su';
+      }
     }
 
     // Log final resolved headers for debugging (only if not already proxied to avoid spam)
@@ -1286,14 +1232,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
           headers = _getMergedHeaders(safeUrl, widget.referrer, widget.headers);
         }
 
-        if (uri.host.contains('instreams.live')) {
+        if (uri.host.contains('instreams.live') || uri.host.contains('wfty.st')) {
           safeUrl = _buildProxiedUrl(safeUrl, headers);
           headers = {
             'User-Agent': headers['User-Agent'] ?? '',
             'Accept': '*/*',
           };
         }
-      } catch (_) {}
+      } catch (e, stack) {
+        debugPrint('[PlayerScreen] ❌ Reset rewrite error: $e\n$stack');
+      }
 
       await _controller?.setDataSource(
         safeUrl,

@@ -350,12 +350,6 @@ class _PairingScreenState extends State<PairingScreen> {
                   ),
                 ),
                 _buildButton('Get new code', _createCode),
-                const SizedBox(height: 12),
-                _buildButton(
-                  'Browse as Guest', 
-                  () => Navigator.of(context).pushReplacementNamed('/home'),
-                  isSecondary: true,
-                ),
               ],
             ],
           ),
