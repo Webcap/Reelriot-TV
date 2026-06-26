@@ -826,11 +826,12 @@ class SportsScreenState extends State<SportsScreen> {
         });
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
           _error = e.toString();
         });
+      }
     }
   }
 
@@ -999,8 +1000,9 @@ class SportsScreenState extends State<SportsScreen> {
     final allGames = <_EspnGame, _League>{};
     for (var ld in _data!) {
       if (_selectedSport != null &&
-          ld.league.sport.toUpperCase() != _selectedSport)
+          ld.league.sport.toUpperCase() != _selectedSport) {
         continue;
+      }
       for (var g in ld.games) {
         allGames[g] = ld.league;
       }

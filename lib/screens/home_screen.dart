@@ -576,7 +576,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
       }
 
       // 3. Map Discovery Sections to existing variables
-      List<DiscoverySection> apiSections = (discovery['sections'] as List).map((s) => DiscoverySection.fromJson(s)).toList();
+      List<DiscoverySection> apiSections = (discovery['sections'] as List)
+          .map((s) => DiscoverySection.fromJson(s))
+          .where((s) => s.isEnabled)
+          .toList();
       debugPrint('[HomeScreen] 📡 Discovery Feed Received: ${apiSections.length} sections');
       for (var s in apiSections) {
         debugPrint('[HomeScreen]    - Row: "${s.title}" (${s.items.length} items)');
@@ -1607,14 +1610,33 @@ class DiscoverySection {
   final List<MovieListItem> items;
   final String type;
   final String mediaType;
+  final bool isEnabled;
 
-  DiscoverySection({required this.title, required this.items, required this.type, required this.mediaType});
+  DiscoverySection({
+    required this.title, 
+    required this.items, 
+    required this.type, 
+    required this.mediaType,
+    this.isEnabled = true,
+  });
 
   factory DiscoverySection.fromJson(Map<String, dynamic> json) {
+    bool enabled = true;
+    if (json.containsKey('enabled')) {
+      enabled = json['enabled'] == true;
+    } else if (json.containsKey('is_enabled')) {
+      enabled = json['is_enabled'] == true;
+    } else if (json.containsKey('isActive')) {
+      enabled = json['isActive'] == true;
+    } else if (json.containsKey('active')) {
+      enabled = json['active'] == true;
+    }
+
     return DiscoverySection(
       title: json['title'] ?? '',
       type: json['type'] ?? '',
       mediaType: json['mediaType'] ?? '',
+      isEnabled: enabled,
       items: (json['items'] as List).map((i) => MovieListItem.fromJson(i as Map<String, dynamic>)).toList(),
     );
   }

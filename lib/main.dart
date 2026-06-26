@@ -51,7 +51,7 @@ Future<void> bootstrap(String envFile) async {
     try {
       await Supabase.initialize(
         url: url,
-        anonKey: anonKey,
+        publishableKey: anonKey,
         authOptions: const FlutterAuthClientOptions(
           authFlowType: AuthFlowType.pkce,
         ),
