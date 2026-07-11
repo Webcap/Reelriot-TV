@@ -26,7 +26,12 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> loadConfig() async {
-    return core.fetchConfig(caffeineBaseUrl, apiKey: caffeineApiKey);
+    return core.fetchConfig(
+      caffeineBaseUrl,
+      apiKey: caffeineApiKey,
+      platform: 'tv',
+      environment: environment,
+    );
   }
 
   /// Fetches the unified discovery feed (Community Trending, AI Picks, etc.)
