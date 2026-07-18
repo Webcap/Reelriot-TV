@@ -38,6 +38,13 @@ const _leagues = [
     color: Color(0xFFF97316),
   ),
   _League(
+    name: 'NBA Summer League',
+    sport: 'basketball',
+    league: 'nba-summer',
+    icon: Icons.sports_basketball,
+    color: Color(0xFFF97316),
+  ),
+  _League(
     name: 'NCAAB (Men)',
     sport: 'basketball',
     league: 'mens-college-basketball',
@@ -95,6 +102,14 @@ const _leagues = [
     league: 'nhl',
     icon: Icons.sports_hockey,
     color: Color(0xFF06B6D4),
+  ),
+  // ── Soccer — International ────────────────────────────────────────────────
+  _League(
+    name: 'World Cup',
+    sport: 'soccer',
+    league: 'fifa.world',
+    icon: Icons.sports_soccer,
+    color: Color(0xFFEAB308), // Gold/Yellow
   ),
   // ── Soccer — Club Leagues ────────────────────────────────────────────────
   _League(
