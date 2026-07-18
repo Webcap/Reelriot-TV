@@ -1,24 +1,24 @@
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/tv_banner_neon.png"
+  image_path: "assets/images/ReelriotTVLogo.png"
   adaptive_icon_background: "#000000"
-  adaptive_icon_foreground: "assets/images/tv_banner_neon.png"
+  adaptive_icon_foreground: "assets/images/ReelriotTVLogo.png"
   web:
     generate: true
-    image_path: "assets/images/tv_banner_neon.png"
+    image_path: "assets/images/ReelriotTVLogo.png"
     background_color: "#000000"
     theme_color: "#000000"
   flavors:
     dev:
       android: true
       ios: true
-      image_path: "assets/images/tv_banner_neon.png"
+      image_path: "assets/images/ReelriotTVLogo.png"
       adaptive_icon_background: "#000000"
-      adaptive_icon_foreground: "assets/images/tv_banner_neon.png"
+      adaptive_icon_foreground: "assets/images/ReelriotTVLogo.png"
     prod:
       android: true
       ios: true
-      image_path: "assets/images/tv_banner_neon.png"
+      image_path: "assets/images/ReelriotTVLogo.png"
       adaptive_icon_background: "#000000"
-      adaptive_icon_foreground: "assets/images/tv_banner_neon.png"
+      adaptive_icon_foreground: "assets/images/ReelriotTVLogo.png"

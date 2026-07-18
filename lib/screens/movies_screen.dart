@@ -4,6 +4,8 @@ import 'package:reelriot_tv/services/api_service.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:reelriot_tv/models/discovery_section.dart';
 
 class MoviesScreen extends StatefulWidget {
   const MoviesScreen({super.key});
@@ -14,9 +16,7 @@ class MoviesScreen extends StatefulWidget {
 
 class _MoviesScreenState extends State<MoviesScreen> {
   final ApiService _api = ApiService();
-  List<MovieListItem>? _popular;
-  List<MovieListItem>? _trending;
-  List<MovieListItem>? _topRated;
+  List<DiscoverySection>? _sections;
   String? _error;
 
   @override
@@ -28,14 +28,21 @@ class _MoviesScreenState extends State<MoviesScreen> {
   Future<void> _load() async {
     setState(() => _error = null);
     try {
-      final popular = await _api.fetchPopularMovies();
-      final trending = await _api.fetchTrendingMovies();
-      final topRated = await _api.fetchTopRatedMovies();
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      final discovery = await _api.fetchDiscovery(
+        userId: userId,
+        mediaType: 'movie',
+        region: _api.region,
+      );
+      
+      final List<DiscoverySection> parsedSections = (discovery['sections'] as List)
+          .map((s) => DiscoverySection.fromJson(s))
+          .where((s) => s.isEnabled && s.items.isNotEmpty)
+          .toList();
+
       if (mounted) {
         setState(() {
-          _popular = popular.results;
-          _trending = trending.results;
-          _topRated = topRated.results;
+          _sections = parsedSections;
         });
       }
     } catch (e) {
@@ -58,13 +65,17 @@ class _MoviesScreenState extends State<MoviesScreen> {
       );
     }
 
-    return ListView(
+    if (_sections == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 32),
-      children: [
-        _buildSection('Popular', _popular),
-        _buildSection('Trending', _trending),
-        _buildSection('Top Rated', _topRated),
-      ],
+      itemCount: _sections!.length,
+      itemBuilder: (context, index) {
+        final section = _sections![index];
+        return _buildSection(section.title, section.items);
+      },
     );
   }
 

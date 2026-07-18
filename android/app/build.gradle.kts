@@ -55,3 +55,9 @@ android {
 flutter {
     source = "../.."
 }
+configurations.all {
+    resolutionStrategy {
+        force("com.startapp:inapp-sdk:5.0.2")
+    }
+}
+

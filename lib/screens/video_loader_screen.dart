@@ -1,4 +1,5 @@
 import 'package:caffeine_core/caffeine_core.dart' as core;
+import 'dart:async';
 import 'package:reelriot_tv/services/outage_service.dart';
 import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
 import 'package:reelriot_tv/constants.dart';
@@ -51,10 +52,9 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   final SettingsService _settings = SettingsService();
 
   final List<Map<String, String>> _providers = [
+    {'code': 'vixsrc', 'name': 'VixSrc'},
     {'code': 'vidlink', 'name': 'VidLink'},
-    {'code': 'vixsrc', 'name': 'Vixsrc'},
-    {'code': 'vidsrcsu', 'name': 'Vidsrc.su'},
-    {'code': 'vidzee', 'name': 'Vidzee'},
+    {'code': 'vidsrcsu', 'name': 'VidSrc.su'},
     {'code': 'vidfun', 'name': 'VidFun'},
     {'code': 'flixhq', 'name': 'FlixHQ'},
   ];
@@ -207,58 +207,98 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     final nextEpData = await nextEpDataFuture;
     final qualityBadge = await qualityBadgeFuture;
 
+    // 2. Fetch all streams concurrently
+    final List<Future<core.ProviderStreamResponse?>> providerFutures = [];
+    
     for (int i = 0; i < _providers.length; i++) {
-      if (!mounted) return;
-
-      // 1. Determine start position (cached for retries)
-      Duration? startPos;
-      if (_currentStartPosition != null) {
-        startPos = _currentStartPosition;
-      } else {
-        startPos = await _historyService.getSavedProgress(
-          mediaId!,
-          widget.movie != null,
-          season: _currentSeason,
-          episode: _currentEpisode,
-        );
-        // Cache it so subsequent provider retries use the same position
-        _currentStartPosition = startPos;
-      }
-
       final providerCode = _providers[i]['code']!;
       final providerName = _providers[i]['name']!;
-
+      
       setState(() {
-        _currentProviderIndex = i;
         _providerStates[i].status = ProviderStatus.loading;
       });
 
-      debugPrint(
-        '[VideoLoader] 🔍 Trying provider: $providerName ($providerCode) [${i + 1}/${_providers.length}]',
-      );
+      if (widget.movie != null) {
+        providerFutures.add(
+          _api.fetchMovieStream(widget.movie!.id, provider: providerCode)
+            .then((res) => res as core.ProviderStreamResponse?)
+            .catchError((e) {
+              debugPrint('[VideoLoader] ⚠️ Error with provider $providerName: $e');
+              return null;
+            })
+        );
+      } else {
+        providerFutures.add(
+          _api.fetchTvStream(widget.tvShow!.id, _currentSeason!, _currentEpisode!, provider: providerCode)
+            .then((res) => res as core.ProviderStreamResponse?)
+            .catchError((e) {
+              debugPrint('[VideoLoader] ⚠️ Error with provider $providerName: $e');
+              return null;
+            })
+        );
+      }
+    }
 
-      try {
-        core.ProviderStreamResponse response;
-        if (widget.movie != null) {
-          response = await _api.fetchMovieStream(
-            widget.movie!.id,
-            provider: providerCode,
-          );
-        } else {
-          response = await _api.fetchTvStream(
-            widget.tvShow!.id,
-            _currentSeason!,
-            _currentEpisode!,
-            provider: providerCode,
-          );
+    // Start a timer to cycle the loading text to mimic web app
+    Timer? cycleTimer = Timer.periodic(const Duration(milliseconds: 1500), (timer) {
+      if (mounted) {
+        setState(() {
+          _currentProviderIndex = (_currentProviderIndex + 1) % _providers.length;
+        });
+      } else {
+        timer.cancel();
+      }
+    });
+
+    // Wait for all providers to finish (concurrently)
+    final responses = await Future.wait(providerFutures);
+    cycleTimer.cancel();
+
+    if (!mounted) return;
+
+    // 1. Determine start position (cached for retries)
+    Duration? startPos;
+    if (_currentStartPosition != null) {
+      startPos = _currentStartPosition;
+    } else {
+      startPos = await _historyService.getSavedProgress(
+        mediaId!,
+        widget.movie != null,
+        season: _currentSeason,
+        episode: _currentEpisode,
+      );
+      // Cache it so subsequent provider retries use the same position
+      _currentStartPosition = startPos;
+    }
+
+    // Loop through the results in priority order
+    for (int i = 0; i < _providers.length; i++) {
+      if (!mounted) return;
+      
+      final providerCode = _providers[i]['code']!;
+      final providerName = _providers[i]['name']!;
+      final response = responses[i];
+
+      setState(() {
+        _currentProviderIndex = i;
+      });
+
+      if (response != null &&
+          response.success &&
+          response.links != null &&
+          response.links!.isNotEmpty) {
+        
+        // Defensive filter: Only keep valid HTTP/HTTPS URLs (filters out AES strings/iframe embeds)
+        response.links!.retainWhere((link) => link.url.startsWith('http'));
+
+        if (response.links!.isEmpty) {
+          debugPrint('[VideoLoader] ⚠️ Provider $providerName returned invalid streams.');
+          continue;
         }
 
-        if (response.success &&
-            response.links != null &&
-            response.links!.isNotEmpty) {
-          debugPrint(
-            '[VideoLoader] ✅ Found ${response.links!.length} stream(s) from $providerName',
-          );
+        debugPrint(
+          '[VideoLoader] ✅ Found ${response.links!.length} stream(s) from $providerName',
+        );
           if (!mounted) return;
 
           // 1. Collect all potential subtitle links
@@ -432,14 +472,6 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
             });
           }
         }
-      } catch (e) {
-        debugPrint('[VideoLoader] ⚠️ Error with provider $providerName: $e');
-        if (mounted) {
-          setState(() {
-            _providerStates[i].status = ProviderStatus.failed;
-          });
-        }
-      }
     }
 
     if (mounted && !_isDone) {

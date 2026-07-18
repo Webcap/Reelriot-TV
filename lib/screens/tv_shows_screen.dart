@@ -4,6 +4,8 @@ import 'package:reelriot_tv/services/api_service.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:reelriot_tv/models/discovery_section.dart';
 
 class TvShowsScreen extends StatefulWidget {
   const TvShowsScreen({super.key});
@@ -14,9 +16,7 @@ class TvShowsScreen extends StatefulWidget {
 
 class _TvShowsScreenState extends State<TvShowsScreen> {
   final ApiService _api = ApiService();
-  List<TvListItem>? _popular;
-  List<TvListItem>? _trending;
-  List<TvListItem>? _topRated;
+  List<DiscoverySection>? _sections;
   String? _error;
 
   @override
@@ -28,14 +28,21 @@ class _TvShowsScreenState extends State<TvShowsScreen> {
   Future<void> _load() async {
     setState(() => _error = null);
     try {
-      final popular = await _api.fetchPopularTv();
-      final trending = await _api.fetchTrendingTv();
-      final topRated = await _api.fetchTopRatedTv();
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      final discovery = await _api.fetchDiscovery(
+        userId: userId,
+        mediaType: 'tv',
+        region: _api.region,
+      );
+      
+      final List<DiscoverySection> parsedSections = (discovery['sections'] as List)
+          .map((s) => DiscoverySection.fromJson(s))
+          .where((s) => s.isEnabled && s.items.isNotEmpty)
+          .toList();
+
       if (mounted) {
         setState(() {
-          _popular = popular.results;
-          _trending = trending.results;
-          _topRated = topRated.results;
+          _sections = parsedSections;
         });
       }
     } catch (e) {
@@ -58,17 +65,21 @@ class _TvShowsScreenState extends State<TvShowsScreen> {
       );
     }
 
-    return ListView(
+    if (_sections == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 32),
-      children: [
-        _buildSection('Popular TV', _popular),
-        _buildSection('Popular Shows This Week', _trending),
-        _buildSection('Top Rated TV', _topRated),
-      ],
+      itemCount: _sections!.length,
+      itemBuilder: (context, index) {
+        final section = _sections![index];
+        return _buildSection(section.title, section.items);
+      },
     );
   }
 
-  Widget _buildSection(String title, List<TvListItem>? items) {
+  Widget _buildSection(String title, List<MovieListItem>? items) {
     if (items == null) {
       return const Padding(
         padding: EdgeInsets.only(bottom: 32),
@@ -99,15 +110,15 @@ class _TvShowsScreenState extends State<TvShowsScreen> {
                 final t = items[index];
                 return PosterCard(
                   posterPath: t.posterPath,
-                  title: t.name ?? 'TV',
+                  title: t.title ?? 'TV',
                   onTap: () => _openDetail(t.id),
                   quality: QualityUtils.getQualityBadgeSync(
-                    releaseDate: t.firstAirDate,
+                    releaseDate: t.releaseDate,
                     isMovie: false,
                   ),
                   mediaId: t.id,
                   isMovie: false,
-                  releaseDate: t.firstAirDate,
+                  releaseDate: t.releaseDate,
                 );
               },
             ),
