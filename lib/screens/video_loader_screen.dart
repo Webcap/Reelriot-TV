@@ -207,8 +207,10 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     final nextEpData = await nextEpDataFuture;
     final qualityBadge = await qualityBadgeFuture;
 
-    // 2. Fetch all streams concurrently
-    final List<Future<core.ProviderStreamResponse?>> providerFutures = [];
+    // 2. Fetch all streams concurrently but stream the results
+    final StreamController<int> resultStream = StreamController<int>();
+    int completedCount = 0;
+    final List<core.ProviderStreamResponse?> responses = List.filled(_providers.length, null);
     
     for (int i = 0; i < _providers.length; i++) {
       final providerCode = _providers[i]['code']!;
@@ -218,25 +220,61 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
         _providerStates[i].status = ProviderStatus.loading;
       });
 
+      Future<core.ProviderStreamResponse?> fetchFuture;
       if (widget.movie != null) {
-        providerFutures.add(
-          _api.fetchMovieStream(widget.movie!.id, provider: providerCode)
-            .then((res) => res as core.ProviderStreamResponse?)
-            .catchError((e) {
-              debugPrint('[VideoLoader] ⚠️ Error with provider $providerName: $e');
-              return null;
-            })
-        );
+        fetchFuture = _api.fetchMovieStream(widget.movie!.id, provider: providerCode)
+            .then((res) => res as core.ProviderStreamResponse?);
       } else {
-        providerFutures.add(
-          _api.fetchTvStream(widget.tvShow!.id, _currentSeason!, _currentEpisode!, provider: providerCode)
-            .then((res) => res as core.ProviderStreamResponse?)
-            .catchError((e) {
-              debugPrint('[VideoLoader] ⚠️ Error with provider $providerName: $e');
-              return null;
-            })
-        );
+        fetchFuture = _api.fetchTvStream(widget.tvShow!.id, _currentSeason!, _currentEpisode!, provider: providerCode)
+            .then((res) => res as core.ProviderStreamResponse?);
       }
+
+      fetchFuture.then((response) {
+        completedCount++;
+        
+        if (response != null && response.success && response.links != null && response.links!.isNotEmpty) {
+          debugPrint('[VideoLoader] 🛠️ Raw links from $providerName: ${response.links!.map((l) => l.url).toList()}');
+          // Defensive filter: Only keep valid HTTP/HTTPS URLs (filters out AES strings/iframe embeds)
+          response.links!.retainWhere((link) => link.url.startsWith('http'));
+          
+          if (response.links!.isNotEmpty) {
+            responses[i] = response;
+            if (!resultStream.isClosed) {
+               resultStream.add(i);
+            }
+            return;
+          } else {
+            debugPrint('[VideoLoader] ⚠️ Provider $providerName returned invalid streams.');
+            if (mounted) {
+              setState(() {
+                _providerStates[i].status = ProviderStatus.failed;
+              });
+            }
+          }
+        } else {
+          debugPrint('[VideoLoader] ❌ Provider $providerName returned no links or success=false');
+          if (mounted) {
+            setState(() {
+              _providerStates[i].status = ProviderStatus.failed;
+            });
+          }
+        }
+
+        if (completedCount == _providers.length && !resultStream.isClosed) {
+          resultStream.add(-1);
+        }
+      }).catchError((e) {
+        debugPrint('[VideoLoader] ⚠️ Error with provider $providerName: $e');
+        if (mounted) {
+          setState(() {
+            _providerStates[i].status = ProviderStatus.failed;
+          });
+        }
+        completedCount++;
+        if (completedCount == _providers.length && !resultStream.isClosed) {
+          resultStream.add(-1);
+        }
+      });
     }
 
     // Start a timer to cycle the loading text to mimic web app
@@ -249,12 +287,6 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
         timer.cancel();
       }
     });
-
-    // Wait for all providers to finish (concurrently)
-    final responses = await Future.wait(providerFutures);
-    cycleTimer.cancel();
-
-    if (!mounted) return;
 
     // 1. Determine start position (cached for retries)
     Duration? startPos;
@@ -271,208 +303,194 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
       _currentStartPosition = startPos;
     }
 
-    // Loop through the results in priority order
-    for (int i = 0; i < _providers.length; i++) {
-      if (!mounted) return;
-      
-      final providerCode = _providers[i]['code']!;
-      final providerName = _providers[i]['name']!;
-      final response = responses[i];
+    await for (final winningIndex in resultStream.stream) {
+      if (!mounted) break;
+      if (winningIndex == -1) {
+         break; // All failed
+      }
+
+      final providerCode = _providers[winningIndex]['code']!;
+      final providerName = _providers[winningIndex]['name']!;
+      final response = responses[winningIndex]!;
 
       setState(() {
-        _currentProviderIndex = i;
+        _currentProviderIndex = winningIndex;
       });
 
-      if (response != null &&
-          response.success &&
-          response.links != null &&
-          response.links!.isNotEmpty) {
-        
-        // Defensive filter: Only keep valid HTTP/HTTPS URLs (filters out AES strings/iframe embeds)
-        response.links!.retainWhere((link) => link.url.startsWith('http'));
+      debugPrint('[VideoLoader] ✅ Found ${response.links!.length} stream(s) from $providerName');
 
-        if (response.links!.isEmpty) {
-          debugPrint('[VideoLoader] ⚠️ Provider $providerName returned invalid streams.');
-          continue;
-        }
+      if (!mounted) return;
 
+      // 1. Collect all potential subtitle links
+      List<core.SubtitleLink> allSubtitleLinks = [];
+
+      debugPrint(
+        '[VideoLoader] ℹ️ Subtitle Settings: useExternal=${_settings.useExternalSubtitles}, hasKey=${_settings.opensubtitlesKey.isNotEmpty}',
+      );
+
+      // External Subtitles (Prioritized)
+      if (_settings.useExternalSubtitles &&
+          _settings.opensubtitlesKey.isNotEmpty) {
         debugPrint(
-          '[VideoLoader] ✅ Found ${response.links!.length} stream(s) from $providerName',
+          '[VideoLoader] 🔍 External subtitles enabled. Checking Open Subtitles...',
         );
-          if (!mounted) return;
+        try {
+          final int tmdbId = widget.movie?.id ?? widget.tvShow!.id;
+          // Search for English, Spanish, and the user's default language
+          final validLangs = {
+            'en',
+            'es',
+            _settings.language,
+          }.where((l) => l.isNotEmpty).toSet();
+          final searchLangs = validLangs.join(',');
 
-          // 1. Collect all potential subtitle links
-          List<core.SubtitleLink> allSubtitleLinks = [];
-
-          debugPrint(
-            '[VideoLoader] ℹ️ Subtitle Settings: useExternal=${_settings.useExternalSubtitles}, hasKey=${_settings.opensubtitlesKey.isNotEmpty}',
+          final extSubs = await _subtitleService.searchSubtitles(
+            tmdbId: tmdbId,
+            languageCode: searchLangs,
+            apiKey: _settings.opensubtitlesKey,
+            seasonNumber: _currentSeason,
+            episodeNumber: _currentEpisode,
           );
 
-          // External Subtitles (Prioritized)
-          if (_settings.useExternalSubtitles &&
-              _settings.opensubtitlesKey.isNotEmpty) {
+          if (extSubs.isNotEmpty) {
             debugPrint(
-              '[VideoLoader] 🔍 External subtitles enabled. Checking Open Subtitles...',
+              '[VideoLoader] ✅ Found ${extSubs.length} Open Subtitles. Adding top tracks...',
             );
-            try {
-              final int tmdbId = widget.movie?.id ?? widget.tvShow!.id;
-              // Search for English, Spanish, and the user's default language
-              final validLangs = {
-                'en',
-                'es',
-                _settings.language,
-              }.where((l) => l.isNotEmpty).toSet();
-              final searchLangs = validLangs.join(',');
 
-              final extSubs = await _subtitleService.searchSubtitles(
-                tmdbId: tmdbId,
-                languageCode: searchLangs,
-                apiKey: _settings.opensubtitlesKey,
-                seasonNumber: _currentSeason,
-                episodeNumber: _currentEpisode,
-              );
+            // Track added languages to ensure diversity (one best per lang)
+            final addedLangs = <String>{};
+            int addedCount = 0;
 
-              if (extSubs.isNotEmpty) {
-                debugPrint(
-                  '[VideoLoader] ✅ Found ${extSubs.length} Open Subtitles. Adding top tracks...',
+            for (var sub in extSubs) {
+              if (addedCount >= 4) break;
+
+              final lang = sub.attr?.language ?? '';
+              final fileId = sub.attr?.files?.first.fileId;
+
+              if (fileId != null && !addedLangs.contains(lang)) {
+                final downloadUrl = await _subtitleService.downloadSubtitle(
+                  fileId,
+                  _settings.opensubtitlesKey,
                 );
 
-                // Track added languages to ensure diversity (one best per lang)
-                final addedLangs = <String>{};
-                int addedCount = 0;
-
-                for (var sub in extSubs) {
-                  if (addedCount >= 4) break;
-
-                  final lang = sub.attr?.language ?? '';
-                  final fileId = sub.attr?.files?.first.fileId;
-
-                  if (fileId != null && !addedLangs.contains(lang)) {
-                    final downloadUrl = await _subtitleService.downloadSubtitle(
-                      fileId,
-                      _settings.opensubtitlesKey,
-                    );
-
-                    if (downloadUrl != null) {
-                      addedLangs.add(lang);
-                      addedCount++;
-                      allSubtitleLinks.add(
-                        core.SubtitleLink(
-                          file: downloadUrl,
-                          label:
-                              '${sub.attr?.languageName ?? lang} (OpenSubtitles)',
-                        ),
-                      );
-                    }
-                  }
+                if (downloadUrl != null) {
+                  addedLangs.add(lang);
+                  addedCount++;
+                  allSubtitleLinks.add(
+                    core.SubtitleLink(
+                      file: downloadUrl,
+                      label:
+                          '${sub.attr?.languageName ?? lang} (OpenSubtitles)',
+                    ),
+                  );
                 }
               }
-            } catch (e) {
-              debugPrint(
-                '[VideoLoader] ⚠️ External subtitle search failed: $e',
-              );
             }
           }
-
-          // Internal subtitles from provider (Fallback/Secondary)
-          if (response.links!.first.subtitles.isNotEmpty) {
-            debugPrint(
-              '[VideoLoader] 📝 Found ${response.links!.first.subtitles.length} internal subtitles',
-            );
-            allSubtitleLinks.addAll(response.links!.first.subtitles);
-          }
-
-          // 2. Parse and process all collected subtitles
-          final langIndex = supportedLanguages.indexWhere(
-            (l) => l.languageCode == _settings.language,
-          );
-          final defaultLanguage = langIndex != -1
-              ? supportedLanguages[langIndex].englishName
-              : 'English';
-
-          final List<CaffeinePlayerSubtitlesSource> subs = await VideoUtils.parseSubtitles(
-            subtitles: allSubtitleLinks,
-            defaultLanguage: defaultLanguage,
-            fetchAllLanguages: true, // TV app generally wants more choice
-            getSubtitleContent: _subtitleService.getSubtitleContent,
-          );
-
+        } catch (e) {
           debugPrint(
-            '[VideoLoader] 🏁 Total processed subtitles: ${subs.length}',
+            '[VideoLoader] ⚠️ External subtitle search failed: $e',
           );
-
-          if (!mounted) return;
-          setState(() {
-            _providerStates[i].status = ProviderStatus.success;
-            _isDone = true;
-          });
-
-          debugPrint(
-            '[VideoLoader] 🚀 Launching PlayerScreen with URL: ${response.links!.first.url}',
-          );
-          
-          final result = await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => PlayerScreen(
-                url: response.links!.first.url,
-                title: widget.movie?.title ?? widget.tvShow?.name ?? 'Video',
-                item: widget.movie ?? widget.tvShow,
-                isMovie: widget.movie != null,
-                season: _currentSeason,
-                episode: _currentEpisode,
-                episodeId: _currentEpisodeId,
-                episodeName: _currentEpisodeName,
-                nextEpisode: nextEpData,
-                startPosition: startPos,
-                providerCode: providerCode,
-                allProviders: _providers,
-                quality: qualityBadge,
-                headers: response.links!.first.headers,
-                externalSubtitles: subs,
-              ),
-            ),
-          );
-
-          if (result == true) {
-            debugPrint('[VideoLoader] 🔄 Player signaled fallback. Retrying...');
-            if (mounted) {
-              setState(() {
-                _providerStates[i].status = ProviderStatus.failed;
-                _isDone = false;
-              });
-            }
-            continue; 
-          } else if (result is Map && result['action'] == 'next') {
-            debugPrint('[VideoLoader] ⏭️ Player signaled Next Episode.');
-            if (nextEpData != null && mounted) {
-              setState(() {
-                _currentSeason = nextEpData['season'];
-                _currentEpisode = nextEpData['episode'];
-                _currentEpisodeId = nextEpData['episodeId'];
-                _currentEpisodeName = nextEpData['episodeName'];
-                _currentStartPosition = null;
-              });
-              // Loop back to start loading the next one
-              _loadVideo();
-              return;
-            }
-          }
-
-          // User manually popped or finished video, so we also close the loader
-          debugPrint('[VideoLoader] 🔚 Player session ended. Closing loader.');
-          if (mounted) Navigator.of(context).pop();
-          return;
-        } else {
-          debugPrint(
-            '[VideoLoader] ❌ Provider $providerName returned no links or success=false',
-          );
-          if (mounted) {
-            setState(() {
-              _providerStates[i].status = ProviderStatus.failed;
-            });
-          }
         }
+      }
+
+      // Internal subtitles from provider (Fallback/Secondary)
+      if (response.links!.first.subtitles.isNotEmpty) {
+        debugPrint(
+          '[VideoLoader] 📝 Found ${response.links!.first.subtitles.length} internal subtitles',
+        );
+        allSubtitleLinks.addAll(response.links!.first.subtitles);
+      }
+
+      // 2. Parse and process all collected subtitles
+      final langIndex = supportedLanguages.indexWhere(
+        (l) => l.languageCode == _settings.language,
+      );
+      final defaultLanguage = langIndex != -1
+          ? supportedLanguages[langIndex].englishName
+          : 'English';
+
+      final List<CaffeinePlayerSubtitlesSource> subs = await VideoUtils.parseSubtitles(
+        subtitles: allSubtitleLinks,
+        defaultLanguage: defaultLanguage,
+        fetchAllLanguages: true, // TV app generally wants more choice
+        getSubtitleContent: _subtitleService.getSubtitleContent,
+      );
+
+      debugPrint(
+        '[VideoLoader] 🏁 Total processed subtitles: ${subs.length}',
+      );
+
+      if (!mounted) return;
+      
+      // Stop the cycling timer as soon as we succeed!
+      cycleTimer.cancel();
+      
+      setState(() {
+        _providerStates[winningIndex].status = ProviderStatus.success;
+        _isDone = true;
+      });
+
+      debugPrint(
+        '[VideoLoader] 🚀 Launching PlayerScreen with URL: ${response.links!.first.url}',
+      );
+      
+      final result = await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => PlayerScreen(
+            url: response.links!.first.url,
+            title: widget.movie?.title ?? widget.tvShow?.name ?? 'Video',
+            item: widget.movie ?? widget.tvShow,
+            isMovie: widget.movie != null,
+            season: _currentSeason,
+            episode: _currentEpisode,
+            episodeId: _currentEpisodeId,
+            episodeName: _currentEpisodeName,
+            nextEpisode: nextEpData,
+            startPosition: startPos,
+            providerCode: providerCode,
+            allProviders: _providers,
+            quality: qualityBadge,
+            headers: response.links!.first.headers,
+            externalSubtitles: subs,
+          ),
+        ),
+      );
+
+      if (result == true) {
+        debugPrint('[VideoLoader] 🔄 Player signaled fallback. Retrying...');
+        if (mounted) {
+          setState(() {
+            _providerStates[winningIndex].status = ProviderStatus.failed;
+            _isDone = false;
+          });
+        }
+        continue; 
+      } else if (result is Map && result['action'] == 'next') {
+        debugPrint('[VideoLoader] ⏭️ Player signaled Next Episode.');
+        if (nextEpData != null && mounted) {
+          setState(() {
+            _currentSeason = nextEpData['season'];
+            _currentEpisode = nextEpData['episode'];
+            _currentEpisodeId = nextEpData['episodeId'];
+            _currentEpisodeName = nextEpData['episodeName'];
+            _currentStartPosition = null;
+          });
+          // Loop back to start loading the next one
+          resultStream.close();
+          _loadVideo();
+          return;
+        }
+      }
+
+      // User manually popped or finished video, so we also close the loader
+      debugPrint('[VideoLoader] 🔚 Player session ended. Closing loader.');
+      resultStream.close();
+      if (mounted) Navigator.of(context).pop();
+      return;
     }
+
+    cycleTimer.cancel();
 
     if (mounted && !_isDone) {
       debugPrint(
