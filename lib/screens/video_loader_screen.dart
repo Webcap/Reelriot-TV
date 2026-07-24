@@ -52,7 +52,6 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   final SettingsService _settings = SettingsService();
 
   final List<Map<String, String>> _providers = [
-    {'code': 'vixsrc', 'name': 'VixSrc'},
     {'code': 'vidlink', 'name': 'VidLink'},
     {'code': 'vidsrcsu', 'name': 'VidSrc.su'},
     {'code': 'vidfun', 'name': 'VidFun'},

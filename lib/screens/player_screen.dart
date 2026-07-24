@@ -637,9 +637,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final uri = Uri.parse(widget.url);
       final host = uri.host.toLowerCase();
       if (host.contains('vidlink')) return 'VidLink';
-      if (host.contains('vixsrc')) return 'Vixsrc';
       if (host.contains('vidsrc')) return 'Vidsrc';
-      if (host.contains('vidzee')) return 'Vidzee';
       if (host.contains('vidfun')) return 'VidFun';
       if (host.contains('flixhq')) return 'FlixHQ';
       
@@ -651,7 +649,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
           final innerUri = Uri.parse(decoded);
           final innerHost = innerUri.host.toLowerCase();
           if (innerHost.contains('vidlink')) return 'VidLink';
-          if (innerHost.contains('vixsrc')) return 'Vixsrc';
           if (innerHost.contains('vidsrc')) return 'Vidsrc';
         }
       }
@@ -733,7 +730,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         return '';
       }
 
-      // Most CDNs (vixsrc, vidlink, vidsrc) require the trailing slash on Referer
+      // Most CDNs (vidlink, vidsrc) require the trailing slash on Referer
       return '${uri.scheme}://${uri.host}/';
     } catch (_) {
       return '';
@@ -873,10 +870,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
         headers['Origin'] = 'https://vidlink.pro';
       }
 
-      if (matchUrl.contains('vixsrc.to') || matchUrl.contains('vixsrc')) {
-        headers['Referer'] = 'https://vixsrc.to/';
-        headers['Origin'] = 'https://vixsrc.to';
-      }
 
       if (matchUrl.contains('instreams.live')) {
         headers['Referer'] = 'https://instreams.click/';
