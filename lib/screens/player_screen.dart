@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:reelriot_tv/services/outage_service.dart';
 import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
 import 'package:reelriot_tv/services/settings_service.dart';
@@ -227,7 +228,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
         final finalSubs = uniqueSubs.values.toList();
 
         final currentPosition = _controller?.position ?? Duration.zero;
-        final currentUrl = widget.url;
 
         debugPrint(
           '[PlayerScreen] 🔄 Updating data source with ${finalSubs.length} subtitles...',
@@ -241,22 +241,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
           return;
         }
 
-        // Re-setup data source with new subtitles
-        await _controller?.setDataSource(
-          currentUrl,
-          headers: widget.headers,
-          subtitles: finalSubs,
-          startAt: currentPosition,
+        // Directly activate auto-discovered subtitle track without stream reset
+        final autoTrack = SubtitleTrack.uri(
+          downloadUrl,
+          title: '$langName (Auto)',
         );
+        _controller?.setSubtitleTrack(autoTrack);
 
-        if (!_isDisposed && mounted) {
-          _controller?.seekTo(currentPosition);
-          _controller?.play();
-
-          debugPrint(
-            '[PlayerScreen] ✅ Auto-subtitle "$langName (Auto)" added to menu.',
-          );
-        }
+        debugPrint(
+          '[PlayerScreen] ✅ Auto-subtitle "$langName (Auto)" activated.',
+        );
       } else {
         debugPrint(
           '[PlayerScreen] ℹ️ No suitable auto-subtitles found for TMDB ID $tmdbId, language: $langCode',
@@ -1118,7 +1112,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
           '[PlayerScreen] ✅ Found ${searchResults.length} new subtitles',
         );
 
-        final List<CaffeinePlayerSubtitlesSource> newSubs = [];
         final langName = supportedLanguages
             .firstWhere(
               (l) => l.languageCode == langCode,
@@ -1130,6 +1123,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             )
             .englishName;
 
+        bool activated = false;
         for (var data in searchResults) {
           final fileId = data.attr?.files?.first.fileId;
           if (fileId != null) {
@@ -1137,57 +1131,57 @@ class _PlayerScreenState extends State<PlayerScreen> {
               fileId,
               SettingsService().opensubtitlesKey,
             );
-            if (downloadUrl != null) {
-              newSubs.add(
-                CaffeinePlayerSubtitlesSource(
-                  name: '$langName (OS)',
-                  url: downloadUrl,
-                ),
+            if (downloadUrl != null && !_isDisposed && mounted) {
+              final trackName = '$langName (OpenSubtitles)';
+              final newTrack = SubtitleTrack.uri(
+                downloadUrl,
+                title: trackName,
               );
+
+              debugPrint(
+                '[PlayerScreen] 🔤 Activating downloaded subtitle track: $trackName ($downloadUrl)',
+              );
+
+              // Directly set subtitle track on active controller without stream reload
+              _controller?.setSubtitleTrack(newTrack);
+              activated = true;
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Subtitles loaded: $langName'),
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+              }
+              break;
             }
           }
         }
 
-        if (newSubs.isEmpty) {
-          debugPrint('[PlayerScreen] ❌ Failed to download any new subtitles');
-          return;
+        if (!activated) {
+          debugPrint('[PlayerScreen] ❌ Failed to download subtitle file');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Could not download subtitles'),
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
         }
-
-        final List<CaffeinePlayerSubtitlesSource> updatedExternalSubs = [
-          ...widget.externalSubtitles ?? [],
-          ...newSubs,
-        ];
-
-        // Unique filter to avoid duplicates
-        final Map<String, CaffeinePlayerSubtitlesSource> uniqueSubs = {};
-        for (var sub in updatedExternalSubs) {
-          uniqueSubs[sub.name!] = sub;
-        }
-
-        final finalSubs = uniqueSubs.values.toList();
-
-        final currentPosition =
-            _controller?.position ?? Duration.zero;
-        final currentUrl = widget.url;
-
-        // Re-setup data source with new subtitles
-        await _controller?.setDataSource(
-          currentUrl,
-          headers: _getMergedHeaders(
-            currentUrl,
-            widget.referrer,
-            widget.headers,
-          ),
-          subtitles: finalSubs,
-          startAt: currentPosition,
-        );
-
-        _controller?.seekTo(currentPosition);
-        _controller?.play();
       } else {
         debugPrint(
           '[PlayerScreen] ℹ️ No subtitles found for language: $langCode',
         );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('No subtitles found for $langCode'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       }
     } catch (e) {
       debugPrint('[PlayerScreen] ❌ Error searching more subtitles: $e');

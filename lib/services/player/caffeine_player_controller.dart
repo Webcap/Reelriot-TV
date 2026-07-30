@@ -228,33 +228,6 @@ class CaffeinePlayerController extends ChangeNotifier {
       (player.platform as dynamic).setProperty('demuxer-max-back-bytes', '16M');
     }
 
-    // Handle subtitles
-    if (subtitles != null && subtitles.isNotEmpty) {
-      CaffeinePlayerSubtitlesSource? defaultSub;
-      
-      for (var sub in subtitles) {
-        final track = sub.url != null 
-            ? SubtitleTrack.uri(sub.url!, title: sub.name)
-            : SubtitleTrack.data(sub.data!, title: sub.name);
-            
-        player.setSubtitleTrack(track);
-        if (sub.isDefault) {
-          defaultSub = sub;
-        }
-      }
-      
-      // If no default was found, turn off subtitles (prevents last one from staying on)
-      if (defaultSub == null) {
-        player.setSubtitleTrack(SubtitleTrack.no());
-      } else {
-        // Re-select the default one to be sure (since the loop above selects each one)
-        final track = defaultSub.url != null
-            ? SubtitleTrack.uri(defaultSub.url!, title: defaultSub.name)
-            : SubtitleTrack.data(defaultSub.data!, title: defaultSub.name);
-        player.setSubtitleTrack(track);
-      }
-    }
-
     await player.open(
       Media(
         url,
@@ -262,6 +235,25 @@ class CaffeinePlayerController extends ChangeNotifier {
       ),
       play: true,
     );
+
+    // Handle subtitles (AFTER player.open so tracks are preserved)
+    if (subtitles != null && subtitles.isNotEmpty) {
+      SubtitleTrack? defaultTrack;
+
+      for (var sub in subtitles) {
+        final track = sub.url != null
+            ? SubtitleTrack.uri(sub.url!, title: sub.name)
+            : SubtitleTrack.data(sub.data!, title: sub.name);
+
+        if (sub.isDefault) {
+          defaultTrack = track;
+        }
+      }
+
+      if (defaultTrack != null) {
+        player.setSubtitleTrack(defaultTrack);
+      }
+    }
     
     if (startAt > Duration.zero) {
       debugPrint('[CaffeinePlayer] ⏩ Applying startup seek: $startAt');
