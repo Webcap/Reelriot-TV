@@ -1,5 +1,6 @@
 import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'dart:async';
+import 'dart:convert';
 import 'package:reelriot_tv/services/outage_service.dart';
 import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
 import 'package:reelriot_tv/constants.dart';
@@ -54,6 +55,8 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   final List<Map<String, String>> _providers = [
     {'code': 'vidlink', 'name': 'VidLink'},
     {'code': 'vidsrcsu', 'name': 'VidSrc.su'},
+    {'code': 'vidsrcme', 'name': 'VidSrc.me'},
+    {'code': 'nxsha', 'name': 'Nxsha'},
     {'code': 'vidfun', 'name': 'VidFun'},
     {'code': 'flixhq', 'name': 'FlixHQ'},
   ];
@@ -233,33 +236,13 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
         
         if (response != null && response.success && response.links != null && response.links!.isNotEmpty) {
           // Defensive filter: Only keep playable HLS (.m3u8), MP4 or proxied media stream URLs.
-          // Reject raw HTML iframe embed URLs (e.g. /embed/, web.nxsha.app) that cannot be parsed by media_kit/libmpv.
+          // Reject raw HTML iframe embed URLs (e.g. /embed/, web.nxsha.app) even if wrapped in a proxy URL.
           response.links!.retainWhere((link) {
-            final url = link.url.toLowerCase();
-            if (!url.startsWith('http')) return false;
-
-            // Reject iframe/HTML embed URLs that cannot be parsed by media_kit
-            if (url.contains('/embed/') ||
-                url.contains('embed.html') ||
-                url.contains('web.nxsha.app') ||
-                url.contains('vidsrcme.ru/embed') ||
-                url.contains('wfs.lol/embed')) {
-              debugPrint('[VideoLoader] ⚠️ Filtering out HTML embed URL: ${link.url}');
-              return false;
+            final isPlayable = _isPlayableMediaUrl(link.url, link.isM3U8);
+            if (!isPlayable) {
+              debugPrint('[VideoLoader] ⚠️ Filtering out unplayable/embed URL: ${link.url}');
             }
-
-            // Reject non-m3u8 if isM3U8 is explicitly false and no stream extension is present
-            if (link.isM3U8 == false &&
-                !url.contains('.m3u8') &&
-                !url.contains('.mp4') &&
-                !url.contains('/proxy/stream') &&
-                !url.contains('playlist') &&
-                !url.contains('/hls/')) {
-              debugPrint('[VideoLoader] ⚠️ Filtering out non-playable stream URL: ${link.url}');
-              return false;
-            }
-
-            return true;
+            return isPlayable;
           });
           
           if (response.links!.isNotEmpty) {
@@ -672,5 +655,52 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
         ],
       ),
     );
+  }
+
+  bool _isPlayableMediaUrl(String rawUrl, bool? isM3U8) {
+    final lowerUrl = rawUrl.toLowerCase();
+    if (!lowerUrl.startsWith('http') && !lowerUrl.startsWith('/')) return false;
+
+    // Extract real target URL if proxied via /proxy/stream?url=...
+    String targetUrl = lowerUrl;
+    if (lowerUrl.contains('url=')) {
+      try {
+        final uri = Uri.parse(rawUrl);
+        final encodedTarget = uri.queryParameters['url'];
+        if (encodedTarget != null && encodedTarget.isNotEmpty) {
+          try {
+            final normalizedB64 = encodedTarget.replaceAll('-', '+').replaceAll('_', '/');
+            final padded = normalizedB64.padRight((normalizedB64.length + 3) & ~3, '=');
+            targetUrl = utf8.decode(base64.decode(padded)).toLowerCase();
+          } catch (_) {
+            targetUrl = Uri.decodeComponent(encodedTarget).toLowerCase();
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Check if the target is a raw HTML embed page (e.g. /embed/, web.nxsha.app, vidsrcme.ru)
+    final isEmbed = targetUrl.contains('/embed/') ||
+                    targetUrl.contains('embed.html') ||
+                    targetUrl.contains('web.nxsha.app') ||
+                    targetUrl.contains('vidsrcme.ru') ||
+                    targetUrl.contains('wfs.lol/embed');
+
+    // Check if target is a valid direct media stream (.m3u8, .mp4, playlist)
+    final isDirectMedia = targetUrl.contains('.m3u8') ||
+                          targetUrl.contains('.mp4') ||
+                          targetUrl.contains('/proxy/stream/video.m3u8') ||
+                          targetUrl.contains('playlist') ||
+                          targetUrl.contains('/hls/');
+
+    if (isEmbed && !isDirectMedia) {
+      return false;
+    }
+
+    if (isM3U8 == false && !isDirectMedia) {
+      return false;
+    }
+
+    return true;
   }
 }

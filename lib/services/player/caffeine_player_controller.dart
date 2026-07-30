@@ -63,7 +63,7 @@ class CaffeinePlayerController extends ChangeNotifier {
     videoController = VideoController(
       player,
       configuration: const VideoControllerConfiguration(
-        hwdec: 'auto', // Enable hardware decoding for stability
+        hwdec: 'mediacodec-copy', // Hardware decoding via mediacodec-copy for maximum stability and zero SELinux/BufferPool stalls
       ),
     );
     _setupListeners();
@@ -192,7 +192,8 @@ class CaffeinePlayerController extends ChangeNotifier {
     }
 
     // Performance and RAM optimizations for TV boxes (Amlogic/Mali/Adreno)
-    (player.platform as dynamic).setProperty('vd-lavc-dr', 'yes'); // Enable direct rendering for direct GPU surface output
+    (player.platform as dynamic).setProperty('vd-lavc-dr', 'no'); // MUST be 'no' on Android to prevent SELinux dmabuf AVC denials
+    (player.platform as dynamic).setProperty('hwdec', 'mediacodec-copy'); // Avoid zero-copy dmabuf bufferpool pipeline drops
     (player.platform as dynamic).setProperty('cache', 'yes');
     
     // Low-latency and decoder sync optimizations to prevent frozen video
