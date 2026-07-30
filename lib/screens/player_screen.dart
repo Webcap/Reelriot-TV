@@ -107,6 +107,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    _lastKnownPosition = widget.startPosition;
     WakelockManager.enable();
     OutageService.instance.pause();
     _setupController();
@@ -301,9 +302,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
       position = duration;
     } else {
       final ctrlPos = _controller!.position;
-      position = (ctrlPos > Duration.zero)
+      position = (ctrlPos > const Duration(seconds: 5))
           ? ctrlPos
-          : (_lastKnownPosition ?? Duration.zero);
+          : (_lastKnownPosition != null && _lastKnownPosition! > const Duration(seconds: 5)
+              ? _lastKnownPosition!
+              : (widget.startPosition ?? Duration.zero));
+    }
+
+    // Do NOT overwrite valid saved history with near-zero initial loading positions
+    if (!isFinished &&
+        position <= const Duration(seconds: 5) &&
+        widget.startPosition != null &&
+        widget.startPosition! > const Duration(seconds: 5)) {
+      debugPrint(
+        '[PlayerScreen] 🛡️ Preserving saved resume position (${widget.startPosition}), skipping startup 0s progress save.',
+      );
+      return;
     }
 
     await _historyService.saveProgress(
@@ -414,9 +428,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       } else if (event.type == CaffeinePlayerEventType.progress) {
         if (!_isDisposed) {
           final progress = event.position;
-          if (progress != null &&
-              (_lastKnownPosition == null ||
-                  (progress.inSeconds != _lastKnownPosition!.inSeconds))) {
+          if (progress != null && progress > const Duration(seconds: 5)) {
             _lastKnownPosition = progress;
           }
         }
@@ -1208,7 +1220,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     await _saveCurrentProgress();
-    final currentPosition = _controller?.position ?? _lastKnownPosition;
+    final ctrlPos = _controller?.position;
+    final currentPosition = (ctrlPos != null && ctrlPos > const Duration(seconds: 5))
+        ? ctrlPos
+        : (_lastKnownPosition != null && _lastKnownPosition! > const Duration(seconds: 5)
+            ? _lastKnownPosition
+            : (widget.startPosition ?? Duration.zero));
 
     debugPrint(
       '[PlayerScreen] 🔄 Forcing player reset (media_kit)... '
