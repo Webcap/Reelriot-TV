@@ -232,9 +232,35 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
         completedCount++;
         
         if (response != null && response.success && response.links != null && response.links!.isNotEmpty) {
-          debugPrint('[VideoLoader] 🛠️ Raw links from $providerName: ${response.links!.map((l) => l.url).toList()}');
-          // Defensive filter: Only keep valid HTTP/HTTPS URLs (filters out AES strings/iframe embeds)
-          response.links!.retainWhere((link) => link.url.startsWith('http'));
+          // Defensive filter: Only keep playable HLS (.m3u8), MP4 or proxied media stream URLs.
+          // Reject raw HTML iframe embed URLs (e.g. /embed/, web.nxsha.app) that cannot be parsed by media_kit/libmpv.
+          response.links!.retainWhere((link) {
+            final url = link.url.toLowerCase();
+            if (!url.startsWith('http')) return false;
+
+            // Reject iframe/HTML embed URLs that cannot be parsed by media_kit
+            if (url.contains('/embed/') ||
+                url.contains('embed.html') ||
+                url.contains('web.nxsha.app') ||
+                url.contains('vidsrcme.ru/embed') ||
+                url.contains('wfs.lol/embed')) {
+              debugPrint('[VideoLoader] ⚠️ Filtering out HTML embed URL: ${link.url}');
+              return false;
+            }
+
+            // Reject non-m3u8 if isM3U8 is explicitly false and no stream extension is present
+            if (link.isM3U8 == false &&
+                !url.contains('.m3u8') &&
+                !url.contains('.mp4') &&
+                !url.contains('/proxy/stream') &&
+                !url.contains('playlist') &&
+                !url.contains('/hls/')) {
+              debugPrint('[VideoLoader] ⚠️ Filtering out non-playable stream URL: ${link.url}');
+              return false;
+            }
+
+            return true;
+          });
           
           if (response.links!.isNotEmpty) {
             responses[i] = response;

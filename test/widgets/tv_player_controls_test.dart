@@ -110,6 +110,7 @@ void main() {
 
     // Tap the FF icon
     await tester.tap(find.byIcon(Icons.forward_10_rounded));
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
 
     verify(() => mockController.seekTo(any())).called(1);

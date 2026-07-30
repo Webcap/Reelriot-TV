@@ -325,10 +325,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _setupController() {
-    if (widget.url.isEmpty) {
-      _safeSetState(() {
-        _hasError = true;
-        _errorMessage = 'Invalid video URL';
+    final lowerUrl = widget.url.toLowerCase();
+    if (widget.url.isEmpty ||
+        lowerUrl.contains('/embed/') ||
+        lowerUrl.contains('web.nxsha.app') ||
+        lowerUrl.contains('wfs.lol/embed') ||
+        lowerUrl.contains('vidsrcme.ru/embed')) {
+      debugPrint('[PlayerScreen] ❌ Non-playable HTML embed URL detected: ${widget.url}');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_isDisposed) {
+          _fallbackToNextProvider();
+        }
       });
       return;
     }

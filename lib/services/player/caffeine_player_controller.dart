@@ -56,13 +56,14 @@ class CaffeinePlayerController extends ChangeNotifier {
   bool _controlsVisible = false;
   bool _isDisposed = false;
   bool _isLiveStream = false;
+  Duration? _lastEmittedPosition;
 
   CaffeinePlayerController() {
     player = Player();
     videoController = VideoController(
       player,
       configuration: const VideoControllerConfiguration(
-        hwdec: 'auto', // Enable hardware decoding for 1080p stability on Chromecast
+        hwdec: 'auto', // Enable hardware decoding for stability
       ),
     );
     _setupListeners();
@@ -103,7 +104,13 @@ class CaffeinePlayerController extends ChangeNotifier {
 
     _subscriptions.add(player.stream.position.listen((position) {
       if (_isDisposed) return;
-      _emit(CaffeinePlayerEventType.progress, position: position);
+      // Throttle position progress notifications to 1Hz (per second change)
+      // to eliminate UI rebuild microtask queueing and input lag when pausing.
+      if (_lastEmittedPosition == null ||
+          position.inSeconds != _lastEmittedPosition!.inSeconds) {
+        _lastEmittedPosition = position;
+        _emit(CaffeinePlayerEventType.progress, position: position);
+      }
     }));
   }
 
@@ -184,22 +191,20 @@ class CaffeinePlayerController extends ChangeNotifier {
       merged.addAll(headers);
     }
 
-    // Performance optimizations for TV boxes (Amlogic/Mali)
-    (player.platform as dynamic).setProperty('vd-lavc-dr', 'no'); // Keep direct rendering disabled for SELinux safety
+    // Performance and RAM optimizations for TV boxes (Amlogic/Mali/Adreno)
+    (player.platform as dynamic).setProperty('vd-lavc-dr', 'yes'); // Enable direct rendering for direct GPU surface output
     (player.platform as dynamic).setProperty('cache', 'yes');
     
-    // Low-latency and sync optimizations for Chromecast/Mali
+    // Low-latency and decoder sync optimizations to prevent frozen video
     (player.platform as dynamic).setProperty('video-sync', 'audio');
-    (player.platform as dynamic).setProperty('framedrop', 'vo');
+    (player.platform as dynamic).setProperty('framedrop', 'decoder'); // Drop late frames at decoder level, not VO stage
     
     // Force seekable to true for better HLS/Proxy support
     (player.platform as dynamic).setProperty('force-seekable', 'yes');
-    (player.platform as dynamic).setProperty('demuxer-max-bytes', '128000000'); // 128MB
-    (player.platform as dynamic).setProperty('demuxer-max-back-bytes', '64000000'); // 64MB
     
     // HLS specific optimizations
     (player.platform as dynamic).setProperty('hls-bitrate', '5000000'); // Cap at 5Mbps for stability
-    (player.platform as dynamic).setProperty('cache-pause', 'yes');
+    (player.platform as dynamic).setProperty('cache-pause-initial', 'yes');
     (player.platform as dynamic).setProperty('stream-buffer-size', '8192k');
 
     // Set initial start position via mpv property (most robust way)
@@ -211,13 +216,16 @@ class CaffeinePlayerController extends ChangeNotifier {
     }
 
     if (liveStream) {
-      // Stability optimizations for live streams
-      (player.platform as dynamic).setProperty('demuxer-readahead-secs', '45'); // Further increase readahead
-      (player.platform as dynamic).setProperty('cache-secs', '60'); // Further increase cache
+      // Buffer settings for live streams (32MB max to prevent RAM exhaustion on Android TV)
+      (player.platform as dynamic).setProperty('demuxer-max-bytes', '32M');
+      (player.platform as dynamic).setProperty('demuxer-max-back-bytes', '8M');
+      (player.platform as dynamic).setProperty('demuxer-readahead-secs', '20');
+      (player.platform as dynamic).setProperty('cache-secs', '30');
     } else {
-      // Buffer settings for regular media
-      (player.platform as dynamic).setProperty('demuxer-max-bytes', '512M');
-      (player.platform as dynamic).setProperty('demuxer-max-back-bytes', '256M');
+      // Buffer settings for regular media (64MB forward buffer + 16MB back buffer)
+      // Prevents native RAM OOM crash / video freeze on low-memory Android TV devices.
+      (player.platform as dynamic).setProperty('demuxer-max-bytes', '64M');
+      (player.platform as dynamic).setProperty('demuxer-max-back-bytes', '16M');
     }
 
     // Handle subtitles

@@ -33,6 +33,16 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   bool _showBufferingOverlay = false;
   Timer? _bufferingDebounce;
   Timer? _hideTimer;
+
+  // Scrubbing & Seeking engine
+  bool _isScrubbing = false;
+  Duration _targetSeekPosition = Duration.zero;
+  Duration _scrubStartPos = Duration.zero;
+  Timer? _seekDebounceTimer;
+  Timer? _scrubBadgeTimer;
+  bool _showScrubBadge = false;
+  bool _isForwardScrub = true;
+
   final FocusNode _playPauseFocusNode = FocusNode();
   final FocusNode _progressBarFocusNode = FocusNode();
   final FocusNode _settingsFocusNode = FocusNode();
@@ -63,6 +73,8 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   void dispose() {
     _hideTimer?.cancel();
     _bufferingDebounce?.cancel();
+    _seekDebounceTimer?.cancel();
+    _scrubBadgeTimer?.cancel();
     _playPauseFocusNode.dispose();
     _progressBarFocusNode.dispose();
     _settingsFocusNode.dispose();
@@ -72,6 +84,76 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
     _visibilitySubscription?.cancel();
     widget.controller.removeEventsListener(_onPlayerEvent);
     super.dispose();
+  }
+
+  void _performScrub(bool isForward) {
+    _showControls();
+    final duration = widget.controller.player.state.duration;
+    if (duration == Duration.zero) return;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (_lastSeekTimestamp != null && (now - _lastSeekTimestamp!) < 400) {
+      _seekAccelerationFactor = (_seekAccelerationFactor + 1).clamp(1, 10);
+    } else {
+      _seekAccelerationFactor = 1;
+    }
+    _lastSeekTimestamp = now;
+
+    // Step amounts: 10s -> 20s -> 30s -> 60s -> 2m -> 3m -> 5m
+    final stepSeconds = switch (_seekAccelerationFactor) {
+      1 => 10,
+      2 => 20,
+      3 => 30,
+      4 => 60,
+      5 => 120,
+      6 => 180,
+      _ => 300,
+    };
+
+    final currentPos = widget.controller.player.state.position;
+
+    setState(() {
+      if (!_isScrubbing) {
+        _isScrubbing = true;
+        _scrubStartPos = currentPos;
+        _targetSeekPosition = currentPos;
+      }
+
+      _isForwardScrub = isForward;
+      _showScrubBadge = true;
+
+      final delta = Duration(seconds: stepSeconds);
+      if (isForward) {
+        final target = _targetSeekPosition + delta;
+        _targetSeekPosition = target > duration ? duration : target;
+      } else {
+        final target = _targetSeekPosition - delta;
+        _targetSeekPosition = target < Duration.zero ? Duration.zero : target;
+      }
+    });
+
+    _startHideTimer();
+
+    // Debounce actual player seek call by 350ms to prevent network/decoder stall
+    _seekDebounceTimer?.cancel();
+    _seekDebounceTimer = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      final finalTarget = _targetSeekPosition;
+      widget.controller.seekTo(finalTarget);
+
+      setState(() {
+        _isScrubbing = false;
+      });
+
+      _scrubBadgeTimer?.cancel();
+      _scrubBadgeTimer = Timer(const Duration(milliseconds: 1200), () {
+        if (mounted) {
+          setState(() {
+            _showScrubBadge = false;
+          });
+        }
+      });
+    });
   }
 
   void _onPlayerEvent(CaffeinePlayerEvent event) {
@@ -152,17 +234,15 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
             watchingText: widget.controller.watchingText,
           ),
 
-        Visibility(
-          visible: _isVisible,
-          maintainState: true,
-          maintainAnimation: true,
-          child: AnimatedOpacity(
-            opacity: _isVisible ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 300),
-            child: IgnorePointer(
-              ignoring: !_isVisible,
-              child: FocusScope(
-                canRequestFocus: _isVisible,
+        if (_showScrubBadge) _buildScrubBadgeOverlay(),
+
+        AnimatedOpacity(
+          opacity: _isVisible ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 300),
+          child: IgnorePointer(
+            ignoring: !_isVisible,
+            child: FocusScope(
+              canRequestFocus: _isVisible,
                 child: Stack(
                   children: [
                     Positioned.fill(
@@ -267,7 +347,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  _buildTimeText(playerState.position),
+                                  _buildTimeText(_isScrubbing ? _targetSeekPosition : playerState.position),
                                   const Spacer(),
                                   _buildRewindButton(),
                                   const SizedBox(width: 24),
@@ -294,9 +374,8 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
               ),
             ),
           ),
-        ),
-      ],
-    );
+        ],
+      );
   }
 
   Widget _buildInfoBadge(String text) {
@@ -367,7 +446,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   Widget _buildProgressBar([PlayerState? currentState]) {
     final state = currentState ?? widget.controller.player.state;
     final duration = state.duration;
-    final position = state.position;
+    final position = _isScrubbing ? _targetSeekPosition : state.position;
     final buffer = state.buffer;
 
     final double playedPart = (duration == Duration.zero)
@@ -392,40 +471,11 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         if (TvKeys.isRight(event.logicalKey)) {
-          final now = DateTime.now().millisecondsSinceEpoch;
-          if (_lastSeekTimestamp != null && (now - _lastSeekTimestamp!) < 400) {
-            _seekAccelerationFactor = (_seekAccelerationFactor + 1).clamp(
-              1,
-              20,
-            );
-          } else {
-            _seekAccelerationFactor = 1;
-          }
-          _lastSeekTimestamp = now;
-
-          final seekAmount = Duration(seconds: 30 * _seekAccelerationFactor);
-          widget.controller.seekTo(state.position + seekAmount);
-          _startHideTimer();
+          _performScrub(true);
           return KeyEventResult.handled;
         }
         if (TvKeys.isLeft(event.logicalKey)) {
-          final now = DateTime.now().millisecondsSinceEpoch;
-          if (_lastSeekTimestamp != null && (now - _lastSeekTimestamp!) < 400) {
-            _seekAccelerationFactor = (_seekAccelerationFactor + 1).clamp(
-              1,
-              20,
-            );
-          } else {
-            _seekAccelerationFactor = 1;
-          }
-          _lastSeekTimestamp = now;
-
-          final seekAmount = Duration(seconds: 30 * _seekAccelerationFactor);
-          final target = state.position - seekAmount;
-          widget.controller.seekTo(
-            target < Duration.zero ? Duration.zero : target,
-          );
-          _startHideTimer();
+          _performScrub(false);
           return KeyEventResult.handled;
         }
         if (TvKeys.isDown(event.logicalKey)) {
@@ -446,7 +496,24 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
 
             final duration = widget.controller.player.state.duration;
             if (duration != Duration.zero) {
-              widget.controller.seekTo(duration * percentage);
+              final target = duration * percentage;
+              setState(() {
+                _isScrubbing = true;
+                _targetSeekPosition = target;
+                _showScrubBadge = true;
+              });
+              _seekDebounceTimer?.cancel();
+              _seekDebounceTimer = Timer(const Duration(milliseconds: 350), () {
+                if (!mounted) return;
+                widget.controller.seekTo(target);
+                setState(() {
+                  _isScrubbing = false;
+                });
+                _scrubBadgeTimer?.cancel();
+                _scrubBadgeTimer = Timer(const Duration(milliseconds: 1200), () {
+                  if (mounted) setState(() => _showScrubBadge = false);
+                });
+              });
               _startHideTimer();
             }
           }
@@ -604,11 +671,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
     return _buildControlButton(
       focusNode: _rewindFocusNode,
       icon: Icons.replay_10_rounded,
-      onPressed: () {
-        final pos = widget.controller.player.state.position;
-        widget.controller.seekTo(pos - const Duration(seconds: 10));
-        _startHideTimer();
-      },
+      onPressed: () => _performScrub(false),
       onLeft: () => KeyEventResult.handled,
       onRight: () => _playPauseFocusNode.requestFocus(),
     );
@@ -618,11 +681,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
     return _buildControlButton(
       focusNode: _ffFocusNode,
       icon: Icons.forward_10_rounded,
-      onPressed: () {
-        final pos = widget.controller.player.state.position;
-        widget.controller.seekTo(pos + const Duration(seconds: 10));
-        _startHideTimer();
-      },
+      onPressed: () => _performScrub(true),
       onLeft: () => _playPauseFocusNode.requestFocus(),
       onRight: () => _settingsFocusNode.requestFocus(),
     );
@@ -639,6 +698,82 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       },
       onLeft: () => _settingsFocusNode.requestFocus(),
       onRight: () => KeyEventResult.handled,
+    );
+  }
+
+  Widget _buildScrubBadgeOverlay() {
+    final deltaSec = _targetSeekPosition.inSeconds - _scrubStartPos.inSeconds;
+    final isForward = deltaSec >= 0;
+    final absDelta = Duration(seconds: deltaSec.abs());
+
+    String formatDuration(Duration d) {
+      final hours = d.inHours;
+      final mins = d.inMinutes.remainder(60);
+      final secs = d.inSeconds.remainder(60);
+      if (hours > 0) {
+        return '${hours.toString().padLeft(2, '0')}:${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+      }
+      return '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+    }
+
+    final deltaText = '${isForward ? '+' : '-'}${formatDuration(absDelta)}';
+    final targetTimeText = formatDuration(_targetSeekPosition);
+    final totalTimeText = formatDuration(widget.controller.player.state.duration);
+
+    return Center(
+      child: AnimatedOpacity(
+        opacity: _showScrubBadge ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 200),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white24, width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: 20,
+                spreadRadius: 4,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isForward ? Icons.fast_forward_rounded : Icons.fast_rewind_rounded,
+                    color: const Color(0xFFEC1D24),
+                    size: 36,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    deltaText,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '$targetTimeText / $totalTimeText',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
