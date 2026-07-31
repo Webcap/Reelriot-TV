@@ -758,7 +758,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
       // Skip live games or sports from "Up Next" episode calculation
       if (isLive || isSports) continue;
 
-      // Rule: Only show episodes in Up Next if the previous episode was completed
+      // Rule: Only calculate next episode if previous episode was completed, otherwise use current in-progress episode
       if (originalShow['is_completed'] == true) {
         try {
           final show = Map<String, dynamic>.from(originalShow);
@@ -782,6 +782,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
           }
 
           if (nextEp != null && isEpReleased(nextEp.airDate)) {
+            show['season_num'] = seasonNum;
             show['episode_num'] = nextEp.episodeNumber;
             show['episode_name'] = nextEp.name;
             show['is_completed'] = false;
@@ -805,6 +806,15 @@ class _MainHomeViewState extends State<_MainHomeView> {
           }
         } catch (e) {
           debugPrint('[HomeScreen] ❌ Error calculating next episode for "$showTitle": $e');
+        }
+      } else {
+        try {
+          final show = Map<String, dynamic>.from(originalShow);
+          show['season_num'] = show['season_num'] as int? ?? 1;
+          show['episode_num'] = show['episode_num'] as int? ?? 1;
+          upNextItems.add(show);
+        } catch (e) {
+          debugPrint('[HomeScreen] ❌ Error processing in-progress episode for "$showTitle": $e');
         }
       }
       if (upNextItems.length >= 10) break;
