@@ -337,7 +337,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (widget.url.isEmpty ||
         lowerUrl.contains('/embed/') ||
         lowerUrl.contains('web.nxsha.app') ||
-        lowerUrl.contains('wfs.lol/embed') ||
         lowerUrl.contains('vidsrcme.ru/embed')) {
       debugPrint('[PlayerScreen] ❌ Non-playable HTML embed URL detected: ${widget.url}');
       WidgetsBinding.instance.addPostFrameCallback((_) {

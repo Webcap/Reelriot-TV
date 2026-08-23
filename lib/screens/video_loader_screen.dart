@@ -683,8 +683,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     final isEmbed = targetUrl.contains('/embed/') ||
                     targetUrl.contains('embed.html') ||
                     targetUrl.contains('web.nxsha.app') ||
-                    targetUrl.contains('vidsrcme.ru') ||
-                    targetUrl.contains('wfs.lol/embed');
+                    targetUrl.contains('vidsrcme.ru');
 
     // Check if target is a valid direct media stream (.m3u8, .mp4, playlist)
     final isDirectMedia = targetUrl.contains('.m3u8') ||
