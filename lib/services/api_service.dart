@@ -201,7 +201,7 @@ class ApiService {
     return data['imdb_id'];
   }
 
-  Future<core.ProviderStreamResponse> fetchMovieStream(int movieId, {String provider = 'vidlink'}) async {
+  Future<core.ProviderStreamResponse> fetchMovieStream(int movieId, {String provider = 'vidsrcsu'}) async {
     final url = core.Endpoints.streamMovieUrl(caffeineBaseUrl, provider, movieId.toString(), language: audioLanguage, country: region);
     final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 60));
     if (res.statusCode != 200) {
@@ -212,7 +212,7 @@ class ApiService {
   }
 
   Future<core.ProviderStreamResponse> fetchTvStream(
-      int tmdbId, int season, int episode, {String provider = 'vidlink'}) async {
+      int tmdbId, int season, int episode, {String provider = 'vidsrcsu'}) async {
     final url = core.Endpoints.streamTvUrl(caffeineBaseUrl, provider, tmdbId.toString(), season, episode, language: audioLanguage, country: region);
     final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 60));
     if (res.statusCode != 200) {
