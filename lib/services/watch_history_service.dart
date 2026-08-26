@@ -244,6 +244,30 @@ class WatchHistoryService extends ChangeNotifier {
           upsertData, 
           onConflict: 'user_id,media_id,season_num,episode_num'
         );
+
+        try {
+          final eventData = {
+            'user_id': user.id,
+            'media_type': isMovie ? 'movie' : 'tv',
+            'media_id': mediaId,
+            'season_num': season,
+            'episode_num': episode,
+            'title': title,
+            'episode_name': episodeName,
+            'poster_path': posterPath,
+            'backdrop_path': backdropPath,
+            'started_at': DateTime.now().subtract(Duration(milliseconds: elapsed)).toIso8601String(),
+            'completed_at': now,
+            'elapsed_ms': elapsed,
+            'duration_ms': total,
+            'is_completed': true,
+            'platform': 'tv',
+          };
+          await _supabase.from('playback_history_events').insert(eventData);
+        } catch (e) {
+          debugPrint('[WatchHistory] Error inserting playback_history_events: $e');
+        }
+
         debugPrint('[WatchHistory] ✅ Marked ${isMovie ? 'Movie' : 'TV Show'} as Completed');
 
       } else {
@@ -461,15 +485,24 @@ class WatchHistoryService extends ChangeNotifier {
       final cwRes = await cwQuery.order('updated_at', ascending: false);
       
       List<dynamic> completedRes = [];
+      List<dynamic> eventRes = [];
       if (includeCompleted) {
         var compQuery = _supabase.from('completed_watch_history').select().eq('user_id', user.id);
+        var eventQuery = _supabase.from('playback_history_events').select().eq('user_id', user.id).eq('is_completed', true);
         if (mediaType != null) {
           compQuery = compQuery.eq('media_type', mediaType);
+          eventQuery = eventQuery.eq('media_type', mediaType);
         }
-        completedRes = await compQuery.order('updated_at', ascending: false);
+        final results = await Future.wait([
+          compQuery.order('updated_at', ascending: false),
+          eventQuery.order('completed_at', ascending: false),
+        ]);
+        completedRes = results[0];
+        eventRes = results[1];
       }
 
       final normalized = <Map<String, dynamic>>[];
+      final loggedEventKeys = <String>{};
 
       for (var row in cwRes) {
         normalized.add({
@@ -491,7 +524,35 @@ class WatchHistoryService extends ChangeNotifier {
         });
       }
 
+      for (var row in eventRes) {
+        final key = '${row['media_type']}_${row['media_id']}_${row['season_num'] ?? 0}_${row['episode_num'] ?? 0}';
+        loggedEventKeys.add(key);
+
+        normalized.add({
+          'type': row['media_type'],
+          'session_id': row['id'],
+          'media_id': row['media_id'],
+          'title': row['title'],
+          'series_name': row['media_type'] == 'tv' ? row['title'] : null,
+          'season_num': row['season_num'],
+          'episode_num': row['episode_num'],
+          'episode_name': row['episode_name'],
+          'poster_path': row['poster_path'],
+          'backdrop_path': row['backdrop_path'],
+          'position_ms': row['elapsed_ms'] ?? 0,
+          'duration_ms': row['duration_ms'] ?? row['elapsed_ms'] ?? 0,
+          'date_watched': row['completed_at'] ?? row['created_at'],
+          'date_added': row['started_at'] ?? row['created_at'],
+          'id': row['media_id'],
+          'is_completed': true,
+          'platform': row['platform'] ?? 'tv',
+        });
+      }
+
       for (var row in completedRes) {
+        final key = '${row['media_type']}_${row['media_id']}_${row['season_num'] ?? 0}_${row['episode_num'] ?? 0}';
+        if (loggedEventKeys.contains(key)) continue;
+
         normalized.add({
           'type': row['media_type'],
           'media_id': row['media_id'],
@@ -499,7 +560,7 @@ class WatchHistoryService extends ChangeNotifier {
           'series_name': row['media_type'] == 'tv' ? row['title'] : null,
           'season_num': row['season_num'],
           'episode_num': row['episode_num'],
-          'episode_name': null, // We don't store episode name in completed_watch_history yet
+          'episode_name': null,
           'poster_path': row['poster_path'],
           'backdrop_path': row['backdrop_path'],
           'position_ms': row['time_watched_ms'] ?? 0,
