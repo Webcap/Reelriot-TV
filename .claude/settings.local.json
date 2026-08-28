@@ -3,7 +3,14 @@
     "allow": [
       "Bash(flutter pub *)",
       "Bash(flutter analyze *)",
-      "Bash(flutter build *)"
+      "Bash(flutter build *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(adb devices *)",
+      "Bash(flutter clean *)",
+      "Bash(adb -s adb-08221HFDD05U9C-PFD8ln._adb-tls-connect._tcp install -r build/app/outputs/flutter-apk/app-prod-profile.apk)",
+      "Bash(adb *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
