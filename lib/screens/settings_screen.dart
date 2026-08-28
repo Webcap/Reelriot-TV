@@ -190,6 +190,21 @@ class SettingsScreenState extends State<SettingsScreen> {
         }
       }
 
+      // 3. Merge in the Caffeine API's own server-computed watch stats.
+      // These can reflect progress recorded from other devices/platforms
+      // that this device's local Supabase query above wouldn't see (or vice
+      // versa if the API cache is momentarily stale), so take whichever
+      // total is larger per media type rather than picking one source.
+      try {
+        final stats = await ApiService().fetchWatchStats(user.id, days: 14);
+        final apiMovieMinutes = (stats['movies']?['minutes'] as num?)?.toInt() ?? 0;
+        final apiTvMinutes = (stats['tv']?['minutes'] as num?)?.toInt() ?? 0;
+        movieTime = movieTime > apiMovieMinutes * 60000 ? movieTime : apiMovieMinutes * 60000;
+        tvTime = tvTime > apiTvMinutes * 60000 ? tvTime : apiTvMinutes * 60000;
+      } catch (e) {
+        debugPrint('[SettingsScreen] ⚠️ Failed to fetch Caffeine watch stats: $e');
+      }
+
       if (mounted) {
         setState(() {
           _movieWatchTimeMs = movieTime;

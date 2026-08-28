@@ -54,6 +54,30 @@ class ApiService {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  /// Fetches server-computed watch-time stats (minutes watched per media
+  /// type) for the given user over the trailing [days] window. Returns
+  /// e.g. {'movies': {'minutes': 135}, 'tv': {'minutes': 420}}.
+  Future<Map<String, dynamic>> fetchWatchStats(String userId, {int days = 14}) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/watch-stats?days=$days';
+    final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 8));
+    if (res.statusCode != 200) {
+      throw Exception('Failed to load watch stats: ${res.statusCode}');
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return (data['stats'] as Map<String, dynamic>?) ?? {};
+  }
+
+  /// Invalidates the server-side watch-stats cache so the next
+  /// [fetchWatchStats] call reflects recently saved progress.
+  Future<void> invalidateWatchStatsCache(String userId) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/watch-stats/cache';
+    try {
+      await http.delete(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 8));
+    } catch (e) {
+      debugPrint('[ApiService] ⚠️ Failed to invalidate watch-stats cache: $e');
+    }
+  }
+
   /// TV App polls this to see if it's been linked.
   Future<http.Response> pollPairing(String code) async {
     final url = Uri.parse('$caffeineBaseUrl/tv/pair?code=${Uri.encodeComponent(code)}');

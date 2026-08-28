@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:flutter/foundation.dart';
+import 'package:reelriot_tv/services/api_service.dart';
 
 class WatchHistoryService extends ChangeNotifier {
   static final WatchHistoryService _instance = WatchHistoryService._internal();
@@ -307,6 +310,12 @@ class WatchHistoryService extends ChangeNotifier {
 
       _cachedHistory.clear();
       _lastFetchTime.clear();
+
+      // Fire-and-forget: don't let the Caffeine API's own watch-stats cache
+      // go stale after this save, so the profile screen's stats reflect it
+      // promptly instead of waiting out the server cache TTL.
+      unawaited(ApiService().invalidateWatchStatsCache(user.id));
+
       return true;
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Error in _executeSave: $e');

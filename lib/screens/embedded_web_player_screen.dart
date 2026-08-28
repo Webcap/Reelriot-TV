@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:reelriot_tv/services/watch_history_service.dart';
@@ -55,13 +56,65 @@ class _EmbeddedWebPlayerScreenState extends State<EmbeddedWebPlayerScreen> {
   Timer? _saveTimer;
   bool _loading = true;
 
-  // Only ever set by the page's own postMessage progress reports (see
-  // _attachProgressJs) — the actual <video> element lives inside an
-  // origin-keyed iframe our injected script can't reach directly, so this is
-  // the only channel providers that support it can report progress through.
+  // Real progress, when the page's own player cooperates by posting
+  // {currentTime, duration} via window.postMessage (see _attachProgressJs)
+  // — the actual <video> element lives inside an origin-keyed iframe our
+  // injected script can't reach directly, so this is the only channel a
+  // provider can report real position through, and not all of them do.
   int _currentPositionMs = 0;
   int _durationMs = 0;
+  bool _hasRealProgressSignal = false;
   bool _hasFinished = false;
+
+  // Fallback for providers that never post real progress: instead of
+  // counting flat wall-clock time since the page loaded (which would count
+  // buffering/ad delay as "watched" and never notice a pause), we poll
+  // Android's AudioManager for whether audio is actively playing right now
+  // and only accumulate elapsed time during segments where it is. Audio
+  // starting/stopping is a solid proxy for the video actually playing,
+  // and it's a native OS-level signal — it doesn't depend on the provider's
+  // page cooperating with anything, unlike postMessage.
+  Timer? _audioPollTimer;
+  int _accumulatedPlayMs = 0;
+  DateTime? _currentPlaySegmentStart;
+
+  int get _estimatedPositionMs {
+    final startMs = widget.startPosition?.inMilliseconds ?? 0;
+    var playedMs = _accumulatedPlayMs;
+    if (_currentPlaySegmentStart != null) {
+      playedMs += DateTime.now().difference(_currentPlaySegmentStart!).inMilliseconds;
+    }
+    return (startMs + playedMs).clamp(0, _durationMs);
+  }
+
+  Future<void> _pollAudioActive() async {
+    bool active;
+    try {
+      active = await _focusChannel.invokeMethod<bool>('isAudioActive') ?? false;
+    } catch (_) {
+      active = false;
+    }
+
+    final wasActive = _currentPlaySegmentStart != null;
+    if (active && !wasActive) {
+      _currentPlaySegmentStart = DateTime.now();
+    } else if (!active && wasActive) {
+      _accumulatedPlayMs +=
+          DateTime.now().difference(_currentPlaySegmentStart!).inMilliseconds;
+      _currentPlaySegmentStart = null;
+    }
+  }
+
+  int _estimateDurationMs() {
+    if (widget.isMovie) {
+      final item = widget.item;
+      if (item is core.MovieDetail && (item.runtime ?? 0) > 0) {
+        return item.runtime! * 60 * 1000;
+      }
+      return const Duration(minutes: 100).inMilliseconds;
+    }
+    return const Duration(minutes: 45).inMilliseconds;
+  }
 
   void _runJs(String js) {
     if (!mounted) return;
@@ -74,17 +127,20 @@ class _EmbeddedWebPlayerScreenState extends State<EmbeddedWebPlayerScreen> {
   // script access). Retried a couple of times since the platform view isn't
   // guaranteed to be attached the instant the page finishes loading.
   void _requestNativeFocus() {
-    _focusChannel.invokeMethod('requestFocus').catchError((_) {});
+    _focusChannel
+        .invokeMethod('requestFocus')
+        .then((found) => debugPrint('[EmbeddedWebPlayer] requestFocus -> found=$found'))
+        .catchError((e) => debugPrint('[EmbeddedWebPlayer] requestFocus error: $e'));
   }
 
   Future<void> _saveProgress({bool isFinished = false}) async {
     if (_durationMs <= 0) return;
 
-    var positionMs = _currentPositionMs;
+    var positionMs = _hasRealProgressSignal ? _currentPositionMs : _estimatedPositionMs;
     if (isFinished) positionMs = _durationMs;
 
     // Don't clobber a real saved resume position with a near-zero reading
-    // taken before the page ever reported real progress.
+    // taken before playback has meaningfully started.
     final startMs = widget.startPosition?.inMilliseconds ?? 0;
     if (!isFinished && positionMs <= 5000 && startMs > 5000) {
       return;
@@ -122,12 +178,14 @@ class _EmbeddedWebPlayerScreenState extends State<EmbeddedWebPlayerScreen> {
     super.initState();
     WakelockManager.enable();
     _currentPositionMs = widget.startPosition?.inMilliseconds ?? 0;
+    _durationMs = _estimateDurationMs();
 
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel(
         'PlaybackProgress',
         onMessageReceived: (message) {
+          debugPrint('[EmbeddedWebPlayer] progress message: ${message.message}');
           try {
             final data = jsonDecode(message.message);
             if (data is Map) {
@@ -135,6 +193,7 @@ class _EmbeddedWebPlayerScreenState extends State<EmbeddedWebPlayerScreen> {
               final dur = (data['duration'] as num?)?.toDouble() ?? 0.0;
               final ended = data['ended'] == true;
               if (cur > 0) {
+                _hasRealProgressSignal = true;
                 _currentPositionMs = (cur * 1000).toInt();
                 if (dur > 0) _durationMs = (dur * 1000).toInt();
               }
@@ -153,6 +212,10 @@ class _EmbeddedWebPlayerScreenState extends State<EmbeddedWebPlayerScreen> {
           onPageStarted: (_) => _runJs(_adBlockJs),
           onPageFinished: (_) {
             if (mounted) setState(() => _loading = false);
+            _audioPollTimer ??= Timer.periodic(
+              const Duration(seconds: 1),
+              (_) => _pollAudioActive(),
+            );
             _runJs(_adBlockJs);
             _runJs(_attachProgressJs);
             for (final ms in [500, 1200, 2500, 5000]) {
@@ -177,15 +240,19 @@ class _EmbeddedWebPlayerScreenState extends State<EmbeddedWebPlayerScreen> {
           .setMediaPlaybackRequiresUserGesture(false);
     }
 
-    _saveTimer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => _saveProgress(),
-    );
+    _saveTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!_hasRealProgressSignal && _estimatedPositionMs >= _durationMs) {
+        _handleFinished();
+      } else {
+        _saveProgress();
+      }
+    });
   }
 
   @override
   void dispose() {
     _saveTimer?.cancel();
+    _audioPollTimer?.cancel();
     _focusChannel.invokeMethod('releaseFocus').catchError((_) {});
     WakelockManager.disable();
     _focusNode.dispose();

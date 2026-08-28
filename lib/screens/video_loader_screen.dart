@@ -745,11 +745,17 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
       } catch (_) {}
     }
 
-    // Check if the target is a raw HTML embed page (e.g. /embed/, web.nxsha.app, vidsrcme.ru)
+    // Check if the target is a raw HTML embed page (e.g. /embed/, web.nxsha.app, vidsrcme.ru).
+    // vixsrc.to/movie/{id} and vixsrc.to/tv/{id}/{s}/{e} are checked explicitly
+    // by pattern rather than relying on the API's isM3U8 flag: it's been
+    // observed to (incorrectly) report isM3U8: true for the TV path even
+    // though, like the movie path, it's always the raw HTML wrapper page.
     final isEmbed = targetUrl.contains('/embed/') ||
                     targetUrl.contains('embed.html') ||
                     targetUrl.contains('web.nxsha.app') ||
-                    targetUrl.contains('vidsrcme.ru');
+                    targetUrl.contains('vidsrcme.ru') ||
+                    targetUrl.contains('vixsrc.to/movie/') ||
+                    targetUrl.contains('vixsrc.to/tv/');
 
     // Check if target is a valid direct media stream (.m3u8, .mp4, playlist)
     final isDirectMedia = targetUrl.contains('.m3u8') ||
