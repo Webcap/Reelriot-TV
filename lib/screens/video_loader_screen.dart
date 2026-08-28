@@ -6,7 +6,10 @@ import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
 import 'package:reelriot_tv/constants.dart';
 import 'package:reelriot_tv/models/provider_load_state.dart';
 import 'package:reelriot_tv/screens/player_screen.dart';
+import 'dart:io' show Platform;
+import 'package:reelriot_tv/screens/embedded_web_player_screen.dart';
 import 'package:reelriot_tv/services/api_service.dart';
+import 'package:reelriot_tv/services/embed_stream_resolver.dart';
 import 'package:reelriot_tv/services/settings_service.dart';
 import 'package:reelriot_tv/services/subtitle_service.dart';
 import 'package:reelriot_tv/models/sub_languages.dart';
@@ -64,6 +67,11 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   late List<ProviderLoadState> _providerStates;
   int _currentProviderIndex = 0;
   bool _isDone = false;
+
+  // Remembers the last raw embed page URL we couldn't extract a direct
+  // stream from, so we can fall back to a visible embedded browser player
+  // if every provider fails to resolve.
+  String? _lastEmbedCandidateUrl;
 
   // Track current episode state for "Next Episode" looping
   int? _currentSeason;
@@ -231,10 +239,10 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
             .then((res) => res as core.ProviderStreamResponse?);
       }
 
-      fetchFuture.then((response) {
-        completedCount++;
-        
+      fetchFuture.then((response) async {
         if (response != null && response.success && response.links != null && response.links!.isNotEmpty) {
+          final rawLinks = List<core.ProviderStreamLink>.from(response.links!);
+
           // Defensive filter: Only keep playable HLS (.m3u8), MP4 or proxied media stream URLs.
           // Reject raw HTML iframe embed URLs (e.g. /embed/, web.nxsha.app) even if wrapped in a proxy URL.
           response.links!.retainWhere((link) {
@@ -244,9 +252,38 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
             }
             return isPlayable;
           });
-          
+
+          if (response.links!.isEmpty) {
+            // Nothing directly playable came back. On Android, try resolving a
+            // raw HTML embed page (e.g. vixsrc.to) into a real HLS stream via
+            // a hidden WebView before giving up on this provider. Tizen has no
+            // WebView implementation, so EmbedStreamResolver.resolve() is a
+            // no-op there and this just falls through to "failed" as before.
+            final embedCandidate = rawLinks.firstWhere(
+              (l) => l.url.trim().toLowerCase().startsWith('http'),
+              orElse: () => rawLinks.first,
+            );
+            _lastEmbedCandidateUrl = embedCandidate.url;
+            if (mounted) {
+              debugPrint('[VideoLoader] 🧩 Attempting embed resolution for $providerName: ${embedCandidate.url}');
+              final resolvedHls = await EmbedStreamResolver.resolve(context, embedCandidate.url);
+              if (resolvedHls != null && mounted) {
+                debugPrint('[VideoLoader] ✅ Resolved HLS for $providerName: $resolvedHls');
+                response.links!.add(core.ProviderStreamLink(
+                  server: embedCandidate.server,
+                  url: resolvedHls,
+                  isM3U8: true,
+                  quality: embedCandidate.quality,
+                  headers: embedCandidate.headers,
+                  subtitles: embedCandidate.subtitles,
+                ));
+              }
+            }
+          }
+
           if (response.links!.isNotEmpty) {
             responses[i] = response;
+            completedCount++;
             if (!resultStream.isClosed) {
                resultStream.add(i);
             }
@@ -268,6 +305,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
           }
         }
 
+        completedCount++;
         if (completedCount == _providers.length && !resultStream.isClosed) {
           resultStream.add(-1);
         }
@@ -505,6 +543,34 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
         '[VideoLoader] 🚫 All providers failed to return a stream for $mediaName',
       );
       if (!mounted) return;
+
+      // Last resort: none of the providers gave us a directly playable link,
+      // but we saw at least one raw embed page load a working video inside
+      // it (we just couldn't extract the URL out of its isolated iframe).
+      // Show that page as the actual player instead of giving up.
+      if (Platform.isAndroid && _lastEmbedCandidateUrl != null) {
+        debugPrint(
+          '[VideoLoader] 🌐 Falling back to visible embedded player: $_lastEmbedCandidateUrl',
+        );
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => EmbeddedWebPlayerScreen(
+              url: _lastEmbedCandidateUrl!,
+              title: mediaName ?? 'Video',
+              item: widget.movie ?? widget.tvShow,
+              isMovie: widget.movie != null,
+              season: _currentSeason,
+              episode: _currentEpisode,
+              episodeId: _currentEpisodeId,
+              episodeName: _currentEpisodeName,
+              startPosition: startPos,
+            ),
+          ),
+        );
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No stream available from any provider')),
       );

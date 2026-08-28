@@ -1,0 +1,310 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:reelriot_tv/services/watch_history_service.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
+import 'package:reelriot_tv/utils/wakelock_manager.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
+
+/// Last-resort player for providers whose video renders inside an
+/// origin-keyed iframe we can't reach from injected JS to extract a direct
+/// stream URL (e.g. vixsrc). Shows the provider's page itself and lets the
+/// WebView's own browser engine decode/render the video in place, since that
+/// engine can play it even though our script can't see inside it.
+///
+/// Remote/D-pad interaction with the page's own on-screen controls is not
+/// reliable (no touch input), so only Back is wired up explicitly.
+class EmbeddedWebPlayerScreen extends StatefulWidget {
+  final String url;
+  final String title;
+  final dynamic item;
+  final bool isMovie;
+  final int? season;
+  final int? episode;
+  final int? episodeId;
+  final String? episodeName;
+  final Duration? startPosition;
+
+  const EmbeddedWebPlayerScreen({
+    super.key,
+    required this.url,
+    required this.title,
+    required this.item,
+    required this.isMovie,
+    this.season,
+    this.episode,
+    this.episodeId,
+    this.episodeName,
+    this.startPosition,
+  });
+
+  @override
+  State<EmbeddedWebPlayerScreen> createState() =>
+      _EmbeddedWebPlayerScreenState();
+}
+
+class _EmbeddedWebPlayerScreenState extends State<EmbeddedWebPlayerScreen> {
+  static const _focusChannel = MethodChannel('reelriot.tv/webview_focus');
+
+  late final WebViewController _controller;
+  final FocusNode _focusNode = FocusNode();
+  final WatchHistoryService _historyService = WatchHistoryService();
+  Timer? _saveTimer;
+  bool _loading = true;
+
+  // Only ever set by the page's own postMessage progress reports (see
+  // _attachProgressJs) — the actual <video> element lives inside an
+  // origin-keyed iframe our injected script can't reach directly, so this is
+  // the only channel providers that support it can report progress through.
+  int _currentPositionMs = 0;
+  int _durationMs = 0;
+  bool _hasFinished = false;
+
+  void _runJs(String js) {
+    if (!mounted) return;
+    _controller.runJavaScript(js);
+  }
+
+  // Hands the TV remote's D-pad/media keys to the WebView's native Android
+  // view so the browser engine can route them into the page's own player
+  // (including into nested iframes, since that's native input dispatch, not
+  // script access). Retried a couple of times since the platform view isn't
+  // guaranteed to be attached the instant the page finishes loading.
+  void _requestNativeFocus() {
+    _focusChannel.invokeMethod('requestFocus').catchError((_) {});
+  }
+
+  Future<void> _saveProgress({bool isFinished = false}) async {
+    if (_durationMs <= 0) return;
+
+    var positionMs = _currentPositionMs;
+    if (isFinished) positionMs = _durationMs;
+
+    // Don't clobber a real saved resume position with a near-zero reading
+    // taken before the page ever reported real progress.
+    final startMs = widget.startPosition?.inMilliseconds ?? 0;
+    if (!isFinished && positionMs <= 5000 && startMs > 5000) {
+      return;
+    }
+
+    await _historyService.saveProgress(
+      item: widget.item,
+      isMovie: widget.isMovie,
+      season: widget.season,
+      episode: widget.episode,
+      episodeId: widget.episodeId,
+      episodeName: widget.episodeName,
+      position: Duration(milliseconds: positionMs),
+      duration: Duration(milliseconds: _durationMs),
+    );
+  }
+
+  Future<void> _exit() async {
+    await _saveProgress();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  // Mirrors PlayerScreen's handling of CaffeinePlayerEventType.finished:
+  // save the final position as complete and close, instead of sitting on a
+  // finished video waiting for the next 30s tick or a manual Back press.
+  Future<void> _handleFinished() async {
+    if (_hasFinished) return;
+    _hasFinished = true;
+    await _saveProgress(isFinished: true);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WakelockManager.enable();
+    _currentPositionMs = widget.startPosition?.inMilliseconds ?? 0;
+
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..addJavaScriptChannel(
+        'PlaybackProgress',
+        onMessageReceived: (message) {
+          try {
+            final data = jsonDecode(message.message);
+            if (data is Map) {
+              final cur = (data['currentTime'] as num?)?.toDouble() ?? 0.0;
+              final dur = (data['duration'] as num?)?.toDouble() ?? 0.0;
+              final ended = data['ended'] == true;
+              if (cur > 0) {
+                _currentPositionMs = (cur * 1000).toInt();
+                if (dur > 0) _durationMs = (dur * 1000).toInt();
+              }
+              // Either the page told us explicitly, or we're close enough
+              // to the end (matches the ratio saveProgress() itself uses to
+              // decide "completed" server-side) that waiting for another
+              // signal isn't worth it.
+              final nearEnd = dur > 0 && cur > 0 && (cur / dur) >= 0.95;
+              if (ended || nearEnd) _handleFinished();
+            }
+          } catch (_) {}
+        },
+      )
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (_) => _runJs(_adBlockJs),
+          onPageFinished: (_) {
+            if (mounted) setState(() => _loading = false);
+            _runJs(_adBlockJs);
+            _runJs(_attachProgressJs);
+            for (final ms in [500, 1200, 2500, 5000]) {
+              Future<void>.delayed(Duration(milliseconds: ms), () {
+                _runJs(_adBlockJs);
+                _runJs(_attachProgressJs);
+              });
+            }
+            for (final ms in [300, 1000, 2500]) {
+              Future<void>.delayed(
+                Duration(milliseconds: ms),
+                _requestNativeFocus,
+              );
+            }
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.url));
+
+    if (_controller.platform is AndroidWebViewController) {
+      (_controller.platform as AndroidWebViewController)
+          .setMediaPlaybackRequiresUserGesture(false);
+    }
+
+    _saveTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _saveProgress(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _saveTimer?.cancel();
+    _focusChannel.invokeMethod('releaseFocus').catchError((_) {});
+    WakelockManager.disable();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (TvKeys.isBack(event.logicalKey)) {
+          _exit();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) async {
+          if (didPop) return;
+          await _exit();
+        },
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: Stack(
+            children: [
+              Positioned.fill(child: WebViewWidget(controller: _controller)),
+              if (_loading)
+                const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const String _adBlockJs = r'''
+  (function() {
+    try {
+      Object.defineProperty(window, 'open', {
+        value: function() { return null; },
+        writable: false,
+        configurable: false
+      });
+    } catch(e) {}
+    try {
+      window.alert = function() {};
+      window.confirm = function() { return false; };
+      window.prompt = function() { return null; };
+    } catch(e) {}
+  })();
+''';
+
+/// Reports playback progress back to the app. The actual <video> element is
+/// normally inside an origin-keyed iframe our script can't reach directly
+/// (contentDocument/contentWindow access throws), so this relies on the
+/// provider's own player posting {currentTime, duration} to its parent via
+/// window.postMessage — a channel that's explicitly designed to cross that
+/// isolation boundary, unlike direct DOM/JS access. If a provider's player
+/// doesn't do this, progress simply won't be tracked for it.
+const String _attachProgressJs = r'''
+  (function() {
+    function sendProgress(cur, dur, ended) {
+      try {
+        if (typeof PlaybackProgress !== 'undefined' && cur > 0) {
+          PlaybackProgress.postMessage(JSON.stringify({
+            currentTime: cur,
+            duration: dur || 0,
+            ended: !!ended
+          }));
+        }
+      } catch(e) {}
+    }
+
+    function hookVideos() {
+      try {
+        document.querySelectorAll('video').forEach(function(v) {
+          if (!v.__rr_tracked) {
+            v.__rr_tracked = true;
+            ['timeupdate', 'seeked', 'pause', 'play'].forEach(function(ev) {
+              v.addEventListener(ev, function() {
+                sendProgress(v.currentTime, v.duration || 0, false);
+              });
+            });
+            v.addEventListener('ended', function() {
+              sendProgress(v.duration || v.currentTime, v.duration || 0, true);
+            });
+          }
+          if (v.currentTime > 0) sendProgress(v.currentTime, v.duration || 0, false);
+        });
+      } catch(e) {}
+    }
+
+    hookVideos();
+    if (!window.__rr_progress_interval) {
+      window.__rr_progress_interval = setInterval(hookVideos, 1000);
+    }
+
+    if (!window.__rr_msg_tracked) {
+      window.__rr_msg_tracked = true;
+      window.addEventListener('message', function(e) {
+        try {
+          var d = e.data;
+          if (typeof d === 'string') {
+            try { d = JSON.parse(d); } catch(_) { return; }
+          }
+          if (!d || typeof d !== 'object') return;
+          var cur = d.currentTime || d.current_time || d.position || d.time;
+          var dur = d.duration || d.totalTime || d.total_time || 0;
+          var ended = d.ended === true || d.event === 'ended' || d.type === 'ended';
+          if ((cur && cur > 0) || ended) sendProgress(cur || dur, dur, ended);
+        } catch(ex) {}
+      });
+    }
+  })();
+''';
