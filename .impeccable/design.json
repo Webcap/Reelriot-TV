@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-27T00:00:00.000Z",
+  "title": "Design System: ReelRiot TV",
+  "extensions": {
+    "colorMeta": {
+      "signal-red": {
+        "role": "primary",
+        "displayName": "Signal Red",
+        "canonical": "#EC1D24",
+        "tonalRamp": ["#3D0407", "#630609", "#8C0910", "#B90D14", "#EC1D24", "#F2555C", "#F68B90", "#FAC0C3"]
+      },
+      "canvas-black": {
+        "role": "neutral",
+        "displayName": "Canvas Black",
+        "canonical": "#000000",
+        "tonalRamp": ["#0D0D0D", "#1F1F1F", "#333333", "#4D4D4D", "#666666", "#999999", "#CCCCCC", "#F2F2F2"]
+      },
+      "canvas-cool": {
+        "role": "neutral",
+        "displayName": "Canvas Cool",
+        "canonical": "#0B0F14",
+        "tonalRamp": ["#050608", "#0B0F14", "#161C24", "#232B36", "#333D4C", "#4C596B", "#7D8CA0", "#C4CDD9"]
+      },
+      "surface-graphite": {
+        "role": "neutral",
+        "displayName": "Surface Graphite",
+        "canonical": "#1A1A1A",
+        "tonalRamp": ["#0F0F0F", "#1A1A1A", "#2B2B2B", "#404040", "#595959", "#757575", "#A3A3A3", "#D4D4D4"]
+      },
+      "warning-amber": {
+        "role": "warning",
+        "displayName": "Warning Amber",
+        "canonical": "#F59E0B",
+        "tonalRamp": ["#3D2603", "#663F05", "#8C5407", "#B36D09", "#F59E0B", "#F7B33D", "#FACB7A", "#FDE4BA"]
+      },
+      "success-green": {
+        "role": "success",
+        "displayName": "Success Green",
+        "canonical": "#16A34A",
+        "tonalRamp": ["#052A13", "#0A421E", "#0E5A28", "#148036", "#16A34A", "#4CBE71", "#8CD8A5", "#C9EED5"]
+      },
+      "info-blue": {
+        "role": "info",
+        "displayName": "Info Blue",
+        "canonical": "#3B82F6",
+        "tonalRamp": ["#0A1B3D", "#12296B", "#1A3A99", "#2563EB", "#3B82F6", "#60A5FA", "#93C1FB", "#D6E7FE"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Splash and hero title moments only — rare, maximum-impact use." },
+      "headline": { "displayName": "Headline", "purpose": "Screen and detail-page titles (movie/show title, section headers)." },
+      "title": { "displayName": "Title", "purpose": "Card and subsection titles, row headers." },
+      "body": { "displayName": "Body", "purpose": "Descriptions, synopsis text, primary readable content — the real reading size at TV viewing distance." },
+      "label": { "displayName": "Label", "purpose": "Metadata, badges, captions, secondary chrome." }
+    },
+    "shadows": [
+      { "name": "hero-backdrop", "value": "0 24px 64px rgba(0,0,0,0.5)", "purpose": "Full-bleed hero/backdrop imagery only — the exception to the glass-not-shadow rule." }
+    ],
+    "motion": [],
+    "breakpoints": []
+  },
+  "components": [],
+  "narrative": {
+    "northStar": "The Signal Room",
+    "overview": "ReelRiot TV is a control room, not a storefront. It sits between the viewer and a scatter of unreliable broadcast sources — multiple streaming providers, any of which might be down on a given night — and presents one confident, always-live feed. The visual language borrows from the broadcast/signal world it's actually solving for: near-black canvases like a dim control room, one alarm-red accent that reads as \"live\" and \"select,\" and type that's built to be read across a room, not a desk. Nothing here is decorative; everything either orients a viewer holding a remote six feet from the screen, or tells them the system is working on their behalf.\n\nThis is a 10-foot, remote-only surface. There is no hover-as-primary-affordance, no dense information scent, no small print. Focus state is the cursor — a component either has D-pad focus and reads as unmistakably \"here,\" or it recedes into the dark canvas around it.",
+    "keyCharacteristics": [
+      "Near-black canvas throughout; light exists only where it's earned (posters, hero art, focus states).",
+      "One signal-red accent, used sparingly and consistently for focus, selection, and the single primary action per screen.",
+      "Heavy type weights (900 for display/headline, bold for body/label emphasis) — built for distance reading, not desktop density.",
+      "Depth comes from translucent white layering on black (a \"glass over signal-room dark\" model), not drop shadows.",
+      "Every interactive surface has an unambiguous, high-contrast D-pad focus state; nothing relies on touch or a pointer."
+    ],
+    "rules": [
+      { "name": "The One Signal Rule", "body": "Signal Red is the only accent color with a job. If a new screen needs \"an accent,\" it's Signal Red or it's not an accent — it's a status color (amber/green/blue) used for its specific semantic meaning, never as decoration.", "section": "colors" },
+      { "name": "The Canonical Red Rule", "body": "#EC1D24 is the canonical brand red going forward. #DC2626 and #E60000 exist widely in the current codebase doing the identical job as #EC1D24 — this is drift, not intentional variation, and both are legacy values to migrate to #EC1D24 on touch, not values to reach for in new work.", "section": "colors" },
+      { "name": "The Reading-Distance Rule", "body": "Never reason about type size the way a web/desktop system would. s(18) is this system's \"body copy,\" not a caption — the s() scaling function is the only correct way to size text; a raw, unscaled font size is a bug on this surface, not a stylistic choice.", "section": "typography" },
+      { "name": "The Glass-Not-Shadow Rule", "body": "Default to translucent white layering for elevation. Reach for a real BoxShadow only for full-bleed imagery moments (hero art, poster backdrops) where a shadow is doing real compositional work, not for ordinary card/container elevation.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do size every font, radius, spacing, and icon dimension through s() — this is the system's actual responsive grid.",
+      "Do use Signal Red (#EC1D24) as the only accent color, and only to mean \"focused, selected, primary action, or alert.\"",
+      "Do build elevation from translucent white layering on the canvas; reserve real shadows for full-bleed imagery moments.",
+      "Do design every interactive element's D-pad-focused state first — it is the primary (often only) interaction signal on this surface.",
+      "Do lean on weight (900/bold) over size for hierarchy; this is a distance-reading surface."
+    ],
+    "donts": [
+      "Don't introduce #DC2626 or #E60000 in new work — they're legacy duplicates of Signal Red; migrate them to #EC1D24 when touching a file that uses them.",
+      "Don't invent a new accent color for \"brand variety.\" Status colors (amber/green/blue) exist for specific semantic states only, not for decoration.",
+      "Don't hardcode an unscaled pixel value for font size, radius, or spacing — always route through s().",
+      "Don't design a primary interaction around hover, touch, or pointer proximity — there is no pointer on this surface, only D-pad focus.",
+      "Don't use a bottom tab bar or top nav bar pattern; navigation is the persistent left rail plus focusable content rows."
+    ]
+  }
+}
