@@ -78,6 +78,145 @@ class ApiService {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────────────
+  // Watch history: legacy /history (continue-watching progress + removal)
+  // ─────────────────────────────────────────────────────────────────────
+
+  /// Upserts continue-watching progress, or marks an item completed and logs
+  /// a playback_history_events row when `completed: true` or the elapsed/
+  /// duration ratio crosses the server's own completion threshold.
+  Future<Map<String, dynamic>> postHistory(String userId, Map<String, dynamic> body) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/history';
+    final res = await http
+        .post(Uri.parse(url), headers: {..._caffeineApiHeaders, 'Content-Type': 'application/json'}, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('postHistory failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Removes a single item (movie, or one episode when season_num/episode_num
+  /// are included) from continue-watching and playback_history_events.
+  Future<void> deleteHistory(String userId, Map<String, dynamic> body) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/history';
+    final res = await http
+        .delete(Uri.parse(url), headers: {..._caffeineApiHeaders, 'Content-Type': 'application/json'}, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200 && res.statusCode != 404) {
+      throw Exception('deleteHistory failed: ${res.statusCode}');
+    }
+  }
+
+  /// Unified chronological history: in-progress items plus one row per
+  /// completed play (no aggregate counter — count matching rows for a
+  /// rewatch count).
+  Future<Map<String, dynamic>> getHistory(String userId, {String? type, String? status, int limit = 100}) async {
+    final params = <String, String>{'limit': '$limit'};
+    if (type != null) params['type'] = type;
+    if (status != null) params['status'] = status;
+    final query = Uri(queryParameters: params).query;
+    final url = '$caffeineBaseUrl/v1/user/$userId/history?$query';
+    final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('getHistory failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Wipes all watch history (continue-watching + completed plays) for the user.
+  Future<void> deleteHistoryAll(String userId) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/history/all';
+    final res = await http.delete(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('deleteHistoryAll failed: ${res.statusCode}');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Watch history: scrobble lifecycle (real playback tracking)
+  // ─────────────────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> scrobbleStart(String userId, Map<String, dynamic> body) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/scrobble/start';
+    final res = await http
+        .post(Uri.parse(url), headers: {..._caffeineApiHeaders, 'Content-Type': 'application/json'}, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('scrobbleStart failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> scrobbleProgress(String userId, Map<String, dynamic> body) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/scrobble/progress';
+    final res = await http
+        .post(Uri.parse(url), headers: {..._caffeineApiHeaders, 'Content-Type': 'application/json'}, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('scrobbleProgress failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> scrobbleStop(String userId, Map<String, dynamic> body) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/scrobble/stop';
+    final res = await http
+        .post(Uri.parse(url), headers: {..._caffeineApiHeaders, 'Content-Type': 'application/json'}, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('scrobbleStop failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Watch history: /history/watches (Trakt-style manual "add a watch")
+  // ─────────────────────────────────────────────────────────────────────
+
+  /// Always logs a new watch event (never upserts) — used for manual
+  /// "mark as watched"/rewatch actions with no real playback session.
+  Future<Map<String, dynamic>> postHistoryWatch(String userId, Map<String, dynamic> body) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/history/watches';
+    final res = await http
+        .post(Uri.parse(url), headers: {..._caffeineApiHeaders, 'Content-Type': 'application/json'}, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('postHistoryWatch failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Lists individual logged watch events for one item, most recent first.
+  Future<Map<String, dynamic>> getHistoryWatches(
+    String userId, {
+    required String mediaType,
+    required int mediaId,
+    int? seasonNum,
+    int? episodeNum,
+  }) async {
+    final params = <String, String>{'media_type': mediaType, 'media_id': '$mediaId'};
+    if (seasonNum != null) params['season_num'] = '$seasonNum';
+    if (episodeNum != null) params['episode_num'] = '$episodeNum';
+    final query = Uri(queryParameters: params).query;
+    final url = '$caffeineBaseUrl/v1/user/$userId/history/watches?$query';
+    final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('getHistoryWatches failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Removes a single logged watch event; returns the new watch count.
+  Future<Map<String, dynamic>> deleteHistoryWatch(String userId, String watchId) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/history/watches/$watchId';
+    final res = await http.delete(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('deleteHistoryWatch failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   /// TV App polls this to see if it's been linked.
   Future<http.Response> pollPairing(String code) async {
     final url = Uri.parse('$caffeineBaseUrl/tv/pair?code=${Uri.encodeComponent(code)}');

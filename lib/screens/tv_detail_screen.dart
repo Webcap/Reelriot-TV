@@ -14,6 +14,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reelriot_tv/services/ad_service.dart';
 import 'package:reelriot_tv/widgets/long_press_focus.dart';
 import 'package:reelriot_tv/widgets/context_menu_dialog.dart';
+import 'package:reelriot_tv/widgets/add_watch_menu.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'dart:ui';
 import 'package:reelriot_tv/widgets/native_ad_banner.dart';
@@ -31,6 +32,63 @@ class TvDetailScreen extends StatefulWidget {
 class _TvDetailScreenState extends State<TvDetailScreen> {
   final ApiService _api = ApiService();
 
+  Future<void> _addEpisodeWatch(TvEpisode ep, {DateTime? watchedAt, bool unknownDate = false}) async {
+    if (_show == null) return;
+    await _historyService.addWatch(
+      item: _show!,
+      isMovie: false,
+      season: ep.seasonNumber,
+      episode: ep.episodeNumber,
+      episodeName: ep.name,
+      watchedAt: watchedAt,
+      unknownDate: unknownDate,
+    );
+    if (mounted) {
+      setState(() => _recentlyCompletedIds.add(ep.id));
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _recentlyCompletedIds.remove(ep.id));
+      });
+    }
+    _load(); // Refresh season history
+  }
+
+  Future<void> _showEpisodeWatchHistory(TvEpisode ep, double Function(double) s) async {
+    if (_show == null) return;
+    final events = await _historyService.getWatchEvents(
+      mediaId: _show!.id,
+      isMovie: false,
+      season: ep.seasonNumber,
+      episode: ep.episodeNumber,
+    );
+    if (!mounted) return;
+
+    if (events.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No watches logged yet')),
+      );
+      return;
+    }
+
+    ContextMenuDialog.show(
+      context: context,
+      title: 'Watch History',
+      s: s,
+      items: events.map((e) {
+        final watchedAt = e['watched_at'] as String?;
+        final label = watchedAt != null ? _formatDate(watchedAt) : 'Unknown date';
+        return ContextMenuItem(
+          label: 'Remove: $label',
+          icon: Icons.delete_outline,
+          color: Colors.redAccent,
+          onTap: () async {
+            await _historyService.removeWatchEvent(e['id'] as String);
+            _load();
+          },
+        );
+      }).toList(),
+    );
+  }
+
   void _showEpisodeContextMenu(TvEpisode ep, bool isWatched) {
     s(double v) => _scale(context, v);
     ContextMenuDialog.show(
@@ -39,27 +97,24 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
       s: s,
       items: [
         ContextMenuItem(
-          label: 'Mark as Completed',
+          label: 'Add Another Watch',
           icon: Icons.check_circle_outline,
-          onTap: () async {
-            if (_show == null) return;
-            await _historyService.markAsComplete(
-              item: _show!,
-              isMovie: false,
-              season: ep.seasonNumber,
-              episode: ep.episodeNumber,
-              episodeId: ep.id,
-              episodeName: ep.name,
+          onTap: () {
+            final releaseDate = ep.airDate != null ? DateTime.tryParse(ep.airDate!) : null;
+            AddWatchMenu.show(
+              context: context,
+              title: ep.name ?? 'Episode ${ep.episodeNumber}',
+              s: s,
+              releaseDate: releaseDate,
+              onPick: ({watchedAt, unknownDate = false}) =>
+                  _addEpisodeWatch(ep, watchedAt: watchedAt, unknownDate: unknownDate),
             );
-            if (mounted) {
-              setState(() => _recentlyCompletedIds.add(ep.id));
-              // Clear after animation
-              Future.delayed(const Duration(seconds: 3), () {
-                if (mounted) setState(() => _recentlyCompletedIds.remove(ep.id));
-              });
-            }
-            _load(); // Refresh season history
           },
+        ),
+        ContextMenuItem(
+          label: 'Watch History',
+          icon: Icons.history_rounded,
+          onTap: () => _showEpisodeWatchHistory(ep, s),
         ),
         ContextMenuItem(
           label: 'Mark Watched until here',
@@ -175,66 +230,25 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
       final results = await Future.wait([
         _api.fetchSeasonDetail(widget.tvId, num),
         if (user != null)
-          Supabase.instance.client
-              .from('continue_watching_history')
-              .select()
-              .eq('user_id', user.id)
-              .eq('media_type', 'tv')
-              .eq('media_id', widget.tvId)
-              .eq('season_num', num)
+          _historyService.getSeasonProgress(widget.tvId, num)
         else
-          Future.value(<dynamic>[]),
-        if (user != null)
-          Supabase.instance.client
-              .from('completed_watch_history')
-              .select()
-              .eq('user_id', user.id)
-              .eq('media_type', 'tv')
-              .eq('media_id', widget.tvId)
-              .eq('season_num', num)
-        else
-          Future.value(<dynamic>[]),
+          Future.value(<Map<String, dynamic>>[]),
       ]);
 
       final detail = results[0] as TvSeasonDetailResponse;
-      final cwRows = List<Map<String, dynamic>>.from(results[1] as List);
-      final compRows = List<Map<String, dynamic>>.from(results[2] as List);
+      final seasonHistory = List<Map<String, dynamic>>.from(results[1] as List);
 
-      // Build a per-episode map: episode_num -> normalized history entry
-      final Map<int, Map<String, dynamic>> episodeMap = {};
-
-      for (final row in cwRows) {
-        final epNum = row['episode_num'] as int? ?? 0;
-        episodeMap[epNum] = {
-          'media_id': row['media_id'],
-          'season_num': row['season_num'],
-          'episode_num': epNum,
-          'episode_id': row['episode_id'],
-          'elapsed_ms': row['elapsed_ms'] ?? 0,
-          'duration_ms': row['duration_ms'] ?? 0,
-          'is_completed': false,
-        };
-      }
-
-      // Completed entries override continue-watching (is_completed wins)
-      for (final row in compRows) {
-        final epNum = row['episode_num'] as int? ?? 0;
-        final watched = row['time_watched_ms'] as int? ?? 0;
-        episodeMap[epNum] = {
-          'media_id': row['media_id'],
-          'season_num': row['season_num'],
-          'episode_num': epNum,
-          'episode_id': row['episode_id'],
-          'elapsed_ms': watched,
-          'duration_ms': watched,
-          'is_completed': true,
-        };
+      // The API doesn't carry TMDB episode ids — attach them locally from the
+      // season detail response so episode_id-based lookups elsewhere still work.
+      final episodeIdByNum = {for (final ep in detail.episodes) ep.episodeNumber: ep.id};
+      for (final entry in seasonHistory) {
+        entry['episode_id'] = episodeIdByNum[entry['episode_num']];
       }
 
       if (mounted) {
         setState(() {
           _seasons![num] = detail;
-          _seasonHistory = episodeMap.values.toList();
+          _seasonHistory = seasonHistory;
         });
       }
     } catch (_) {}

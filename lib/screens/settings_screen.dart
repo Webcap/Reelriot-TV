@@ -158,10 +158,11 @@ class SettingsScreenState extends State<SettingsScreen> {
       final twoWeeksAgo = DateTime.now().subtract(const Duration(days: 14)).toUtc().toIso8601String();
       
       final completedRes = await Supabase.instance.client
-          .from('completed_watch_history')
-          .select('time_watched_ms, media_type')
+          .from('playback_history_events')
+          .select('elapsed_ms, duration_ms, media_type')
           .eq('user_id', user.id)
-          .gte('updated_at', twoWeeksAgo);
+          .eq('is_completed', true)
+          .gte('completed_at', twoWeeksAgo);
 
       final continueRes = await Supabase.instance.client
           .from('continue_watching_history')
@@ -173,7 +174,7 @@ class SettingsScreenState extends State<SettingsScreen> {
       int tvTime = 0;
 
       for (var row in (completedRes as List)) {
-        final ms = row['time_watched_ms'] as int? ?? 0;
+        final ms = (row['elapsed_ms'] as int?) ?? (row['duration_ms'] as int?) ?? 0;
         if (row['media_type'] == 'movie') {
           movieTime += ms;
         } else {

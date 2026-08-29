@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:reelriot_tv/constants.dart';
 import 'package:reelriot_tv/screens/video_loader_screen.dart';
 import 'package:reelriot_tv/screens/actor_screen.dart';
 import 'package:reelriot_tv/services/api_service.dart';
 import 'package:reelriot_tv/services/watch_history_service.dart';
+import 'package:reelriot_tv/widgets/add_watch_menu.dart';
+import 'package:reelriot_tv/widgets/context_menu_dialog.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
@@ -213,22 +217,28 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     if (mounted) setState(() => _qualityBadge = q);
   }
 
-  Future<void> _toggleWatched() async {
+  DateTime? _parseReleaseDate() {
+    final raw = _movie?.releaseDate;
+    if (raw == null || raw.isEmpty) return null;
+    return DateTime.tryParse(raw);
+  }
+
+  Future<void> _addWatch({DateTime? watchedAt, bool unknownDate = false}) async {
     if (Supabase.instance.client.auth.currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please sign in to mark as watched')),
       );
       return;
     }
-
     if (_movie == null) return;
 
     try {
-      if (_isWatched) {
-        await _historyService.removeFromHistory(id: _movie!.id, isMovie: true);
-      } else {
-        await _historyService.markAsComplete(item: _movie!, isMovie: true);
-      }
+      await _historyService.addWatch(
+        item: _movie!,
+        isMovie: true,
+        watchedAt: watchedAt,
+        unknownDate: unknownDate,
+      );
       _load(); // Refresh state
     } catch (e) {
       if (mounted) {
@@ -237,6 +247,82 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
         );
       }
     }
+  }
+
+  Future<void> _unmarkWatched() async {
+    if (_movie == null) return;
+    await _historyService.removeFromHistory(id: _movie!.id, isMovie: true);
+    _load();
+  }
+
+  void _showAddWatchMenu(double Function(double) s) {
+    if (_movie == null) return;
+    AddWatchMenu.show(
+      context: context,
+      title: _movie!.title ?? '',
+      s: s,
+      releaseDate: _parseReleaseDate(),
+      onPick: ({watchedAt, unknownDate = false}) => _addWatch(watchedAt: watchedAt, unknownDate: unknownDate),
+    );
+  }
+
+  Future<void> _showWatchHistory(double Function(double) s) async {
+    if (_movie == null) return;
+    final events = await _historyService.getWatchEvents(mediaId: _movie!.id, isMovie: true);
+    if (!mounted) return;
+
+    if (events.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No watches logged yet')),
+      );
+      return;
+    }
+
+    ContextMenuDialog.show(
+      context: context,
+      title: 'Watch History',
+      s: s,
+      items: events.map((e) {
+        final watchedAt = e['watched_at'] as String?;
+        final label = watchedAt != null ? _formatDate(watchedAt) : 'Unknown date';
+        return ContextMenuItem(
+          label: 'Remove: $label',
+          icon: Icons.delete_outline,
+          color: Colors.redAccent,
+          onTap: () async {
+            await _historyService.removeWatchEvent(e['id'] as String);
+            _load();
+          },
+        );
+      }).toList(),
+    );
+  }
+
+  void _showWatchedLongPressMenu(double Function(double) s) {
+    if (_movie == null) return;
+    ContextMenuDialog.show(
+      context: context,
+      title: _movie!.title ?? '',
+      s: s,
+      items: [
+        ContextMenuItem(
+          label: 'Add Another Watch',
+          icon: Icons.add_circle_outline,
+          onTap: () => _showAddWatchMenu(s),
+        ),
+        ContextMenuItem(
+          label: 'Watch History',
+          icon: Icons.history_rounded,
+          onTap: () => _showWatchHistory(s),
+        ),
+        ContextMenuItem(
+          label: 'Unmark Completely',
+          icon: Icons.remove_circle_outline,
+          color: Colors.redAccent,
+          onTap: _unmarkWatched,
+        ),
+      ],
+    );
   }
 
   String _formatDate(String? dateStr) {
@@ -535,10 +621,11 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                         ),
                                         SizedBox(width: s(24)),
                                         _ActionBtn(
-                                          label: _isWatched ? 'UNWATCH' : 'WATCHED',
+                                          label: _isWatched ? 'WATCHED' : 'MARK WATCHED',
                                           icon: _isWatched ? Icons.check_circle : Icons.check_circle_outline,
                                           isPrimary: false,
-                                          onTap: _toggleWatched,
+                                          onTap: () => _showAddWatchMenu(s),
+                                          onLongPress: () => _showWatchedLongPressMenu(s),
                                           s: s,
                                         ),
                                       ],
@@ -757,6 +844,7 @@ class _ActionBtn extends StatefulWidget {
   final double Function(double) s;
   final bool autofocus;
   final double? progress;
+  final VoidCallback? onLongPress;
 
   const _ActionBtn({
     required this.label,
@@ -766,6 +854,7 @@ class _ActionBtn extends StatefulWidget {
     required this.s,
     this.autofocus = false,
     this.progress,
+    this.onLongPress,
   });
 
   @override
@@ -774,6 +863,8 @@ class _ActionBtn extends StatefulWidget {
 
 class _ActionBtnState extends State<_ActionBtn> {
   double _scale = 1.0;
+  Timer? _longPressTimer;
+  bool _isLongPress = false;
 
   void _handleTap() {
     setState(() => _scale = 1.08);
@@ -783,14 +874,45 @@ class _ActionBtnState extends State<_ActionBtn> {
     widget.onTap();
   }
 
+  void _handleKeyDown() {
+    if (widget.onLongPress == null || _longPressTimer != null) return;
+    _isLongPress = false;
+    _longPressTimer = Timer(const Duration(milliseconds: 500), () {
+      _isLongPress = true;
+      HapticFeedback.mediumImpact();
+      widget.onLongPress?.call();
+    });
+  }
+
+  void _handleKeyUp() {
+    final wasLongPress = _isLongPress;
+    _longPressTimer?.cancel();
+    _longPressTimer = null;
+    if (!wasLongPress) {
+      _handleTap();
+    }
+    _isLongPress = false;
+  }
+
+  @override
+  void dispose() {
+    _longPressTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Focus(
       autofocus: widget.autofocus,
       onKeyEvent: (_, event) {
-        if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
-          _handleTap();
-          return KeyEventResult.handled;
+        if (TvKeys.isSelect(event.logicalKey)) {
+          if (event is KeyDownEvent) {
+            _handleKeyDown();
+            return KeyEventResult.handled;
+          } else if (event is KeyUpEvent) {
+            _handleKeyUp();
+            return KeyEventResult.handled;
+          }
         }
         return KeyEventResult.ignored;
       },
@@ -798,6 +920,7 @@ class _ActionBtnState extends State<_ActionBtn> {
         final focused = Focus.of(context).hasFocus;
         return GestureDetector(
           onTap: _handleTap,
+          onLongPress: widget.onLongPress,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(widget.s(8)),
             child: Stack(
