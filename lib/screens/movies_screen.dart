@@ -2,6 +2,7 @@ import 'package:caffeine_core/caffeine_core.dart';
 import 'package:reelriot_tv/screens/movie_detail_screen.dart';
 import 'package:reelriot_tv/services/api_service.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/widgets/tv_skeleton_loader.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -66,7 +67,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
     }
 
     if (_sections == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const TvBrowseScreenSkeleton(sectionCount: 3);
     }
 
     return ListView.builder(
@@ -81,10 +82,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
 
   Widget _buildSection(String title, List<MovieListItem>? items) {
     if (items == null) {
-      return const Padding(
-        padding: EdgeInsets.only(bottom: 32),
-        child: Center(child: CircularProgressIndicator()),
-      );
+      return const TvRowSkeleton();
     }
     if (items.isEmpty) return const SizedBox.shrink();
     return Padding(

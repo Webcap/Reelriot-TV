@@ -10,6 +10,8 @@ import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reelriot_tv/services/ad_service.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
+import 'package:reelriot_tv/utils/tv_colors.dart';
+import 'package:reelriot_tv/widgets/tv_skeleton_loader.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -237,10 +239,10 @@ class SearchScreenState extends State<SearchScreen> {
 
   Widget _buildResultsSection() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: Color(0xFFDC2626)));
+      return const TvSearchResultsSkeleton(tileCount: 5);
     }
     if (_error != null) {
-      return Center(child: Text(_error!, style: const TextStyle(color: Colors.red)));
+      return Center(child: Text(_error!, style: const TextStyle(color: TvSemanticColors.dangerDefault)));
     }
     if (_movies == null && _tv == null) {
       return Column(

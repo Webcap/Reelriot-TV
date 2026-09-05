@@ -3,8 +3,10 @@ import 'package:reelriot_tv/screens/home_screen.dart';
 import 'package:reelriot_tv/screens/movie_detail_screen.dart';
 import 'package:reelriot_tv/screens/tv_detail_screen.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/widgets/tv_skeleton_loader.dart';
 import 'package:reelriot_tv/widgets/long_press_focus.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
+import 'package:reelriot_tv/utils/tv_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -106,9 +108,7 @@ class FavoritesScreenState extends State<FavoritesScreen>
     }
 
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFFE60000)),
-      );
+      return const TvGridSkeleton(itemCount: 12);
     }
 
     if (_error != null) {
@@ -124,7 +124,7 @@ class FavoritesScreenState extends State<FavoritesScreen>
             ElevatedButton(
               onPressed: _fetchBookmarks,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE60000),
+                backgroundColor: TvSemanticColors.dangerDefault,
               ),
               child: const Text('Retry'),
             ),

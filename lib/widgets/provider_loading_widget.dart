@@ -1,4 +1,5 @@
 import 'package:reelriot_tv/models/provider_load_state.dart';
+import 'package:reelriot_tv/utils/tv_colors.dart';
 import 'package:flutter/material.dart';
 
 class ProviderLoadingWidget extends StatefulWidget {
@@ -284,13 +285,13 @@ class _ProviderLoadingWidgetState extends State<ProviderLoadingWidget>
         return Icon(
           Icons.check_circle_rounded,
           size: iconSize,
-          color: const Color(0xFF4CAF50),
+          color: TvSemanticColors.successDefault,
         );
       case ProviderStatus.failed:
         return Icon(
           Icons.error_rounded,
           size: iconSize,
-          color: const Color(0xFFEF5350),
+          color: TvSemanticColors.dangerDefault,
         );
     }
   }
