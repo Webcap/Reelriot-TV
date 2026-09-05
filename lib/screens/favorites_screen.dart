@@ -234,13 +234,7 @@ class FavoritesScreenState extends State<FavoritesScreen>
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 12),
-          const Text(
-            'Keep track of movies and shows you want to watch across all your devices.',
-            style: TextStyle(color: Colors.white54, fontSize: 16),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
           LongPressFocus(
             focusNode: _focusNode,
             onTap: () => Navigator.of(context).pushNamed('/pairing'),

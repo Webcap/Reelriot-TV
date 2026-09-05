@@ -224,7 +224,7 @@ class SearchScreenState extends State<SearchScreen> {
               cursorWidth: 3,
               style: const TextStyle(color: Colors.white, fontSize: 20),
               decoration: InputDecoration(
-                hintText: 'Search for movies or shows',
+                hintText: 'Search',
                 hintStyle: TextStyle(color: Colors.grey[600]),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 border: InputBorder.none,

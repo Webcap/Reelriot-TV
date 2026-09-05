@@ -567,11 +567,6 @@ class SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
               ),
-              SizedBox(height: s(32)),
-              Text(
-                'Experience the next generation of home entertainment with Reelriot. Streaming redefined for the big screen.',
-                style: TextStyle(color: Colors.white70, fontSize: s(18), height: 1.5),
-              ),
             ],
           ),
         ),
