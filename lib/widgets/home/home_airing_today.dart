@@ -22,7 +22,9 @@ class HomeAiringTodayRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (airingToday == null || airingToday!.isEmpty) return const SizedBox.shrink();
+    if (airingToday == null || airingToday!.isEmpty) {
+      return const SizedBox.shrink();
+    }
     double s(double v) => ResponsiveUtils.scale(context, v);
 
     return Column(
@@ -72,7 +74,7 @@ class HomeAiringTodayRow extends StatelessWidget {
                   onFocus: () => onFocus(m.id),
                   onLongPress: () => onLongPress(m),
                   onTap: () => onTap(m),
-                   quality: QualityUtils.getQualityBadgeSync(
+                  quality: QualityUtils.getQualityBadgeSync(
                     releaseDate: m.releaseDate,
                     isMovie: false, // Airing Today is always TV
                   ),

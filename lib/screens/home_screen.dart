@@ -30,20 +30,26 @@ import 'package:reelriot_tv/models/ad.dart' as model;
 import 'package:reelriot_tv/widgets/home/home_media_row.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
-import 'package:reelriot_tv/widgets/home/home_nav_rail.dart';
-import 'package:reelriot_tv/widgets/home/home_top_nav.dart';
+import 'package:reelriot_tv/widgets/home/home_top_bar.dart';
+import 'package:reelriot_tv/widgets/home/home_category_tiles.dart';
 import 'package:reelriot_tv/widgets/home/home_continue_watching.dart';
 import 'package:reelriot_tv/widgets/home/home_genres.dart';
 import 'package:reelriot_tv/widgets/home/home_providers.dart';
 import 'package:reelriot_tv/widgets/home/home_up_next.dart';
-import 'package:reelriot_tv/widgets/home/home_hero_section.dart';
-import 'package:reelriot_tv/widgets/home/home_hero_button.dart';
+import 'package:reelriot_tv/widgets/home/home_spotlight_tile.dart';
+import 'package:reelriot_tv/widgets/home/home_quick_tiles.dart';
 import 'package:reelriot_tv/widgets/long_press_focus.dart';
 import 'package:reelriot_tv/widgets/home/home_airing_today.dart';
 import 'package:reelriot_tv/widgets/home/home_ai_recommendations.dart';
 import 'package:reelriot_tv/widgets/home/home_update_card.dart';
 import 'package:reelriot_tv/screens/genre_screen.dart';
 import 'package:reelriot_tv/models/discovery_section.dart';
+import 'package:reelriot_tv/theme/dashboard_theme.dart';
+import 'package:reelriot_tv/widgets/tv_skeleton_loader.dart';
+
+// Home dashboard — canon direction (see the note atop
+// lib/theme/dashboard_theme.dart). Clean, restrained streaming-TV
+// dashboard; no themed visual metaphor.
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -53,14 +59,20 @@ class HomeScreen extends StatefulWidget {
 }
 
 class HomeScreenState extends State<HomeScreen> {
-  static HomeScreenState? of(BuildContext context) => context.findAncestorStateOfType<HomeScreenState>();
+  static HomeScreenState? of(BuildContext context) =>
+      context.findAncestorStateOfType<HomeScreenState>();
 
   int _selectedIndex = 1;
-  final GlobalKey<SearchScreenState> _searchKey = GlobalKey<SearchScreenState>();
-  final GlobalKey<FavoritesScreenState> _favoritesKey = GlobalKey<FavoritesScreenState>();
-  final GlobalKey<SportsScreenState> _sportsKey = GlobalKey<SportsScreenState>();
-  final GlobalKey<SettingsScreenState> _settingsKey = GlobalKey<SettingsScreenState>();
-  final GlobalKey<_MainHomeViewState> _homeKey = GlobalKey<_MainHomeViewState>();
+  final GlobalKey<SearchScreenState> _searchKey =
+      GlobalKey<SearchScreenState>();
+  final GlobalKey<FavoritesScreenState> _favoritesKey =
+      GlobalKey<FavoritesScreenState>();
+  final GlobalKey<SportsScreenState> _sportsKey =
+      GlobalKey<SportsScreenState>();
+  final GlobalKey<SettingsScreenState> _settingsKey =
+      GlobalKey<SettingsScreenState>();
+  final GlobalKey<_MainHomeViewState> _homeKey =
+      GlobalKey<_MainHomeViewState>();
   late List<FocusNode> _navNodes;
 
   void setIndex(int index) {
@@ -74,11 +86,11 @@ class HomeScreenState extends State<HomeScreen> {
       const _Tab(label: 'Search', icon: Icons.search),
       const _Tab(label: 'Home', icon: Icons.home_filled),
     ];
-    
+
     if (SettingsService().sportsEnabled) {
       tabs.add(const _Tab(label: 'Sports', icon: Icons.sports_soccer));
     }
-    
+
     tabs.add(const _Tab(label: 'Profile', icon: Icons.person_outline));
     tabs.add(const _Tab(label: 'Favorites', icon: Icons.favorite_border));
     return tabs;
@@ -89,7 +101,7 @@ class HomeScreenState extends State<HomeScreen> {
     super.initState();
     _navNodes = List.generate(5, (_) => FocusNode());
     SettingsService().addListener(_onSettingsChanged);
-    
+
     // Request initial focus on the Home tab (index 1)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_navNodes.length > 1) {
@@ -142,16 +154,19 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
-    final tabs = _visibleTabs.map((t) => HomeTab(label: t.label, icon: t.icon)).toList();
+    final tabs = _visibleTabs
+        .map((t) => HomeTab(label: t.label, icon: t.icon))
+        .toList();
     if (_selectedIndex >= tabs.length) {
       _selectedIndex = 1; // Default to Home
     }
 
     if (_navNodes.length < tabs.length) {
-      _navNodes.addAll(List.generate(tabs.length - _navNodes.length, (_) => FocusNode()));
+      _navNodes.addAll(
+        List.generate(tabs.length - _navNodes.length, (_) => FocusNode()),
+      );
     }
 
     return PopScope(
@@ -169,9 +184,9 @@ class HomeScreenState extends State<HomeScreen> {
           },
           child: Scaffold(
             backgroundColor: const Color(0xFF000000),
-            body: Row(
+            body: Column(
               children: [
-                HomeNavRail(
+                HomeTopBar(
                   selectedIndex: _selectedIndex,
                   navNodes: _navNodes,
                   tabs: tabs,
@@ -197,7 +212,7 @@ class HomeScreenState extends State<HomeScreen> {
                       _settingsKey.currentState?.refresh();
                     }
                   },
-                  onMoveRight: () {
+                  onMoveIntoContent: () {
                     final tabLabel = tabs[_selectedIndex].label;
                     if (tabLabel == 'Search') {
                       _searchKey.currentState?.requestFocus();
@@ -218,7 +233,8 @@ class HomeScreenState extends State<HomeScreen> {
                     children: [
                       SearchScreen(key: _searchKey),
                       _buildMainView(),
-                      if (SettingsService().sportsEnabled) RepaintBoundary(child: SportsScreen(key: _sportsKey)),
+                      if (SettingsService().sportsEnabled)
+                        RepaintBoundary(child: SportsScreen(key: _sportsKey)),
                       SettingsScreen(key: _settingsKey),
                       FavoritesScreen(key: _favoritesKey),
                     ],
@@ -244,7 +260,6 @@ class HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
 }
 
 class _Tab {
@@ -279,16 +294,26 @@ class _MainHomeViewState extends State<_MainHomeView> {
     int? showId,
   }) {
     double s(double v) => _scale(context, v);
-    final title = isMovie 
-        ? (item is MovieDetail ? item.title : (item is MovieListItem ? item.title : item['title'] ?? 'Movie'))
-        : (item is TvShowDetail ? item.name : (item is MovieListItem ? item.title : item['name'] ?? item['title'] ?? 'TV Show'));
+    final title = isMovie
+        ? (item is MovieDetail
+              ? item.title
+              : (item is MovieListItem ? item.title : item['title'] ?? 'Movie'))
+        : (item is TvShowDetail
+              ? item.name
+              : (item is MovieListItem
+                    ? item.title
+                    : item['name'] ?? item['title'] ?? 'TV Show'));
 
     // Resolve the show/movie ID for navigation
-    final resolvedId = showId ??
-        (item is MovieDetail ? item.id
-          : item is MovieListItem ? item.id
-          : item is TvShowDetail ? item.id
-          : ((item as Map)['media_id'] ?? item['id']));
+    final resolvedId =
+        showId ??
+        (item is MovieDetail
+            ? item.id
+            : item is MovieListItem
+            ? item.id
+            : item is TvShowDetail
+            ? item.id
+            : ((item as Map)['media_id'] ?? item['id']));
 
     // Capture the navigator before the dialog opens — the dialog's own
     // Navigator.pop() would otherwise undo a push made from onTap().
@@ -335,7 +360,15 @@ class _MainHomeViewState extends State<_MainHomeView> {
           icon: Icons.delete_outline,
           color: Colors.redAccent,
           onTap: () async {
-            final id = item is MovieDetail ? item.id : (item is MovieListItem ? item.id : (item is TvShowDetail ? item.id : (item as Map)['media_id'] ?? item['id'] ?? item['mediaId']));
+            final id = item is MovieDetail
+                ? item.id
+                : (item is MovieListItem
+                      ? item.id
+                      : (item is TvShowDetail
+                            ? item.id
+                            : (item as Map)['media_id'] ??
+                                  item['id'] ??
+                                  item['mediaId']));
             await _historyService.removeFromHistory(
               id: id,
               isMovie: isMovie,
@@ -348,6 +381,16 @@ class _MainHomeViewState extends State<_MainHomeView> {
       ],
     );
   }
+
+  // Numbers each home shelf as a call-slot, in the order it actually
+  // renders; reset once per build so it stays accurate regardless of which
+  // optional rows (continue watching, up next) are present that frame.
+  int _shelfCounter = 0;
+  int _nextShelf() {
+    _shelfCounter++;
+    return _shelfCounter;
+  }
+
   String _selectedCategory = 'Movies';
   MovieDetail? _focusedMovie;
   List<MovieListItem>? _trending;
@@ -366,6 +409,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     }
     return 'We think you might like';
   }
+
   List<MovieListItem>? _tvRecommendations;
   String? _tvRecommendationsTitle;
   final RecommendationService _recService = RecommendationService();
@@ -388,7 +432,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
   final bool _isVisible = true;
 
   final List<Map<String, dynamic>> _movieGenres = [
-    {'id': 28, 'name': 'Action', 'color': const Color(0xFFDC2626)},
+    {'id': 28, 'name': 'Action', 'color': DashboardTheme.signalRed},
     {'id': 12, 'name': 'Adventure', 'color': const Color(0xFFEA580C)},
     {'id': 16, 'name': 'Animation', 'color': const Color(0xFFD97706)},
     {'id': 35, 'name': 'Comedy', 'color': const Color(0xFFCA8A04)},
@@ -407,7 +451,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
   ];
 
   final List<Map<String, dynamic>> _tvGenres = [
-    {'id': 10759, 'name': 'Action', 'color': const Color(0xFFDC2626)},
+    {'id': 10759, 'name': 'Action', 'color': DashboardTheme.signalRed},
     {'id': 16, 'name': 'Animation', 'color': const Color(0xFFD97706)},
     {'id': 35, 'name': 'Comedy', 'color': const Color(0xFFCA8A04)},
     {'id': 80, 'name': 'Crime', 'color': const Color(0xFF65A30D)},
@@ -433,7 +477,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
     super.didChangeDependencies();
     final isCurrent = ModalRoute.of(context)?.isCurrent ?? false;
     if (isCurrent && _historyDirty) {
-      debugPrint('[HomeScreen] 🔄 Became current and history is dirty, reloading...');
+      debugPrint(
+        '[HomeScreen] 🔄 Became current and history is dirty, reloading...',
+      );
       _historyDirty = false;
       _reloadHistory(forceRefresh: true);
     }
@@ -441,16 +487,18 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
   void _onHistoryChanged() {
     if (!mounted) return;
-    
+
     // Check if this screen is currently visible/active in the navigator
     final isCurrent = ModalRoute.of(context)?.isCurrent ?? false;
-    
+
     if (isCurrent) {
       debugPrint('[HomeScreen] 🔄 History changed, reloading content quietly');
       _reloadHistory(forceRefresh: true);
       _historyDirty = false;
     } else {
-      debugPrint('[HomeScreen] ⏳ History changed while backgrounded, marking as dirty');
+      debugPrint(
+        '[HomeScreen] ⏳ History changed while backgrounded, marking as dirty',
+      );
       _historyDirty = true;
     }
   }
@@ -460,20 +508,22 @@ class _MainHomeViewState extends State<_MainHomeView> {
     try {
       final config = await _api.loadConfig();
       SettingsService().updateFromConfig(config);
-      
+
       // Use new structured update check
       final info = await UpdateService().checkForUpdate(
         caffeineApiUrl,
         env: environment,
         apiKey: caffeineApiKey,
       );
-      
-      debugPrint('[HomeScreen] 🏁 Structured Update check result: available=${info.isUpdateAvailable}, version=${info.latestVersion}, forced=${info.isForced}');
+
+      debugPrint(
+        '[HomeScreen] 🏁 Structured Update check result: available=${info.isUpdateAvailable}, version=${info.latestVersion}, forced=${info.isForced}',
+      );
       if (mounted) {
         setState(() => _updateInfo = info);
         // If forced, jump to update screen immediately
         if (info.isUpdateAvailable && info.isForced) {
-           Navigator.push(
+          Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => UpdateScreen(updateInfo: info)),
           );
@@ -486,15 +536,20 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
   void _listenToAuthChanges() {
     _authSubscription?.cancel();
-    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
+      data,
+    ) {
       final event = data.event;
-      if (event == AuthChangeEvent.signedIn || event == AuthChangeEvent.signedOut || event == AuthChangeEvent.tokenRefreshed) {
-        debugPrint('[HomeScreen] 👤 Auth state changed: $event. Refreshing content.');
+      if (event == AuthChangeEvent.signedIn ||
+          event == AuthChangeEvent.signedOut ||
+          event == AuthChangeEvent.tokenRefreshed) {
+        debugPrint(
+          '[HomeScreen] 👤 Auth state changed: $event. Refreshing content.',
+        );
         _loadContent();
       }
     });
   }
-
 
   void _onScroll() {
     if (!mounted) return;
@@ -512,7 +567,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
     }
   }
 
-  Future<void> _loadContent({bool quiet = false, bool forceRefresh = false}) async {
+  Future<void> _loadContent({
+    bool quiet = false,
+    bool forceRefresh = false,
+  }) async {
     if (!quiet) {
       setState(() {
         _loading = true;
@@ -530,7 +588,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
         _watchingShows = null;
       });
     }
-    
+
     try {
       if (forceRefresh) {
         await _historyService.waitForPendingSaves();
@@ -539,7 +597,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
       final isTv = _selectedCategory == 'TV Shows';
       final userId = Supabase.instance.client.auth.currentUser?.id;
-      
+
       // 1. Fetch Discovery Feed with Retries (The Brain)
       Map<String, dynamic>? discovery;
       int retryCount = 0;
@@ -555,18 +613,28 @@ class _MainHomeViewState extends State<_MainHomeView> {
           break; // Success
         } catch (e) {
           retryCount++;
-          debugPrint('[HomeScreen] ⚠️ Discovery load attempt $retryCount failed: $e');
+          debugPrint(
+            '[HomeScreen] ⚠️ Discovery load attempt $retryCount failed: $e',
+          );
           if (retryCount >= maxRetries) rethrow;
           await Future.delayed(Duration(seconds: retryCount)); // Backoff
         }
       }
 
-      if (discovery == null) throw Exception('Discovery data is null after retries');
+      if (discovery == null) {
+        throw Exception('Discovery data is null after retries');
+      }
 
       // 2. Fetch History & Contextual Data in parallel
       final results = await Future.wait([
-        _historyService.getHistory(mediaType: isTv ? 'tv' : 'movie', forceRefresh: forceRefresh),
-        if (isTv) _historyService.getRecentlyWatchedShows(forceRefresh: forceRefresh) else Future.value(null),
+        _historyService.getHistory(
+          mediaType: isTv ? 'tv' : 'movie',
+          forceRefresh: forceRefresh,
+        ),
+        if (isTv)
+          _historyService.getRecentlyWatchedShows(forceRefresh: forceRefresh)
+        else
+          Future.value(null),
       ]);
 
       final history = results[0] as List<Map<String, dynamic>>;
@@ -581,42 +649,56 @@ class _MainHomeViewState extends State<_MainHomeView> {
           .map((s) => DiscoverySection.fromJson(s))
           .where((s) => s.isEnabled)
           .toList();
-      debugPrint('[HomeScreen] 📡 Discovery Feed Received: ${apiSections.length} sections');
+      debugPrint(
+        '[HomeScreen] 📡 Discovery Feed Received: ${apiSections.length} sections',
+      );
       for (var s in apiSections) {
-        debugPrint('[HomeScreen]    - Row: "${s.title}" (${s.items.length} items)');
+        debugPrint(
+          '[HomeScreen]    - Row: "${s.title}" (${s.items.length} items)',
+        );
       }
-      
+
       List<MovieListItem>? trending;
       List<MovieListItem>? communityTrending;
       List<MovieListItem>? aiRecs;
       List<MovieListItem>? popular;
       List<MovieListItem>? topRated;
-      
+
       for (var section in apiSections) {
         if (section.type == 'community') {
           communityTrending = section.items;
           trending ??= section.items.take(5).toList();
         } else if (section.type == 'ai') {
           aiRecs = section.items;
-        } else if (section.title.toLowerCase().contains('premiere') || 
-                   section.title.toLowerCase().contains('recent') || 
-                   section.title.toLowerCase().contains('fresh') ||
-                   section.title.toLowerCase().contains('popular')) {
+        } else if (section.title.toLowerCase().contains('premiere') ||
+            section.title.toLowerCase().contains('recent') ||
+            section.title.toLowerCase().contains('fresh') ||
+            section.title.toLowerCase().contains('popular')) {
           popular = section.items;
           trending ??= section.items.take(5).toList();
-        } else if (section.title.toLowerCase().contains('acclaimed') || 
-                   section.title.toLowerCase().contains('trending') ||
-                   section.type == 'tmdb') {
+        } else if (section.title.toLowerCase().contains('acclaimed') ||
+            section.title.toLowerCase().contains('trending') ||
+            section.type == 'tmdb') {
           topRated = section.items;
           trending ??= section.items.take(5).toList();
         }
       }
 
       // Precision Fallbacks: Ensure we have something for the hero section
-      trending ??= popular?.take(5).toList() ?? 
-                  communityTrending?.take(5).toList() ?? 
-                  (apiSections.isNotEmpty ? apiSections.firstWhere((s) => s.items.isNotEmpty, orElse: () => apiSections.first).items.take(5).toList() : null);
-      
+      trending ??=
+          popular?.take(5).toList() ??
+          communityTrending?.take(5).toList() ??
+          (apiSections.isNotEmpty
+              ? apiSections
+                    .firstWhere(
+                      (s) => s.items.isNotEmpty,
+                      orElse: () => apiSections.first,
+                    )
+                    .items
+                    .take(5)
+                    .toList()
+              : null);
+
       popular ??= trending;
 
       // --- Featured Live Event ---
@@ -636,7 +718,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
           featuredItem = MovieListItem(
             id: -100, // Special ID for live events
             title: featured['title'],
-            overview: "Experience the excitement of $sport live on Caffeine TV. Watch ${featured['title']} now!",
+            overview:
+                "Experience the excitement of $sport live on Caffeine TV. Watch ${featured['title']} now!",
             posterPath: featured['poster_url'] ?? featured['thumbnail_url'],
             backdropPath: featured['poster_url'] ?? featured['thumbnail_url'],
             mediaType: 'live',
@@ -648,25 +731,28 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
       // --- Ads Integration ---
       List<MovieListItem> ads = [];
-      if (SettingsService().adsEnabled || (kDebugMode && SettingsService().simulateAds)) {
+      if (SettingsService().adsEnabled ||
+          (kDebugMode && SettingsService().simulateAds)) {
         try {
           final results = await Supabase.instance.client
               .from('sponsorships')
               .select('*')
               .eq('is_active', true);
-          
+
           for (var ad in results) {
             final adId = ad['id'].toString().hashCode;
             _adUrls[adId] = ad['link'] ?? '';
-            ads.add(MovieListItem(
-              id: adId,
-              title: ad['title'],
-              overview: ad['description'],
-              posterPath: ad['image_url'],
-              backdropPath: ad['image_url'],
-              mediaType: 'ad',
-              isSponsored: true,
-            ));
+            ads.add(
+              MovieListItem(
+                id: adId,
+                title: ad['title'],
+                overview: ad['description'],
+                posterPath: ad['image_url'],
+                backdropPath: ad['image_url'],
+                mediaType: 'ad',
+                isSponsored: true,
+              ),
+            );
           }
         } catch (e) {
           debugPrint('[HomeScreen] ❌ Error fetching ads: $e');
@@ -674,15 +760,20 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
         if (kDebugMode && SettingsService().simulateAds) {
           if (ads.isEmpty) {
-            ads.add(MovieListItem(
-              id: 999901,
-              title: 'Aurora Ultra: Power Redefined',
-              overview: 'Experience unparalleled performance with the new Aurora Ultra series.',
-              posterPath: 'https://caffeine.synqholdings.com/assets/images/simulated/poster_ad_1.png',
-              backdropPath: 'https://caffeine.synqholdings.com/assets/images/simulated/poster_ad_1.png',
-              mediaType: 'ad',
-              isSponsored: true,
-            ));
+            ads.add(
+              MovieListItem(
+                id: 999901,
+                title: 'Aurora Ultra: Power Redefined',
+                overview:
+                    'Experience unparalleled performance with the new Aurora Ultra series.',
+                posterPath:
+                    'https://caffeine.synqholdings.com/assets/images/simulated/poster_ad_1.png',
+                backdropPath:
+                    'https://caffeine.synqholdings.com/assets/images/simulated/poster_ad_1.png',
+                mediaType: 'ad',
+                isSponsored: true,
+              ),
+            );
           }
         }
       }
@@ -696,7 +787,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
           _popular = popular;
           _topRated = topRated;
           _aiRecommendations = aiRecs;
-          _weeklyTrending = communityTrending; 
+          _weeklyTrending = communityTrending;
           _nowPlaying = popular;
           _loading = false;
 
@@ -731,28 +822,39 @@ class _MainHomeViewState extends State<_MainHomeView> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to load discovery feed. Please check your connection.')),
+          const SnackBar(
+            content: Text(
+              'Failed to load discovery feed. Please check your connection.',
+            ),
+          ),
         );
       }
     }
   }
 
-  Future<List<Map<String, dynamic>>> _processUpNext(List<Map<String, dynamic>> watchingShows) async {
+  Future<List<Map<String, dynamic>>> _processUpNext(
+    List<Map<String, dynamic>> watchingShows,
+  ) async {
     final List<Map<String, dynamic>> upNextItems = [];
     final now = DateTime.now();
-    
+
     bool isEpReleased(String? airDate) {
       if (airDate == null || airDate.isEmpty) return false;
       try {
-        return DateTime.parse(airDate).isBefore(now.add(const Duration(days: 1)));
+        return DateTime.parse(
+          airDate,
+        ).isBefore(now.add(const Duration(days: 1)));
       } catch (_) {
         return false;
       }
     }
 
     for (var originalShow in watchingShows) {
-      final showTitle = originalShow['name'] ?? originalShow['title'] ?? 'Unknown Show';
-      final isLive = originalShow['type'] == 'live' || originalShow['media_type'] == 'live';
+      final showTitle =
+          originalShow['name'] ?? originalShow['title'] ?? 'Unknown Show';
+      final isLive =
+          originalShow['type'] == 'live' ||
+          originalShow['media_type'] == 'live';
       final isSports = showTitle.contains(' at ') || showTitle.contains(' vs ');
 
       // Skip live games or sports from "Up Next" episode calculation
@@ -764,7 +866,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
           final show = Map<String, dynamic>.from(originalShow);
           final dynamic rawId = show['id'] ?? show['media_id'];
           if (rawId == null) continue;
-          
+
           final showId = rawId is int ? rawId : int.tryParse(rawId.toString());
           if (showId == null) continue;
 
@@ -791,7 +893,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
             // Check if there's a next season
             final tvDetail = await _api.fetchTvDetail(showId);
             if (seasonNum < (tvDetail.numberOfSeasons ?? 0)) {
-              final nextSeasonDetail = await _api.fetchSeasonDetail(showId, seasonNum + 1);
+              final nextSeasonDetail = await _api.fetchSeasonDetail(
+                showId,
+                seasonNum + 1,
+              );
               if (nextSeasonDetail.episodes.isNotEmpty) {
                 final firstEp = nextSeasonDetail.episodes.first;
                 if (isEpReleased(firstEp.airDate)) {
@@ -805,7 +910,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
             }
           }
         } catch (e) {
-          debugPrint('[HomeScreen] ❌ Error calculating next episode for "$showTitle": $e');
+          debugPrint(
+            '[HomeScreen] ❌ Error calculating next episode for "$showTitle": $e',
+          );
         }
       } else {
         try {
@@ -814,7 +921,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
           show['episode_num'] = show['episode_num'] as int? ?? 1;
           upNextItems.add(show);
         } catch (e) {
-          debugPrint('[HomeScreen] ❌ Error processing in-progress episode for "$showTitle": $e');
+          debugPrint(
+            '[HomeScreen] ❌ Error processing in-progress episode for "$showTitle": $e',
+          );
         }
       }
       if (upNextItems.length >= 10) break;
@@ -827,10 +936,15 @@ class _MainHomeViewState extends State<_MainHomeView> {
       await _historyService.waitForPendingSaves();
     }
     final mediaType = _selectedCategory == 'TV Shows' ? 'tv' : 'movie';
-    final h = await _historyService.getHistory(mediaType: mediaType, forceRefresh: forceRefresh);
+    final h = await _historyService.getHistory(
+      mediaType: mediaType,
+      forceRefresh: forceRefresh,
+    );
     List<Map<String, dynamic>>? upNext;
     if (mediaType == 'tv') {
-      final watchingShows = await _historyService.getRecentlyWatchedShows(forceRefresh: forceRefresh);
+      final watchingShows = await _historyService.getRecentlyWatchedShows(
+        forceRefresh: forceRefresh,
+      );
       upNext = await _processUpNext(watchingShows);
     }
     if (mounted) {
@@ -857,13 +971,17 @@ class _MainHomeViewState extends State<_MainHomeView> {
   void _startAutoSlide() {
     _autoSlideTimer?.cancel();
     if (!_isHeroInView) return; // Don't start if not in view
-    
+
     _autoSlideTimer = Timer.periodic(const Duration(seconds: 8), (timer) {
-      if (!mounted || _trending == null || _trending!.isEmpty || _loading || !_isHeroInView) {
+      if (!mounted ||
+          _trending == null ||
+          _trending!.isEmpty ||
+          _loading ||
+          !_isHeroInView) {
         if (!_isHeroInView) timer.cancel();
         return;
       }
-      
+
       setState(() {
         _trendingIndex = (_trendingIndex + 1) % _trending!.length;
         final item = _trending![_trendingIndex];
@@ -930,7 +1048,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
       final idx = _trending?.indexWhere((m) => m.id == id) ?? -1;
       if (idx != -1) _trendingIndex = idx;
     }
-    
+
     // Debounce the backdrop update to prevent jank during fast scrolling
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 250), () async {
@@ -966,75 +1084,159 @@ class _MainHomeViewState extends State<_MainHomeView> {
     return (value * width) / 1920;
   }
 
+  // Zero-CLS skeleton in the Home Video world's own shelf-body tones — a
+  // shape of the coming screen, not a spinner sitting in the middle of
+  // nothing.
+  Widget _buildLoadingSkeleton(BuildContext context) {
+    double s(double v) => ResponsiveUtils.scale(context, v);
+    return TvShimmer(
+      baseColor: DashboardTheme.surface,
+      highlightColor: DashboardTheme.surfaceRaised,
+      child: SingleChildScrollView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.symmetric(horizontal: s(96), vertical: s(48)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: s(620),
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: DashboardTheme.surface,
+                borderRadius: BorderRadius.circular(s(12)),
+              ),
+            ),
+            SizedBox(height: s(72)),
+            const TvRowSkeleton(),
+            const TvRowSkeleton(),
+            const TvRowSkeleton(),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator(color: Color(0xFFE60000)));
+    if (_loading) return _buildLoadingSkeleton(context);
 
     // Fallback if API returned 401/404 and left us with no content
     if (_trending == null && _popular == null && _topRated == null) {
+      double s(double v) => ResponsiveUtils.scale(context, v);
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, color: Colors.white24, size: 64),
-            const SizedBox(height: 24),
-            const Text(
-              'No Content Found',
-              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+            Container(
+              width: s(96),
+              height: s(96),
+              decoration: const BoxDecoration(
+                color: DashboardTheme.surface,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.live_tv_outlined,
+                color: Colors.white54,
+                size: s(44),
+              ),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Your API returned 401 Unauthorized or 404.\nPlease ensure your device is paired.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54, fontSize: 16),
+            SizedBox(height: s(28)),
+            Text(
+              'Nothing to Show Yet',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: s(32),
+                fontWeight: FontWeight.w800,
+              ),
             ),
+            SizedBox(height: s(12)),
+            SizedBox(
+              width: s(520),
+              child: Text(
+                "We couldn't reach the discovery feed. Make sure this device is paired to your ReelRiot account, then try again.",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white60,
+                  fontSize: s(18),
+                  height: 1.4,
+                ),
+              ),
+            ),
+            SizedBox(height: s(36)),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 LongPressFocus(
                   onTap: () => _loadContent(),
-                  child: Builder(builder: (context) {
-                    final focused = Focus.of(context).hasFocus;
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                      decoration: BoxDecoration(
-                        color: focused ? Colors.white : Colors.white10,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: focused ? Colors.white : Colors.white24),
-                      ),
-                      child: Text(
-                        'Retry Connection',
-                        style: TextStyle(
-                          color: focused ? Colors.black : Colors.white,
-                          fontWeight: FontWeight.bold,
+                  child: Builder(
+                    builder: (context) {
+                      final focused = Focus.of(context).hasFocus;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: s(32),
+                          vertical: s(16),
                         ),
-                      ),
-                    );
-                  }),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(
+                            alpha: focused ? 0.25 : 0.12,
+                          ),
+                          borderRadius: BorderRadius.circular(s(10)),
+                          boxShadow: focused
+                              ? DashboardDecorations.focusGlow(
+                                  context,
+                                  strength: 0.5,
+                                )
+                              : null,
+                        ),
+                        child: Text(
+                          'Retry Connection',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: s(16),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
-                const SizedBox(width: 16),
+                SizedBox(width: s(16)),
                 LongPressFocus(
                   onTap: () => Navigator.of(context).pushNamed('/pairing'),
-                  child: Builder(builder: (context) {
-                    final focused = Focus.of(context).hasFocus;
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                      decoration: BoxDecoration(
-                        color: focused ? Colors.white : const Color(0xFFE60000),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: focused ? Colors.white : Colors.transparent),
-                      ),
-                      child: Text(
-                        'Sign In',
-                        style: TextStyle(
-                          color: focused ? Colors.black : Colors.white,
-                          fontWeight: FontWeight.bold,
+                  child: Builder(
+                    builder: (context) {
+                      final focused = Focus.of(context).hasFocus;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: s(32),
+                          vertical: s(16),
                         ),
-                      ),
-                    );
-                  }),
+                        decoration: BoxDecoration(
+                          color: DashboardTheme.signalRed.withValues(
+                            alpha: focused ? 0.85 : 1.0,
+                          ),
+                          borderRadius: BorderRadius.circular(s(10)),
+                          boxShadow: focused
+                              ? DashboardDecorations.focusGlow(
+                                  context,
+                                  strength: 0.5,
+                                  color: DashboardTheme.signalRed,
+                                )
+                              : null,
+                        ),
+                        child: Text(
+                          'Sign In',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: s(16),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
@@ -1044,145 +1246,57 @@ class _MainHomeViewState extends State<_MainHomeView> {
     }
 
     double s(double v) => ResponsiveUtils.scale(context, v);
+    _shelfCounter = 0;
 
-    return Stack(
-      children: [
-        HomeHeroSection(
-          backgroundOnly: true,
-          focusedMovie: _focusedMovie,
-          trending: _trending,
-          trendingIndex: _trendingIndex,
-          liveStreamUrls: _liveStreamUrls,
-          onWatchNow: () async {
-            if (_isProcessing) return;
-            _isProcessing = true;
-            try {
-              if (_focusedMovie!.mediaType == 'live') {
-                final url = _liveStreamUrls[_focusedMovie!.id];
-                if (url == null || url.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Stream link not found yet. Try again later!'))
-                  );
-                  return;
-                }
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => PlayerScreen(
-                      url: url,
-                      title: _focusedMovie!.title ?? 'Live Event',
-                      item: null,
-                      isMovie: false,
+    return SingleChildScrollView(
+      controller: _scrollController,
+      primary: false,
+      padding: EdgeInsets.symmetric(horizontal: s(56), vertical: s(32)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_updateInfo != null) HomeUpdateCard(updateInfo: _updateInfo!),
+          // The dashboard's top fold: one large spotlight tile beside a
+          // stack of compact quick-access tiles, instead of a full-bleed
+          // hero banner with nothing else visible above the scroll.
+          if (_focusedMovie != null)
+            SizedBox(
+              height: s(420),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: HomeSpotlightTile(
+                      focusNode: _entryFocusNode,
+                      focusedMovie: _focusedMovie,
+                      trending: _trending,
+                      trendingIndex: _trendingIndex,
+                      liveStreamUrls: _liveStreamUrls,
+                      onWatchNow: _onSpotlightWatchNow,
+                      onFavorite: () {},
                     ),
                   ),
-                );
-                return;
-              }
-
-              if (_focusedMovie!.mediaType == 'ad') {
-                final url = _adUrls[_focusedMovie!.id];
-                if (url != null && url.isNotEmpty) {
-                  final uri = Uri.parse(url);
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
-                }
-                return;
-              }
-
-              if (_selectedCategory == 'TV Shows') {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: _focusedMovie!.id)),
-                );
-              } else {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: _focusedMovie!.id)),
-                );
-              }
-              await _historyService.waitForPendingSaves();
-            } finally {
-              _isProcessing = false;
-              if (mounted) setState(() {});
-            }
-          },
-          onFavorite: () {},
-        ),
-        // Content
-        SingleChildScrollView(
-          controller: _scrollController,
-          primary: false,
-          padding: EdgeInsets.symmetric(horizontal: s(96)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              HomeTopNav(
-                selectedCategory: _selectedCategory,
-                onCategorySelected: (cat) {
-                  setState(() => _selectedCategory = cat);
-                  _loadContent();
-                },
+                  SizedBox(width: s(20)),
+                  SizedBox(
+                    width: s(400),
+                    child: Column(
+                      children: _buildQuickTiles(context, s),
+                    ),
+                  ),
+                ],
               ),
-              if (_updateInfo != null) HomeUpdateCard(updateInfo: _updateInfo!),
-              HomeHeroSection(
-                focusNode: _entryFocusNode,
-                contentOnly: true,
-                focusedMovie: _focusedMovie,
-                trending: _trending,
-                trendingIndex: _trendingIndex,
-                liveStreamUrls: _liveStreamUrls,
-                onWatchNow: () async {
-                  if (_isProcessing) return;
-                  _isProcessing = true;
-                  try {
-                    if (_focusedMovie!.mediaType == 'live') {
-                      final url = _liveStreamUrls[_focusedMovie!.id];
-                      if (url == null || url.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Stream link not found yet. Try again later!'))
-                        );
-                        return;
-                      }
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => PlayerScreen(
-                            url: url,
-                            title: _focusedMovie!.title ?? 'Live Event',
-                            item: null,
-                            isMovie: false,
-                          ),
-                        ),
-                      );
-                      return;
-                    }
-
-                    if (_focusedMovie!.mediaType == 'ad') {
-                      final url = _adUrls[_focusedMovie!.id];
-                      if (url != null && url.isNotEmpty) {
-                        final uri = Uri.parse(url);
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                        }
-                      }
-                      return;
-                    }
-
-                    if (_selectedCategory == 'TV Shows') {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: _focusedMovie!.id)),
-                      );
-                    } else {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: _focusedMovie!.id)),
-                      );
-                    }
-                    await _historyService.waitForPendingSaves();
-                  } finally {
-                    _isProcessing = false;
-                    if (mounted) setState(() {});
-                  }
-                },
-                onFavorite: () {},
-              ),
-              AnimatedSwitcher(
+            ),
+          SizedBox(height: s(40)),
+          HomeCategoryTiles(
+            selectedCategory: _selectedCategory,
+            onCategorySelected: (cat) {
+              setState(() => _selectedCategory = cat);
+              _loadContent();
+            },
+          ),
+          SizedBox(height: s(56)),
+          AnimatedSwitcher(
                 duration: const Duration(milliseconds: 500),
                 transitionBuilder: (Widget child, Animation<double> animation) {
                   return SizeTransition(
@@ -1192,56 +1306,241 @@ class _MainHomeViewState extends State<_MainHomeView> {
                   );
                 },
                 child: (_history == null || _history!.isEmpty)
-                  ? const SizedBox.shrink()
-                  : Column(
-                      key: const ValueKey('continue_watching_section'),
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildContinueWatchingRow(context, s),
-                        SizedBox(height: s(96)),
-                      ],
-                    ),
+                    ? const SizedBox.shrink()
+                    : Column(
+                        key: const ValueKey('continue_watching_section'),
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildContinueWatchingRow(context, s, _nextShelf()),
+                          SizedBox(height: s(96)),
+                        ],
+                      ),
               ),
               // --- UP NEXT ROW (TV ONLY) ---
               if (_selectedCategory == 'TV Shows')
-                _buildUpNextRow(context, s),
+                _buildUpNextRow(context, s, _nextShelf()),
               // --- DYNAMIC DISCOVERY ROWS ---
               if (_apiSections != null)
                 ..._apiSections!.map((section) {
                   if (section.items.isEmpty) return const SizedBox.shrink();
-                  
+
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       HomeMediaRow(
                         title: section.title,
                         items: section.items,
-                        isSocial: section.type == 'social', // We can add a social icon in the row widget
+                        index: _nextShelf(),
+                        isSocial:
+                            section.type ==
+                            'social', // We can add a social icon in the row widget
                         onFocus: (id) => _updateFocusedMovie(id),
                         onTap: (m) => _navigateToDetail(m),
                         onLongPress: (m) => _showItemContextMenu(
-                          item: m, 
-                          isMovie: m.mediaType != 'tv'
+                          item: m,
+                          isMovie: m.mediaType != 'tv',
                         ),
                       ),
                       SizedBox(height: s(96)),
                     ],
                   );
                 }),
-              
+
               // Fallback to genres and other static rows if needed
               HomeGenresRow(
-                genres: _selectedCategory == 'TV Shows' ? _tvGenres : _movieGenres,
+                genres: _selectedCategory == 'TV Shows'
+                    ? _tvGenres
+                    : _movieGenres,
+                index: _nextShelf(),
                 onGenreTap: (g) => _navigateToGenre(g),
               ),
               SizedBox(height: s(96)),
-              HomeProvidersRow(onProviderTap: (p) => _navigateToProvider(p)),
+              HomeProvidersRow(
+                index: _nextShelf(),
+                onProviderTap: (p) => _navigateToProvider(p),
+              ),
               SizedBox(height: s(150)),
             ],
           ),
+        );
+  }
+
+  Future<void> _onSpotlightWatchNow() async {
+    if (_isProcessing) return;
+    _isProcessing = true;
+    try {
+      if (_focusedMovie!.mediaType == 'live') {
+        final url = _liveStreamUrls[_focusedMovie!.id];
+        if (url == null || url.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Stream link not found yet. Try again later!'),
+            ),
+          );
+          return;
+        }
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => PlayerScreen(
+              url: url,
+              title: _focusedMovie!.title ?? 'Live Event',
+              item: null,
+              isMovie: false,
+            ),
+          ),
+        );
+        return;
+      }
+
+      if (_focusedMovie!.mediaType == 'ad') {
+        final url = _adUrls[_focusedMovie!.id];
+        if (url != null && url.isNotEmpty) {
+          final uri = Uri.parse(url);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        }
+        return;
+      }
+
+      if (_selectedCategory == 'TV Shows') {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => TvDetailScreen(tvId: _focusedMovie!.id),
+          ),
+        );
+      } else {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) =>
+                MovieDetailScreen(movieId: _focusedMovie!.id),
+          ),
+        );
+      }
+      await _historyService.waitForPendingSaves();
+    } finally {
+      _isProcessing = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  List<Widget> _buildQuickTiles(
+    BuildContext context,
+    double Function(double) s,
+  ) {
+    final tiles = <Widget>[];
+
+    Map<String, dynamic>? firstHistory;
+    if (_history != null) {
+      for (final h in _history!) {
+        if (h['media_id'] != null && h['title'] != null) {
+          firstHistory = h;
+          break;
+        }
+      }
+    }
+
+    if (firstHistory != null) {
+      final h = firstHistory;
+      final positionMs = h['position_ms'] as int? ?? 0;
+      final durationMs = h['duration_ms'] as int? ?? 0;
+      String? subtitle;
+      if (h['type'] != 'movie' &&
+          h['season_num'] != null &&
+          h['episode_num'] != null) {
+        subtitle =
+            'S${(h['season_num'] as int).toString().padLeft(2, '0')} '
+            'E${(h['episode_num'] as int).toString().padLeft(2, '0')}';
+      }
+      tiles.add(
+        HomeQuickTile(
+          imageUrl: h['poster_path'] != null
+              ? 'https://image.tmdb.org/t/p/w300${h['poster_path']}'
+              : null,
+          title: h['title'] ?? '',
+          subtitle: subtitle,
+          badgeLabel: 'KEEP WATCHING',
+          badgeColor: Colors.white.withValues(alpha: 0.18),
+          leadingIcon: Icons.play_circle_outline,
+          progress: durationMs > 0 ? positionMs / durationMs : null,
+          onTap: () => _onContinueWatchingTap(h),
+          onFocus: () => _updateFocusedMovie(
+            h['media_id'] as int,
+            isMovie: h['type'] == 'movie',
+          ),
+          onLongPress: () => _showItemContextMenu(
+            item: h,
+            isMovie: h['type'] == 'movie',
+            season: h['season_num'] as int?,
+            episode: h['episode_num'] as int?,
+            episodeId: h['id'],
+            episodeName: h['episode_name'],
+            showId: h['media_id'],
+          ),
         ),
-      ],
-    );
+      );
+    }
+
+    Map<String, dynamic>? firstUpNext;
+    if (_selectedCategory == 'TV Shows' &&
+        _watchingShows != null &&
+        _watchingShows!.isNotEmpty) {
+      firstUpNext = _watchingShows!.first;
+    }
+
+    if (firstUpNext != null) {
+      final show = firstUpNext;
+      final season = show['season_num'] as int?;
+      final episode = show['episode_num'] as int?;
+      tiles.add(
+        HomeQuickTile(
+          imageUrl: show['poster_path'] != null
+              ? 'https://image.tmdb.org/t/p/w300${show['poster_path']}'
+              : null,
+          title: show['name'] ?? '',
+          subtitle: (season != null && episode != null)
+              ? 'S${season.toString().padLeft(2, '0')} '
+                    'E${episode.toString().padLeft(2, '0')}'
+              : null,
+          badgeLabel: 'UP NEXT',
+          badgeColor: Colors.white.withValues(alpha: 0.18),
+          leadingIcon: Icons.tv_outlined,
+          onTap: () => _onUpNextTap(show),
+          onFocus: () => _updateFocusedMovie(show['id'], isMovie: false),
+        ),
+      );
+    }
+
+    // Keep exactly two slots so the layout stays stable; fill any gap with
+    // more trending items so the space is never left empty.
+    var fallbackIndex = tiles.isEmpty ? 1 : 1;
+    while (tiles.length < 2 &&
+        _trending != null &&
+        fallbackIndex < _trending!.length) {
+      final item = _trending![fallbackIndex];
+      tiles.add(
+        HomeQuickTile(
+          imageUrl: item.posterPath != null
+              ? 'https://image.tmdb.org/t/p/w300${item.posterPath}'
+              : null,
+          title: item.title ?? '',
+          badgeLabel: 'ALSO TRENDING',
+          badgeColor: Colors.white.withValues(alpha: 0.18),
+          leadingIcon: Icons.local_fire_department_outlined,
+          onTap: () => _navigateToDetail(item),
+          onFocus: () =>
+              _updateFocusedMovie(item.id, isMovie: item.mediaType != 'tv'),
+        ),
+      );
+      fallbackIndex++;
+    }
+
+    final spaced = <Widget>[];
+    for (var i = 0; i < tiles.length; i++) {
+      if (i > 0) spaced.add(SizedBox(height: s(16)));
+      spaced.add(Expanded(child: tiles[i]));
+    }
+    return spaced;
   }
 
   void _navigateToDetail(MovieListItem m) async {
@@ -1263,7 +1562,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
       );
     } else {
       await Navigator.of(context).push(
-        MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
+        MaterialPageRoute(
+          builder: (context) => MovieDetailScreen(movieId: m.id),
+        ),
       );
     }
     await _historyService.waitForPendingSaves();
@@ -1283,25 +1584,38 @@ class _MainHomeViewState extends State<_MainHomeView> {
   }
 
   void _navigateToProvider(Map<String, dynamic> p) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => ProviderScreen(
-      providerId: p['id'] as int,
-      providerName: p['name'] as String,
-    )));
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProviderScreen(
+          providerId: p['id'] as int,
+          providerName: p['name'] as String,
+        ),
+      ),
+    );
   }
-
-
 
   /// Shows a dialog asking the user to resume from their saved position or start over.
   /// Returns the Duration to start at, or null if the dialog was dismissed.
-  Future<Duration?> _showResumeDialog(BuildContext context, Duration saved, int durationMs) {
+  Future<Duration?> _showResumeDialog(
+    BuildContext context,
+    Duration saved,
+    int durationMs,
+  ) {
     final pos = _formatDuration(saved);
-    final total = durationMs > 0 ? ' / ${_formatDuration(Duration(milliseconds: durationMs))}' : '';
+    final total = durationMs > 0
+        ? ' / ${_formatDuration(Duration(milliseconds: durationMs))}'
+        : '';
+    double s(double v) => ResponsiveUtils.scale(context, v);
 
     return showDialog<Duration>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: DashboardTheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(s(20)),
+          side: BorderSide(color: DashboardTheme.divider, width: s(1.5)),
+        ),
         title: const Text(
           'Resume Playback',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -1323,10 +1637,15 @@ class _MainHomeViewState extends State<_MainHomeView> {
             child: TextButton(
               onPressed: () => Navigator.of(ctx).pop(saved),
               style: TextButton.styleFrom(
-                backgroundColor: const Color(0xFFDC2626),
+                backgroundColor: DashboardTheme.signalRed,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: EdgeInsets.symmetric(
+                  horizontal: s(24),
+                  vertical: s(12),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(s(10)),
+                ),
               ),
               child: Text('Continue from $pos'),
             ),
@@ -1344,7 +1663,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
               onPressed: () => Navigator.of(ctx).pop(Duration.zero),
               style: TextButton.styleFrom(
                 foregroundColor: Colors.white54,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: EdgeInsets.symmetric(
+                  horizontal: s(24),
+                  vertical: s(12),
+                ),
               ),
               child: const Text('Start Over'),
             ),
@@ -1358,7 +1680,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
     final h = d.inHours;
     final m = d.inMinutes % 60;
     final s = d.inSeconds % 60;
-    if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    if (h > 0) {
+      return '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    }
     return '$m:${s.toString().padLeft(2, '0')}';
   }
 
@@ -1383,15 +1707,35 @@ class _MainHomeViewState extends State<_MainHomeView> {
   }
 
   String _monthName(int month) {
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return months[month - 1];
   }
 
-  Widget _buildUpNextRow(BuildContext context, double Function(double) s) {
-    if (_watchingShows == null || _watchingShows!.isEmpty) return const SizedBox.shrink();
+  Widget _buildUpNextRow(
+    BuildContext context,
+    double Function(double) s,
+    int index,
+  ) {
+    if (_watchingShows == null || _watchingShows!.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return HomeUpNextRow(
       watchingShows: _watchingShows!,
+      index: index,
       onFocus: (id) => _updateFocusedMovie(id, isMovie: false),
       onLongPress: (show) => _showItemContextMenu(
         item: show,
@@ -1400,67 +1744,80 @@ class _MainHomeViewState extends State<_MainHomeView> {
         episode: show['episode_num'] as int?,
         showId: show['id'] as int?,
       ),
-      onTap: (show) async {
-        final season = show['season_num'] as int?;
-        final episode = show['episode_num'] as int?;
-        
-        if (season != null && episode != null) {
-          if (_isProcessing) return;
-          _isProcessing = true;
-          
-          try {
-            final detail = await _api.fetchTvDetail(show['id']);
-            if (!context.mounted) return;
-            
-            final history = await _historyService.getHistory(mediaType: 'tv');
-            final itemHistory = history.firstWhere(
-              (h) => h['media_id'] == show['id'] && h['season_num'] == season && h['episode_num'] == episode,
-              orElse: () => <String, dynamic>{},
-            );
-
-            Duration? startAt;
-            if (itemHistory.isNotEmpty && (itemHistory['position_ms'] ?? 0) > 0) {
-              if (!context.mounted) return;
-              startAt = await _showResumeDialog(
-                context,
-                Duration(milliseconds: itemHistory['position_ms']), 
-                itemHistory['duration_ms'] ?? 0
-              );
-              if (startAt == null) return;
-            }
-
-            if (!context.mounted) return;
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => VideoLoaderScreen(
-                  tvShow: detail,
-                  season: season,
-                  episode: episode,
-                  startPosition: startAt,
-                ),
-              ),
-            );
-            await _historyService.waitForPendingSaves();
-            _loadContent(quiet: true);
-          } finally {
-            _isProcessing = false;
-          }
-        } else {
-          _navigateToDetail(MovieListItem(
-            id: show['id'],
-            title: show['name'] ?? '',
-            mediaType: 'tv',
-            posterPath: show['poster_path'],
-          ));
-        }
-      },
+      onTap: _onUpNextTap,
     );
   }
 
-  Widget _buildContinueWatchingRow(BuildContext context, double Function(double) s) {
+  Future<void> _onUpNextTap(Map<String, dynamic> show) async {
+    final season = show['season_num'] as int?;
+    final episode = show['episode_num'] as int?;
+
+    if (season != null && episode != null) {
+      if (_isProcessing) return;
+      _isProcessing = true;
+
+      try {
+        final detail = await _api.fetchTvDetail(show['id']);
+        if (!mounted) return;
+
+        final history = await _historyService.getHistory(mediaType: 'tv');
+        final itemHistory = history.firstWhere(
+          (h) =>
+              h['media_id'] == show['id'] &&
+              h['season_num'] == season &&
+              h['episode_num'] == episode,
+          orElse: () => <String, dynamic>{},
+        );
+
+        Duration? startAt;
+        if (itemHistory.isNotEmpty && (itemHistory['position_ms'] ?? 0) > 0) {
+          if (!mounted) return;
+          startAt = await _showResumeDialog(
+            context,
+            Duration(milliseconds: itemHistory['position_ms']),
+            itemHistory['duration_ms'] ?? 0,
+          );
+          if (startAt == null) return;
+        }
+
+        if (!mounted) return;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => VideoLoaderScreen(
+              tvShow: detail,
+              season: season,
+              episode: episode,
+              startPosition: startAt,
+            ),
+          ),
+        );
+        await _historyService.waitForPendingSaves();
+        _loadContent(quiet: true);
+      } finally {
+        _isProcessing = false;
+      }
+    } else {
+      _navigateToDetail(
+        MovieListItem(
+          id: show['id'],
+          title: show['name'] ?? '',
+          mediaType: 'tv',
+          posterPath: show['poster_path'],
+        ),
+      );
+    }
+  }
+
+  Widget _buildContinueWatchingRow(
+    BuildContext context,
+    double Function(double) s,
+    int index,
+  ) {
     if (_history == null) return const SizedBox.shrink();
-    final validHistory = _history!.where((h) => h['media_id'] != null && h['title'] != null).toList();
+    final validHistory = _history!
+        .where((h) => h['media_id'] != null && h['title'] != null)
+        .toList();
     if (validHistory.isEmpty) return const SizedBox.shrink();
 
     final seenIds = <int>{};
@@ -1471,27 +1828,53 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
     return HomeContinueWatchingRow(
       history: dedupedHistory,
+      index: index,
       onFocus: (id, isMovie) => _updateFocusedMovie(id, isMovie: isMovie),
       onClearAll: () async {
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF1A1A1A),
-            title: const Text('Clear History?', style: TextStyle(color: Colors.white)),
-            content: const Text('Do you want to clear all "Continue Watching" items for this category?', style: TextStyle(color: Colors.white70)),
+            backgroundColor: DashboardTheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(s(20)),
+              side: BorderSide(color: DashboardTheme.divider, width: s(1.5)),
+            ),
+            title: const Text(
+              'Clear History?',
+              style: TextStyle(color: Colors.white),
+            ),
+            content: const Text(
+              'Do you want to clear all "Continue Watching" items for this category?',
+              style: TextStyle(color: Colors.white70),
+            ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
               TextButton(
-                onPressed: () => Navigator.pop(ctx, true), 
-                child: const Text('Clear', style: TextStyle(color: Color(0xFFE60000)))
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.white54),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(
+                  'Clear',
+                  style: TextStyle(color: DashboardTheme.signalRed),
+                ),
               ),
             ],
           ),
         );
         if (confirmed == true) {
-          await _historyService.clearHistory(mediaType: _selectedCategory == 'TV Shows' ? 'tv' : 'movie');
+          await _historyService.clearHistory(
+            mediaType: _selectedCategory == 'TV Shows' ? 'tv' : 'movie',
+          );
           if (_scrollController.hasClients) {
-            await _scrollController.animateTo(0, duration: const Duration(milliseconds: 500), curve: Curves.easeOutCubic);
+            await _scrollController.animateTo(
+              0,
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeOutCubic,
+            );
           }
           setState(() {
             _trendingIndex = 0;
@@ -1499,68 +1882,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
           _loadContent();
         }
       },
-      onTap: (h) async {
-        if (_isProcessing) return;
-        _isProcessing = true;
-        try {
-          final isMovie = h['type'] == 'movie';
-          final mediaId = h['media_id'] as int;
-          final positionMs = h['position_ms'] as int? ?? 0;
-          final durationMs = h['duration_ms'] as int? ?? 0;
-          final savedPosition = Duration(milliseconds: positionMs);
-
-          Duration? startAt;
-          if (positionMs > 0) {
-            startAt = await _showResumeDialog(context, savedPosition, durationMs);
-            if (startAt == null) return;
-          }
-
-          if (isMovie) {
-            final detail = await _api.fetchMovieDetail(mediaId);
-            if (!context.mounted) return;
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => VideoLoaderScreen(
-                  movie: detail,
-                  startPosition: startAt,
-                ),
-              ),
-            );
-          } else {
-            final detail = await _api.fetchTvDetail(h['media_id']);
-            if (!mounted) return;
-            
-            if (h['season_num'] == null || h['episode_num'] == null) {
-              if (!context.mounted) return;
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: h['media_id'])),
-              );
-            } else {
-              if (!context.mounted) return;
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => VideoLoaderScreen(
-                    tvShow: detail,
-                    season: h['season_num'],
-                    episode: h['episode_num'],
-                    episodeId: h['id'],
-                    episodeName: h['episode_name'],
-                    startPosition: startAt,
-                  ),
-                ),
-              );
-            }
-          }
-
-          await _historyService.waitForPendingSaves();
-        } finally {
-          _isProcessing = false;
-          if (mounted) setState(() {});
-        }
-      },
+      onTap: _onContinueWatchingTap,
       onLongPress: (h) => _showItemContextMenu(
         item: h,
         isMovie: h['type'] == 'movie',
@@ -1573,20 +1895,91 @@ class _MainHomeViewState extends State<_MainHomeView> {
     );
   }
 
+  Future<void> _onContinueWatchingTap(Map<String, dynamic> h) async {
+    if (_isProcessing) return;
+    _isProcessing = true;
+    try {
+      final isMovie = h['type'] == 'movie';
+      final mediaId = h['media_id'] as int;
+      final positionMs = h['position_ms'] as int? ?? 0;
+      final durationMs = h['duration_ms'] as int? ?? 0;
+      final savedPosition = Duration(milliseconds: positionMs);
 
+      Duration? startAt;
+      if (positionMs > 0) {
+        startAt = await _showResumeDialog(context, savedPosition, durationMs);
+        if (startAt == null) return;
+      }
+
+      if (isMovie) {
+        final detail = await _api.fetchMovieDetail(mediaId);
+        if (!mounted) return;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                VideoLoaderScreen(movie: detail, startPosition: startAt),
+          ),
+        );
+      } else {
+        final detail = await _api.fetchTvDetail(h['media_id']);
+        if (!mounted) return;
+
+        if (h['season_num'] == null || h['episode_num'] == null) {
+          if (!mounted) return;
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => TvDetailScreen(tvId: h['media_id']),
+            ),
+          );
+        } else {
+          if (!mounted) return;
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => VideoLoaderScreen(
+                tvShow: detail,
+                season: h['season_num'],
+                episode: h['episode_num'],
+                episodeId: h['id'],
+                episodeName: h['episode_name'],
+                startPosition: startAt,
+              ),
+            ),
+          );
+        }
+      }
+
+      await _historyService.waitForPendingSaves();
+    } finally {
+      _isProcessing = false;
+      if (mounted) setState(() {});
+    }
+  }
 
   Future<String?> _showSituationDialog(BuildContext context) {
     final controller = TextEditingController();
+    double s(double v) => ResponsiveUtils.scale(context, v);
     return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('What\'s the occasion?', style: TextStyle(color: Colors.white)),
+        backgroundColor: DashboardTheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(s(20)),
+          side: BorderSide(color: DashboardTheme.divider, width: s(1.5)),
+        ),
+        title: const Text(
+          'What\'s the occasion?',
+          style: TextStyle(color: Colors.white),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('e.g. "date night", "horror fans", "relaxing Sunday"', style: TextStyle(color: Colors.white54)),
+            const Text(
+              'e.g. "date night", "horror fans", "relaxing Sunday"',
+              style: TextStyle(color: Colors.white54),
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: controller,
@@ -1595,8 +1988,12 @@ class _MainHomeViewState extends State<_MainHomeView> {
               decoration: const InputDecoration(
                 hintText: 'Enter a situation...',
                 hintStyle: TextStyle(color: Colors.white24),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE60000))),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white24),
+                ),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: DashboardTheme.signalRed),
+                ),
               ),
             ),
           ],
@@ -1604,15 +2001,20 @@ class _MainHomeViewState extends State<_MainHomeView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Get Recommendations', style: TextStyle(color: Color(0xFFE60000))),
+            child: Text(
+              'Get Recommendations',
+              style: TextStyle(color: DashboardTheme.signalRed),
+            ),
           ),
         ],
       ),
     );
   }
 }
-
