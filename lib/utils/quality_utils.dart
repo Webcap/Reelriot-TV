@@ -1,8 +1,9 @@
 import 'package:reelriot_tv/services/api_service.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class QualityUtils {
+  static final Map<String, String> _cache = {};
+
   static String? getQualityBadgeSync({
     required String? releaseDate,
     required bool isMovie,
@@ -17,50 +18,47 @@ class QualityUtils {
       if (release.isAfter(now)) return 'SOON';
 
       final diffDays = now.difference(release).inDays;
-      return diffDays <= 45 ? 'CAM' : 'HD';
+      // 90-day CAM window aligned with caffeine-api standard
+      return diffDays < 90 ? 'CAM' : 'HD';
     } catch (e) {
       debugPrint('[QualityUtils] Error parsing date: $e');
       return null;
     }
   }
 
-  /// Fetches the quality badge, including checking for Supabase overrides.
+  /// Fetches the quality badge from the centralized Caffeine API.
+  /// Uses in-memory cache to prevent duplicate requests across screens and lists.
   static Future<String?> getQualityBadgeAsync({
     required int mediaId,
     required String? releaseDate,
     required bool isMovie,
   }) async {
-    // 1. TV shows are always HD for now
+    // TV shows are always HD
     if (!isMovie) return 'HD';
 
-    // 2. Fetch Manual override from Supabase
-    String? manualQuality;
+    final mediaType = isMovie ? 'movie' : 'tv';
+    final cacheKey = '$mediaType:$mediaId';
+
+    if (_cache.containsKey(cacheKey)) {
+      return _cache[cacheKey];
+    }
+
+    // Fallback sync estimate while awaiting or on failure
+    final syncQuality = getQualityBadgeSync(releaseDate: releaseDate, isMovie: isMovie);
+
     try {
-      final response = await Supabase.instance.client
-          .from('media_quality_overrides')
-          .select('quality')
-          .eq('media_id', mediaId.toString())
-          .maybeSingle();
-      if (response != null && response['quality'] != null) {
-        manualQuality = response['quality'] as String;
+      final serverQuality = await ApiService().fetchMediaQuality(mediaType, mediaId);
+      if (serverQuality != null && serverQuality.isNotEmpty) {
+        _cache[cacheKey] = serverQuality;
+        return serverQuality;
       }
     } catch (e) {
-      // Silent fail
+      debugPrint('[QualityUtils] Error resolving quality for $cacheKey: $e');
     }
 
-    // 3. Fallback to synchronous logic (Date-based)
-    final syncQuality = getQualityBadgeSync(releaseDate: releaseDate, isMovie: isMovie);
-    
-    // 4. Digital Release Detection (Always promotes to HD)
-    // If either the date-based check or manual override says CAM, verify digital status
-    if (isMovie && (syncQuality == 'CAM' || manualQuality == 'CAM')) {
-      final isDigital = await ApiService().isDigitalRelease(mediaId);
-      if (isDigital) return 'HD';
+    if (syncQuality != null) {
+      _cache[cacheKey] = syncQuality;
     }
-
-    // 5. HD always wins if either source says so
-    if (syncQuality == 'HD' || manualQuality == 'HD') return 'HD';
-
-    return manualQuality ?? syncQuality;
+    return syncQuality;
   }
 }

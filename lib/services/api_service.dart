@@ -431,6 +431,26 @@ class ApiService {
     return core.TvListResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
+  /// Fetches media quality from the centralized Caffeine API (/v1/quality/:type/:id).
+  Future<String?> fetchMediaQuality(String type, int id) async {
+    try {
+      final url = core.Endpoints.qualityUrl(caffeineBaseUrl, type, id);
+      final res = await http
+          .get(Uri.parse(url), headers: _caffeineApiHeaders)
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        if (data['success'] == true && data['quality'] != null) {
+          return (data['quality'] as String).toUpperCase();
+        }
+      }
+    } catch (e) {
+      debugPrint('[ApiService] Error fetching media quality for $type:$id: $e');
+    }
+    return null;
+  }
+
+  @Deprecated('Use fetchMediaQuality via Caffeine API instead')
   Future<bool> isDigitalRelease(int movieId) async {
     try {
       final url = core.Endpoints.movieDetailsUrl(tmdbBaseUrl, _tmdbKey, movieId, language);
