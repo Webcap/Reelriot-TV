@@ -40,7 +40,9 @@ Two build flavors exist: `dev` (`.env.dev`, local API) and `prod` (`.env.prod`, 
 
 ## Brand Commitments
 
-User-facing brand name is **ReelRiot** (package id and some internal naming still reference the prior/internal name "Caffeine" — treat ReelRiot as the brand of record for user-facing work). Primary accent color observed in the existing UI is red (~`#DC2626`).
+User-facing brand name is **ReelRiot** (package id and some internal naming still reference the prior/internal name "Caffeine" — treat ReelRiot as the brand of record for user-facing work). Primary accent color observed in the existing UI is red (`#EC1D24` canonical; legacy `#DC2626`/`#E60000` are drift to migrate on touch, not values to reach for in new work).
+
+**Standing visual direction: canon, not a themed world.** After trying a themed metaphor world (video-rental-store "Home Video") on the home dashboard and having it rejected outright, the user confirmed they want the category-standard clean/modern streaming-TV dashboard pattern — near-black canvas, hero + shelves, restrained color (neutrals plus the one red accent) — executed at high craft, not reinterpreted as a concept. Craft bar: Netflix (browse density, hero pattern) and Apple TV (restraint, typography polish, smooth focus lift). Do not propose another themed/skeuomorphic visual world for this app without being asked; default to polishing the canon pattern instead.
 
 ## Evidence on Hand
 

@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:reelriot_tv/constants.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:reelriot_tv/theme/dashboard_theme.dart';
 import 'package:reelriot_tv/widgets/long_press_focus.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -59,7 +60,7 @@ class _PosterCardState extends State<PosterCard> {
           releaseDate: widget.releaseDate,
           isMovie: true,
         );
-        
+
         if (badge != null && badge != widget.quality && mounted) {
           setState(() {
             _overrideQuality = badge;
@@ -96,13 +97,19 @@ class _PosterCardState extends State<PosterCard> {
           final cardWidth = s(220); // design.json lg poster width
           final cardHeight = s(330); // 1.5 ratio
 
-          return AnimatedScale(
-            scale: hasFocus ? 1.05 : 1.0, // 1.05x focus scaling
+          return AnimatedOpacity(
+            // Unfocused cards recede slightly; the focused one reads as the
+            // only one at full attention — a soft lift, not a color change.
+            opacity: hasFocus ? 1.0 : 0.85,
             duration: const Duration(milliseconds: 200),
-            child: Container(
-              width: cardWidth,
-              height: cardHeight,
-              margin: EdgeInsets.only(right: s(24)),
+            child: AnimatedScale(
+              scale: hasFocus ? 1.08 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              child: Container(
+                width: cardWidth,
+                height: cardHeight,
+                margin: EdgeInsets.only(right: s(24)),
                 child: RepaintBoundary(
                   child: Stack(
                     children: [
@@ -112,31 +119,27 @@ class _PosterCardState extends State<PosterCard> {
                         children: [
                           Expanded(
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(s(20)), // rounded-xl
+                              borderRadius: BorderRadius.circular(s(12)),
                               child: Container(
                                 width: cardWidth,
                                 decoration: BoxDecoration(
-                                  color: Colors.grey[900],
-                                  border: Border.all(
-                                    color: hasFocus ? Colors.white : Colors.transparent,
-                                    width: s(4), // 4px focus ring
-                                  ),
-                                  boxShadow: hasFocus ? [
-                                    BoxShadow(
-                                      color: const Color(0xFFEC1D24).withValues(alpha: 0.45),
-                                      blurRadius: s(28),
-                                      spreadRadius: s(3),
-                                    )
-                                  ] : null,
+                                  color: DashboardTheme.surface,
+                                  boxShadow: hasFocus
+                                      ? DashboardDecorations.focusGlow(context)
+                                      : null,
                                 ),
                                 child: _imageUrl.isNotEmpty
-                                  ? CachedNetworkImage(
-                                      imageUrl: _imageUrl,
-                                      fit: BoxFit.cover,
-                                      placeholder: (context, url) => Container(color: Colors.grey[900]),
-                                      errorWidget: (context, url, error) => const Icon(Icons.error),
-                                    )
-                                  : Container(color: Colors.grey[900]),
+                                    ? CachedNetworkImage(
+                                        imageUrl: _imageUrl,
+                                        fit: BoxFit.cover,
+                                        placeholder: (context, url) =>
+                                            Container(
+                                              color: DashboardTheme.surface,
+                                            ),
+                                        errorWidget: (context, url, error) =>
+                                            const Icon(Icons.error),
+                                      )
+                                    : Container(color: DashboardTheme.surface),
                               ),
                             ),
                           ),
@@ -146,7 +149,9 @@ class _PosterCardState extends State<PosterCard> {
                             style: TextStyle(
                               color: hasFocus ? Colors.white : Colors.white70,
                               fontSize: s(24),
-                              fontWeight: hasFocus ? FontWeight.bold : FontWeight.w500,
+                              fontWeight: hasFocus
+                                  ? FontWeight.bold
+                                  : FontWeight.w500,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -156,7 +161,9 @@ class _PosterCardState extends State<PosterCard> {
                             Text(
                               widget.subtitle!,
                               style: TextStyle(
-                                color: hasFocus ? Colors.white70 : Colors.white38,
+                                color: hasFocus
+                                    ? Colors.white70
+                                    : Colors.white38,
                                 fontSize: s(18),
                                 fontWeight: FontWeight.w400,
                               ),
@@ -172,15 +179,19 @@ class _PosterCardState extends State<PosterCard> {
                           left: s(12),
                           child: _buildSponsoredBadge(),
                         ),
-                      if ((_overrideQuality ?? widget.quality) != null && !widget.isSponsored)
+                      if ((_overrideQuality ?? widget.quality) != null &&
+                          !widget.isSponsored)
                         Positioned(
                           top: s(12),
                           right: s(12),
-                          child: _buildQualityBadge(_overrideQuality ?? widget.quality!),
+                          child: _buildQualityBadge(
+                            _overrideQuality ?? widget.quality!,
+                          ),
                         ),
                     ],
                   ),
                 ),
+              ),
             ),
           );
         },
@@ -201,7 +212,7 @@ class _PosterCardState extends State<PosterCard> {
           decoration: BoxDecoration(
             color: Colors.black.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(s(8)),
-            border: Border.all(color: Colors.white24),
+            border: Border.all(color: DashboardTheme.divider),
           ),
           child: Text(
             'SPONSORED',
@@ -222,15 +233,15 @@ class _PosterCardState extends State<PosterCard> {
     double s(double v) => (v * screenWidth) / 1920;
 
     Color bgColor = Colors.black.withValues(alpha: 0.75);
-    Color borderColor = Colors.white24;
+    Color borderColor = DashboardTheme.divider;
     final q = quality.toUpperCase();
 
     if (q == 'CAM') {
-      bgColor = const Color(0xFFE60000).withValues(alpha: 0.9);
-      borderColor = Colors.redAccent.withValues(alpha: 0.5);
+      bgColor = DashboardTheme.signalRed.withValues(alpha: 0.9);
+      borderColor = DashboardTheme.signalRed.withValues(alpha: 0.5);
     } else if (q == 'SOON') {
-      bgColor = Colors.amber.withValues(alpha: 0.9);
-      borderColor = Colors.amberAccent.withValues(alpha: 0.5);
+      bgColor = DashboardTheme.warningAmber.withValues(alpha: 0.9);
+      borderColor = DashboardTheme.warningAmber.withValues(alpha: 0.5);
     }
 
     return Container(
@@ -245,7 +256,7 @@ class _PosterCardState extends State<PosterCard> {
                   color: bgColor.withValues(alpha: 0.3),
                   blurRadius: s(8),
                   spreadRadius: s(1),
-                )
+                ),
               ]
             : null,
       ),

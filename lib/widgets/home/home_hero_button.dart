@@ -1,3 +1,4 @@
+import 'package:reelriot_tv/theme/dashboard_theme.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +25,7 @@ class HomeHeroButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     double s(double v) => ResponsiveUtils.scale(context, v);
+    final isPrimary = style == HeroButtonStyle.primary;
 
     return Focus(
       focusNode: focusNode,
@@ -37,56 +39,50 @@ class HomeHeroButton extends StatelessWidget {
       child: Builder(
         builder: (context) {
           final focused = Focus.of(context).hasFocus;
-          
-          Color bgColor = Colors.transparent;
-          Color borderColor = Colors.white24;
-          Color textColor = Colors.white;
 
-          if (style == HeroButtonStyle.primary) {
-            bgColor = Colors.white;
-            textColor = Colors.black;
-            borderColor = Colors.transparent;
-          } else if (style == HeroButtonStyle.secondaryRed) {
-            borderColor = const Color(0xFFE60000);
-          } else {
-            borderColor = Colors.white;
-          }
-
-          return AnimatedContainer(
+          return AnimatedScale(
+            scale: focused ? 1.05 : 1.0,
             duration: const Duration(milliseconds: 200),
-            padding: EdgeInsets.symmetric(horizontal: s(42), vertical: s(18)),
-            decoration: BoxDecoration(
-              color: bgColor.withValues(alpha: focused ? 0.8 : 1.0),
-              borderRadius: BorderRadius.circular(s(12)),
-              border: Border.all(
-                color: focused ? Colors.white : borderColor,
-                width: s(3.5),
+            curve: Curves.easeOutCubic,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: EdgeInsets.symmetric(
+                horizontal: isPrimary ? s(36) : s(32),
+                vertical: s(18),
               ),
-              boxShadow: focused ? [
-                BoxShadow(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  blurRadius: s(20),
-                  spreadRadius: s(2),
-                )
-              ] : null,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: textColor, size: s(42)),
-                SizedBox(width: s(18)),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: textColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: s(30),
+              decoration: BoxDecoration(
+                color: isPrimary
+                    ? DashboardTheme.signalRed
+                    : (focused
+                          ? Colors.white.withValues(alpha: 0.25)
+                          : Colors.white.withValues(alpha: 0.12)),
+                borderRadius: BorderRadius.circular(s(10)),
+                boxShadow: focused
+                    ? DashboardDecorations.focusGlow(
+                        context,
+                        strength: 0.7,
+                        color: isPrimary ? DashboardTheme.signalRed : null,
+                      )
+                    : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: Colors.white, size: s(38)),
+                  SizedBox(width: s(16)),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: s(28),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           );
-        }
+        },
       ),
     );
   }

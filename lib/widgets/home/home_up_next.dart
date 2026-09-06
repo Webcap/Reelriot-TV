@@ -7,6 +7,7 @@ class HomeUpNextRow extends StatelessWidget {
   final Function(int id) onFocus;
   final Function(Map<String, dynamic> show) onTap;
   final Function(Map<String, dynamic> show) onLongPress;
+  final int index;
 
   const HomeUpNextRow({
     super.key,
@@ -14,6 +15,7 @@ class HomeUpNextRow extends StatelessWidget {
     required this.onFocus,
     required this.onTap,
     required this.onLongPress,
+    this.index = 1,
   });
 
   @override
@@ -28,8 +30,8 @@ class HomeUpNextRow extends StatelessWidget {
           'Up Next',
           style: TextStyle(
             color: Colors.white,
-            fontSize: s(48),
-            fontWeight: FontWeight.w800,
+            fontSize: s(40),
+            fontWeight: FontWeight.w700,
           ),
         ),
         SizedBox(height: s(42)),
@@ -44,10 +46,11 @@ class HomeUpNextRow extends StatelessWidget {
               final season = show['season_num'] as int?;
               final episode = show['episode_num'] as int?;
               final epName = show['episode_name'] as String?;
-              
+
               String? subtitle;
               if (season != null && episode != null) {
-                subtitle = 'S${season.toString().padLeft(2, '0')} E${episode.toString().padLeft(2, '0')}${epName != null ? ' • $epName' : ''}';
+                subtitle =
+                    'S${season.toString().padLeft(2, '0')} E${episode.toString().padLeft(2, '0')}${epName != null ? ' • $epName' : ''}';
               }
 
               return Padding(

@@ -12,7 +12,11 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(node *)",
-      "Bash(grep -rhoE \"Color\\\\\\(0x[0-9A-Fa-f]{6,8}\\\\\\)\" lib)"
+      "Bash(grep -rhoE \"Color\\\\\\(0x[0-9A-Fa-f]{6,8}\\\\\\)\" lib)",
+      "Skill(impeccable)",
+      "Bash(dart format *)",
+      "Bash(flutter devices *)",
+      "Bash(flutter emulators *)"
     ]
   },
   "hooks": {

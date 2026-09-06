@@ -1,4 +1,5 @@
 import 'package:caffeine_core/caffeine_core.dart';
+import 'package:reelriot_tv/theme/dashboard_theme.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
@@ -12,6 +13,7 @@ class HomeMediaRow extends StatelessWidget {
   final Function(int id) onFocus;
   final Function(MovieListItem item) onTap;
   final Function(MovieListItem item) onLongPress;
+  final int? index;
 
   final bool isSocial;
 
@@ -23,6 +25,7 @@ class HomeMediaRow extends StatelessWidget {
     required this.onTap,
     required this.onLongPress,
     this.isSocial = false,
+    this.index,
   });
 
   @override
@@ -39,13 +42,17 @@ class HomeMediaRow extends StatelessWidget {
               title,
               style: TextStyle(
                 color: Colors.white,
-                fontSize: s(48),
-                fontWeight: FontWeight.w800,
+                fontSize: s(40),
+                fontWeight: FontWeight.w700,
               ),
             ),
             if (isSocial) ...[
-              SizedBox(width: s(24)),
-              Icon(Icons.trending_up, color: const Color(0xFFE60000), size: s(48)),
+              SizedBox(width: s(20)),
+              Icon(
+                Icons.trending_up,
+                color: DashboardTheme.signalRed,
+                size: s(36),
+              ),
             ],
           ],
         ),
@@ -61,32 +68,32 @@ class HomeMediaRow extends StatelessWidget {
               return Padding(
                 padding: EdgeInsets.only(right: s(36)),
                 child: m.isSponsored
-                  ? native.NativeAdPosterCard(
-                      ad: model.Ad(
-                        id: m.id.toString(),
+                    ? native.NativeAdPosterCard(
+                        ad: model.Ad(
+                          id: m.id.toString(),
+                          title: m.title ?? '',
+                          description: m.overview ?? '',
+                          imageUrl: m.posterPath ?? '',
+                          cta: 'Learn More',
+                          link: 'https://reelriot.app',
+                          placement: 'poster',
+                        ),
+                      )
+                    : PosterCard(
+                        posterPath: m.posterPath,
                         title: m.title ?? '',
-                        description: m.overview ?? '',
-                        imageUrl: m.posterPath ?? '',
-                        cta: 'Learn More',
-                        link: 'https://reelriot.app',
-                        placement: 'poster',
-                      ),
-                    )
-                  : PosterCard(
-                      posterPath: m.posterPath,
-                      title: m.title ?? '',
-                      isSponsored: m.isSponsored,
-                      onFocus: () => onFocus(m.id),
-                      onLongPress: () => onLongPress(m),
-                      onTap: () => onTap(m),
-                      quality: QualityUtils.getQualityBadgeSync(
-                        releaseDate: m.releaseDate,
+                        isSponsored: m.isSponsored,
+                        onFocus: () => onFocus(m.id),
+                        onLongPress: () => onLongPress(m),
+                        onTap: () => onTap(m),
+                        quality: QualityUtils.getQualityBadgeSync(
+                          releaseDate: m.releaseDate,
+                          isMovie: m.mediaType != 'tv',
+                        ),
+                        mediaId: m.id,
                         isMovie: m.mediaType != 'tv',
+                        releaseDate: m.releaseDate,
                       ),
-                      mediaId: m.id,
-                      isMovie: m.mediaType != 'tv',
-                      releaseDate: m.releaseDate,
-                    ),
               );
             },
           ),

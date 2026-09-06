@@ -1,3 +1,4 @@
+import 'package:reelriot_tv/theme/dashboard_theme.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:flutter/material.dart';
@@ -6,11 +7,13 @@ import 'package:flutter/services.dart';
 class HomeGenresRow extends StatelessWidget {
   final List<Map<String, dynamic>> genres;
   final Function(Map<String, dynamic> genre) onGenreTap;
+  final int index;
 
   const HomeGenresRow({
     super.key,
     required this.genres,
     required this.onGenreTap,
+    this.index = 1,
   });
 
   @override
@@ -24,8 +27,8 @@ class HomeGenresRow extends StatelessWidget {
           'Browse by Genre',
           style: TextStyle(
             color: Colors.white,
-            fontSize: s(48),
-            fontWeight: FontWeight.w800,
+            fontSize: s(40),
+            fontWeight: FontWeight.w700,
           ),
         ),
         SizedBox(height: s(42)),
@@ -41,7 +44,8 @@ class HomeGenresRow extends StatelessWidget {
                 padding: EdgeInsets.only(right: s(24)),
                 child: Focus(
                   onKeyEvent: (node, event) {
-                    if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
+                    if (event is KeyDownEvent &&
+                        TvKeys.isSelect(event.logicalKey)) {
                       onGenreTap(g);
                       return KeyEventResult.handled;
                     }
@@ -50,46 +54,44 @@ class HomeGenresRow extends StatelessWidget {
                   child: Builder(
                     builder: (context) {
                       final focused = Focus.of(context).hasFocus;
+                      // Each genre keeps one flat identity color — no
+                      // gradient wash — dimmed at rest, full and lifted
+                      // under focus.
                       return GestureDetector(
                         onTap: () => onGenreTap(g),
-                        child: AnimatedContainer(
+                        child: AnimatedScale(
+                          scale: focused ? 1.06 : 1.0,
                           duration: const Duration(milliseconds: 200),
-                          width: s(220),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                color.withValues(alpha: focused ? 1.0 : 0.6),
-                                color.withValues(alpha: focused ? 0.8 : 0.3),
-                              ],
+                          curve: Curves.easeOutCubic,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: s(220),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: color.withValues(
+                                alpha: focused ? 1.0 : 0.55,
+                              ),
+                              borderRadius: BorderRadius.circular(s(12)),
+                              boxShadow: focused
+                                  ? DashboardDecorations.focusGlow(
+                                      context,
+                                      strength: 0.5,
+                                    )
+                                  : null,
                             ),
-                            borderRadius: BorderRadius.circular(s(16)),
-                            border: Border.all(
-                              color: focused ? Colors.white : Colors.white12,
-                              width: s(focused ? 4 : 2),
-                            ),
-                            boxShadow: focused ? [
-                              BoxShadow(
-                                color: color.withValues(alpha: 0.5),
-                                blurRadius: s(15),
-                                spreadRadius: s(2),
-                              )
-                            ] : null,
-                          ),
-                          child: Text(
-                            g['name'],
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: s(28),
-                              fontWeight: focused ? FontWeight.w900 : FontWeight.w600,
-                              letterSpacing: s(1),
+                            child: Text(
+                              g['name'],
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: s(26),
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: s(0.5),
+                              ),
                             ),
                           ),
                         ),
                       );
-                    }
+                    },
                   ),
                 ),
               );

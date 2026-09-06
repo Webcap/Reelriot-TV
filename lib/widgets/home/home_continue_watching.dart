@@ -10,6 +10,7 @@ class HomeContinueWatchingRow extends StatelessWidget {
   final Function() onClearAll;
   final Function(Map<String, dynamic> item) onTap;
   final Function(Map<String, dynamic> item) onLongPress;
+  final int index;
 
   const HomeContinueWatchingRow({
     super.key,
@@ -18,6 +19,7 @@ class HomeContinueWatchingRow extends StatelessWidget {
     required this.onClearAll,
     required this.onTap,
     required this.onLongPress,
+    this.index = 1,
   });
 
   @override
@@ -36,8 +38,8 @@ class HomeContinueWatchingRow extends StatelessWidget {
               'Continue Watching',
               style: TextStyle(
                 color: Colors.white,
-                fontSize: s(48),
-                fontWeight: FontWeight.w800,
+                fontSize: s(40),
+                fontWeight: FontWeight.w700,
               ),
             ),
             HomeHeroButton(
@@ -59,14 +61,15 @@ class HomeContinueWatchingRow extends StatelessWidget {
               final h = history[index];
               final isMovie = h['type'] == 'movie';
               final mediaId = h['media_id'] as int;
-              
+
               String? subtitle;
               if (!isMovie) {
                 final season = h['season_num'] as int?;
                 final episode = h['episode_num'] as int?;
                 final epName = h['episode_name'] as String?;
                 if (season != null && episode != null) {
-                  subtitle = 'S${season.toString().padLeft(2, '0')} E${episode.toString().padLeft(2, '0')}${epName != null ? ' • $epName' : ''}';
+                  subtitle =
+                      'S${season.toString().padLeft(2, '0')} E${episode.toString().padLeft(2, '0')}${epName != null ? ' • $epName' : ''}';
                 }
               }
 
