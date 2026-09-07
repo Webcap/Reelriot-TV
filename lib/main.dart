@@ -28,13 +28,13 @@ void main() async {
 }
 
 Future<void> bootstrap(String envFile) async {
+  WidgetsFlutterBinding.ensureInitialized();
   // If in release mode, override debugPrint to do nothing
   // if (kReleaseMode) {
   //   debugPrint = (String? message, {int? wrapWidth}) {};
   // }
 
   debugPrint('[Main] 🚀 Bootstrapping with $envFile');
-  // WidgetsFlutterBinding already called in main
   MediaKit.ensureInitialized();
 
   // Load env first as it's required by subsequent service initializations
