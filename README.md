@@ -34,6 +34,13 @@ flutter run --flavor prod -t lib/main_prod.dart
 flutter run --flavor prod -t lib/main_prod.dart --profile
 ```
 
+### Production with Profile and Release
+```bash
+flutter clean; flutter pub get
+flutter run --flavor prod -t lib/main_prod.dart --profile --uninstall-first
+
+```
+
 > [!NOTE]
 > Using `flutter run` without flags will use the default `main.dart` and `.env`, but it is recommended to use the flavor commands above for consistent environment separation.
 
