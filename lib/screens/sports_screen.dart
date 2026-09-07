@@ -8,6 +8,7 @@ import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reelriot_tv/screens/player_screen.dart';
 import 'package:reelriot_tv/services/ad_service.dart';
+import 'package:reelriot_tv/widgets/tv_skeleton_loader.dart';
 
 // ---------------------------------------------------------------------------
 // ESPN league config
@@ -867,9 +868,7 @@ class SportsScreenState extends State<SportsScreen> {
         '${_dayName(now.weekday)}, ${_monthName(now.month)} ${now.day}';
 
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFFDC2626)),
-      );
+      return const TvSportsScreenSkeleton();
     }
 
     if (_error != null) {

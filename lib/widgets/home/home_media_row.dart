@@ -1,10 +1,12 @@
 import 'package:caffeine_core/caffeine_core.dart';
-import 'package:reelriot_tv/theme/dashboard_theme.dart';
-import 'package:reelriot_tv/utils/responsive_utils.dart';
-import 'package:reelriot_tv/widgets/poster_card.dart';
-import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:reelriot_tv/theme/dashboard_theme.dart';
+import 'package:reelriot_tv/utils/quality_utils.dart';
+import 'package:reelriot_tv/utils/responsive_utils.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:reelriot_tv/widgets/native_ad_poster_card.dart' as native;
+import 'package:reelriot_tv/widgets/poster_card.dart';
 import '../../models/ad.dart' as model;
 
 class HomeMediaRow extends StatelessWidget {
@@ -14,8 +16,8 @@ class HomeMediaRow extends StatelessWidget {
   final Function(MovieListItem item) onTap;
   final Function(MovieListItem item) onLongPress;
   final int? index;
-
   final bool isSocial;
+  final VoidCallback? onMoveUp;
 
   const HomeMediaRow({
     super.key,
@@ -26,6 +28,7 @@ class HomeMediaRow extends StatelessWidget {
     required this.onLongPress,
     this.isSocial = false,
     this.index,
+    this.onMoveUp,
   });
 
   @override
@@ -35,38 +38,49 @@ class HomeMediaRow extends StatelessWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
+        // Section Header
         Row(
           children: [
             Text(
-              title,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: s(40),
-                fontWeight: FontWeight.w700,
-              ),
+              title.toUpperCase(),
+              style: DashboardTheme.sectionTitle(context),
             ),
             if (isSocial) ...[
-              SizedBox(width: s(20)),
+              SizedBox(width: s(12)),
               Icon(
                 Icons.trending_up,
                 color: DashboardTheme.signalRed,
-                size: s(36),
+                size: s(22),
               ),
             ],
           ],
         ),
-        SizedBox(height: s(42)),
+        SizedBox(height: s(12)),
+
+        // Horizontal Shelf Cards
         SizedBox(
-          height: s(480),
+          height: s(245),
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             primary: false,
+            clipBehavior: Clip.none,
             itemCount: items!.length,
             itemBuilder: (context, index) {
               final m = items![index];
+              KeyEventResult handleCardKey(FocusNode node, KeyEvent event) {
+                if (onMoveUp != null &&
+                    event is KeyDownEvent &&
+                    TvKeys.isUp(event.logicalKey)) {
+                  onMoveUp!();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              }
+
               return Padding(
-                padding: EdgeInsets.only(right: s(36)),
+                padding: EdgeInsets.only(right: s(16)),
                 child: m.isSponsored
                     ? native.NativeAdPosterCard(
                         ad: model.Ad(
@@ -78,6 +92,7 @@ class HomeMediaRow extends StatelessWidget {
                           link: 'https://reelriot.app',
                           placement: 'poster',
                         ),
+                        onKeyEvent: onMoveUp != null ? handleCardKey : null,
                       )
                     : PosterCard(
                         posterPath: m.posterPath,
@@ -93,6 +108,8 @@ class HomeMediaRow extends StatelessWidget {
                         mediaId: m.id,
                         isMovie: m.mediaType != 'tv',
                         releaseDate: m.releaseDate,
+                        showTitle: false,
+                        onKeyEvent: onMoveUp != null ? handleCardKey : null,
                       ),
               );
             },

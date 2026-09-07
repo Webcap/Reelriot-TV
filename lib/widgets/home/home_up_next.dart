@@ -1,6 +1,9 @@
-import 'package:reelriot_tv/utils/responsive_utils.dart';
-import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:reelriot_tv/theme/dashboard_theme.dart';
+import 'package:reelriot_tv/utils/responsive_utils.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
+import 'package:reelriot_tv/widgets/poster_card.dart';
 
 class HomeUpNextRow extends StatelessWidget {
   final List<Map<String, dynamic>> watchingShows;
@@ -8,6 +11,7 @@ class HomeUpNextRow extends StatelessWidget {
   final Function(Map<String, dynamic> show) onTap;
   final Function(Map<String, dynamic> show) onLongPress;
   final int index;
+  final VoidCallback? onMoveUp;
 
   const HomeUpNextRow({
     super.key,
@@ -16,6 +20,7 @@ class HomeUpNextRow extends StatelessWidget {
     required this.onTap,
     required this.onLongPress,
     this.index = 1,
+    this.onMoveUp,
   });
 
   @override
@@ -25,47 +30,44 @@ class HomeUpNextRow extends StatelessWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'Up Next',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: s(40),
-            fontWeight: FontWeight.w700,
-          ),
+          'UP NEXT',
+          style: DashboardTheme.sectionTitle(context),
         ),
-        SizedBox(height: s(42)),
+        SizedBox(height: s(12)),
         SizedBox(
-          height: s(520),
+          height: s(245),
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             primary: false,
+            clipBehavior: Clip.none,
             itemCount: watchingShows.length,
             itemBuilder: (context, index) {
               final show = watchingShows[index];
-              final season = show['season_num'] as int?;
-              final episode = show['episode_num'] as int?;
-              final epName = show['episode_name'] as String?;
-
-              String? subtitle;
-              if (season != null && episode != null) {
-                subtitle =
-                    'S${season.toString().padLeft(2, '0')} E${episode.toString().padLeft(2, '0')}${epName != null ? ' • $epName' : ''}';
+              KeyEventResult handleCardKey(FocusNode node, KeyEvent event) {
+                if (onMoveUp != null &&
+                    event is KeyDownEvent &&
+                    TvKeys.isUp(event.logicalKey)) {
+                  onMoveUp!();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
               }
 
               return Padding(
-                padding: EdgeInsets.only(right: s(36)),
+                padding: EdgeInsets.only(right: s(16)),
                 child: PosterCard(
                   posterPath: show['poster_path'],
                   title: show['name'] ?? '',
-                  subtitle: subtitle,
-                  onFocus: () => onFocus(show['id']),
+                  onFocus: () => onFocus(show['id'] as int),
                   onLongPress: () => onLongPress(show),
                   onTap: () => onTap(show),
-                  quality: 'HD', // Up Next is TV shows
-                  mediaId: show['id'],
+                  mediaId: show['id'] as int,
                   isMovie: false,
-                  releaseDate: show['first_air_date'],
+                  showTitle: false,
+                  onKeyEvent: onMoveUp != null ? handleCardKey : null,
                 ),
               );
             },

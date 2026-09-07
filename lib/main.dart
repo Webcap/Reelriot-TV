@@ -5,6 +5,7 @@ import 'package:reelriot_tv/screens/pairing_screen.dart';
 import 'package:reelriot_tv/screens/splash_screen.dart';
 import 'package:reelriot_tv/services/ad_service.dart';
 import 'package:reelriot_tv/services/outage_service.dart';
+import 'package:reelriot_tv/services/profile_service.dart';
 import 'package:reelriot_tv/services/settings_service.dart';
 import 'package:reelriot_tv/utils/cleanup_utils.dart';
 import 'package:reelriot_tv/widgets/outage_overlay.dart';
@@ -85,6 +86,9 @@ Future<void> bootstrap(String envFile) async {
 
   // Start API health monitoring — detects outages and blocks the UI
   OutageService.instance.start();
+
+  // Profile and Avatar Sync Service
+  unawaited(ProfileService().init());
 
   // Background initialization of other third-party services (Ads)
   unawaited(_initializeBgServices());

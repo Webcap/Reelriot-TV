@@ -9,6 +9,7 @@ import '../services/api_service.dart';
 import '../services/update_service.dart';
 import '../env.dart';
 import 'update_screen.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/avatar_utils.dart';
 import '../utils/responsive_utils.dart';
 
@@ -29,6 +30,7 @@ class SettingsScreenState extends State<SettingsScreen> {
   _SettingsCategory _selectedCategory = _SettingsCategory.account;
   bool _loading = false;
   String? _name;
+  String? _username;
   String? _email;
   int _movieWatchTimeMs = 0;
   int _tvWatchTimeMs = 0;
@@ -146,11 +148,18 @@ class SettingsScreenState extends State<SettingsScreen> {
         setState(() {
           final profileData = profileRes.isNotEmpty ? profileRes[0] : null;
           _name = profileData?['name'] as String?;
+          final resolvedUser = profileData?['username']?.toString() ??
+                               user.userMetadata?['username']?.toString() ??
+                               user.email?.split('@')[0];
+          _username = (resolvedUser != null && resolvedUser.isNotEmpty) ? resolvedUser : 'User';
           
           // Initial avatar resolution
-          _avatar = user.userMetadata?['avatar']?.toString() ?? 
+          _avatar = profileData?['image_url']?.toString() ??
+                    profileData?['avatar']?.toString() ??
+                    profileData?['profile_id']?.toString() ??
+                    user.userMetadata?['avatar']?.toString() ?? 
                     user.userMetadata?['avatar_url']?.toString() ??
-                    profileData?['profile_id']?.toString();
+                    user.userMetadata?['profile_id']?.toString();
         });
       }
 
@@ -242,52 +251,118 @@ class SettingsScreenState extends State<SettingsScreen> {
 
     if (!isSignedIn) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.settings_outlined, color: Colors.white24, size: s(120)),
-            SizedBox(height: s(32)),
-            Text(
-              'Settings',
-              style: TextStyle(color: Colors.white, fontSize: s(48), fontWeight: FontWeight.bold),
+        child: Container(
+          width: s(760),
+          padding: EdgeInsets.all(s(48)),
+          decoration: BoxDecoration(
+            color: const Color(0xFF141418).withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(s(28)),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.12),
+              width: s(1.5),
             ),
-            SizedBox(height: s(16)),
-            Text(
-              'Sign in to manage your account and preferences',
-              style: TextStyle(color: Colors.white54, fontSize: s(24)),
-            ),
-            SizedBox(height: s(48)),
-            LongPressFocus(
-              focusNode: _sidebarFocusNode,
-              onTap: () => Navigator.of(context).pushNamed('/pairing'),
-              child: Builder(builder: (context) {
-                final focused = Focus.of(context).hasFocus;
-                return Container(
-                  padding: EdgeInsets.symmetric(horizontal: s(48), vertical: s(24)),
-                  decoration: BoxDecoration(
-                    color: focused ? Colors.white : const Color(0xFFDC2626),
-                    borderRadius: BorderRadius.circular(s(12)),
-                    border: Border.all(color: focused ? Colors.white : Colors.transparent, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: s(40),
+                offset: Offset(0, s(16)),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: s(96),
+                height: s(96),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFFDC2626).withValues(alpha: 0.15),
+                  border: Border.all(
+                    color: const Color(0xFFDC2626).withValues(alpha: 0.4),
+                    width: s(2),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.login, color: focused ? Colors.black : Colors.white, size: s(28)),
-                      SizedBox(width: s(16)),
-                      Text(
-                        'Sign In',
-                        style: TextStyle(
-                          color: focused ? Colors.black : Colors.white,
-                          fontSize: s(24),
-                          fontWeight: FontWeight.bold,
-                        ),
+                ),
+                child: Icon(
+                  Icons.person_outline_rounded,
+                  color: const Color(0xFFFF5252),
+                  size: s(48),
+                ),
+              ),
+              SizedBox(height: s(28)),
+              Text(
+                'Sign In to Reelriot TV',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: s(36),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              SizedBox(height: s(12)),
+              Text(
+                'Pair your TV to sync watch history, access favorites, and manage your profile across all your devices.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white60,
+                  fontSize: s(19),
+                  height: 1.4,
+                ),
+              ),
+              SizedBox(height: s(36)),
+              LongPressFocus(
+                focusNode: _sidebarFocusNode,
+                onTap: () => Navigator.of(context).pushNamed('/pairing'),
+                child: Builder(builder: (context) {
+                  final focused = Focus.of(context).hasFocus;
+                  return Container(
+                    padding: EdgeInsets.symmetric(horizontal: s(52), vertical: s(20)),
+                    decoration: BoxDecoration(
+                      color: focused ? Colors.white : const Color(0xFFDC2626),
+                      borderRadius: BorderRadius.circular(s(30)),
+                      border: Border.all(
+                        color: focused ? Colors.white : Colors.transparent,
+                        width: focused ? s(2.5) : s(1.5),
                       ),
-                    ],
-                  ),
-                );
-              }),
-            ),
-          ],
+                      boxShadow: focused
+                          ? [
+                              BoxShadow(
+                                color: Colors.white.withValues(alpha: 0.4),
+                                blurRadius: s(16),
+                                spreadRadius: s(1),
+                              ),
+                            ]
+                          : [
+                              BoxShadow(
+                                color: const Color(0xFFDC2626).withValues(alpha: 0.5),
+                                blurRadius: s(14),
+                                offset: Offset(0, s(4)),
+                              ),
+                            ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.login_rounded,
+                          color: focused ? Colors.black : Colors.white,
+                          size: s(26),
+                        ),
+                        SizedBox(width: s(14)),
+                        Text(
+                          'Pair TV / Sign In',
+                          style: TextStyle(
+                            color: focused ? Colors.black : Colors.white,
+                            fontSize: s(22),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -330,8 +405,8 @@ class SettingsScreenState extends State<SettingsScreen> {
           ),
           SizedBox(height: s(64)),
           _SidebarItem(
-            label: 'Account',
-            icon: Icons.person_outline,
+            label: 'Profile',
+            icon: Icons.person_outline_rounded,
             isSelected: _selectedCategory == _SettingsCategory.account,
             onTap: () => setState(() => _selectedCategory = _SettingsCategory.account),
             s: s,
@@ -415,7 +490,7 @@ class SettingsScreenState extends State<SettingsScreen> {
 
   String _getCategoryTitle() {
     switch (_selectedCategory) {
-      case _SettingsCategory.account: return 'Account';
+      case _SettingsCategory.account: return 'Profile';
       case _SettingsCategory.playback: return 'Playback';
       case _SettingsCategory.general: return 'General';
       case _SettingsCategory.about: return 'About';
@@ -435,51 +510,210 @@ class SettingsScreenState extends State<SettingsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Profile Card
+        // Premium 10-Foot Profile Hero Card
         StreamBuilder<Map<String, dynamic>?>(
           stream: _profileStream,
           builder: (context, snapshot) {
             final data = snapshot.data;
+            final customImageUrl = data?['image_url']?.toString();
             final dbProfileId = data?['profile_id']?.toString();
-            final avatarId = (dbProfileId != null && dbProfileId != '0') ? dbProfileId : (_avatar ?? '0');
-            final name = data?['name']?.toString() ?? _name ?? 'User';
+            final avatarUrl = (customImageUrl != null && customImageUrl.isNotEmpty)
+                ? AvatarUtils.getAvatarUrl(customImageUrl)
+                : AvatarUtils.getAvatarUrl((dbProfileId != null && dbProfileId != '0') ? dbProfileId : (_avatar ?? '0'));
+
+            // Username Resolution: strictly use username, never full name
+            final resolvedUsername = data?['username']?.toString() ??
+                _username ??
+                Supabase.instance.client.auth.currentUser?.userMetadata?['username']?.toString() ??
+                _email?.split('@')[0] ??
+                'User';
 
             return Container(
-              padding: EdgeInsets.all(s(32)),
+              padding: EdgeInsets.all(s(36)),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.03),
-                borderRadius: BorderRadius.circular(s(24)),
-                border: Border.all(color: Colors.white12),
+                color: const Color(0xFF141418).withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(s(28)),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  width: s(1.5),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: s(36),
+                    offset: Offset(0, s(14)),
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFFDC2626).withValues(alpha: 0.08),
+                    blurRadius: s(48),
+                    spreadRadius: s(2),
+                  ),
+                ],
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  // Circular Avatar
                   Container(
-                    width: s(120),
-                    height: s(120),
+                    width: s(140),
+                    height: s(140),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(s(24)),
-                      image: DecorationImage(
-                        image: NetworkImage(AvatarUtils.getAvatarUrl(avatarId)),
-                        fit: BoxFit.cover,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        width: s(2.5),
                       ),
-                    ),
-                  ),
-                  SizedBox(width: s(24)),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: TextStyle(color: Colors.white, fontSize: s(32), fontWeight: FontWeight.bold),
-                        ),
-                        SizedBox(height: s(4)),
-                        Text(
-                          _email ?? '',
-                          style: TextStyle(color: Colors.white54, fontSize: s(20)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: s(16),
                         ),
                       ],
                     ),
+                    child: ClipOval(
+                      child: CachedNetworkImage(
+                        imageUrl: avatarUrl,
+                        fit: BoxFit.cover,
+                        memCacheWidth: 280,
+                        memCacheHeight: 280,
+                        placeholder: (context, url) => Container(
+                          color: Colors.white10,
+                          child: Icon(Icons.person, color: Colors.white54, size: s(56)),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: Colors.white10,
+                          child: Icon(Icons.person, color: Colors.white54, size: s(56)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: s(32)),
+
+                  // Profile Metadata & Username
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Status Badge
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: s(14), vertical: s(5)),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDC2626).withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(s(8)),
+                            border: Border.all(
+                              color: const Color(0xFFDC2626).withValues(alpha: 0.4),
+                              width: s(1),
+                            ),
+                          ),
+                          child: Text(
+                            'REELRIOT MEMBER',
+                            style: TextStyle(
+                              color: const Color(0xFFFF5252),
+                              fontSize: s(13),
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: s(10)),
+
+                        // Username Display (Stated clearly with @ handle, NOT full name)
+                        Text(
+                          '@$resolvedUsername',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: s(38),
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        SizedBox(height: s(8)),
+
+                        // Email & TV System Chips
+                        Row(
+                          children: [
+                            if (_email != null && _email!.isNotEmpty) ...[
+                              Icon(Icons.mail_outline_rounded, color: Colors.white54, size: s(18)),
+                              SizedBox(width: s(8)),
+                              Text(
+                                _email!,
+                                style: TextStyle(
+                                  color: Colors.white60,
+                                  fontSize: s(18),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              SizedBox(width: s(16)),
+                              Container(
+                                width: s(4),
+                                height: s(4),
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white24,
+                                ),
+                              ),
+                              SizedBox(width: s(16)),
+                            ],
+                            Icon(Icons.tv_rounded, color: Colors.white54, size: s(18)),
+                            SizedBox(width: s(8)),
+                            Text(
+                              'TV App',
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: s(18),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Quick Action: Switch Profile / Re-pair TV
+                  LongPressFocus(
+                    onTap: () => Navigator.of(context).pushNamed('/pairing'),
+                    child: Builder(builder: (context) {
+                      final focused = Focus.of(context).hasFocus;
+                      return Container(
+                        padding: EdgeInsets.symmetric(horizontal: s(24), vertical: s(16)),
+                        decoration: BoxDecoration(
+                          color: focused ? Colors.white : Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(s(14)),
+                          border: Border.all(
+                            color: focused ? Colors.white : Colors.white24,
+                            width: focused ? s(2) : s(1.5),
+                          ),
+                          boxShadow: focused
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.white.withValues(alpha: 0.3),
+                                    blurRadius: s(12),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.sync_alt_rounded,
+                              color: focused ? Colors.black : Colors.white,
+                              size: s(22),
+                            ),
+                            SizedBox(width: s(12)),
+                            Text(
+                              'Switch Account',
+                              style: TextStyle(
+                                color: focused ? Colors.black : Colors.white,
+                                fontSize: s(18),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
                   ),
                 ],
               ),
@@ -487,8 +721,20 @@ class SettingsScreenState extends State<SettingsScreen> {
           },
         ),
         SizedBox(height: s(48)),
-        Text('Watch History (Last 14 days)', style: TextStyle(color: Colors.white70, fontSize: s(24), fontWeight: FontWeight.bold)),
+
+        // Watch Activity Section Title
+        Text(
+          'Watch Activity (Last 14 Days)',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: s(26),
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.3,
+          ),
+        ),
         SizedBox(height: s(24)),
+
+        // 3-Metric Analytics Grid
         Row(
           children: [
             Expanded(
@@ -496,15 +742,27 @@ class SettingsScreenState extends State<SettingsScreen> {
                 label: 'Movie Watch Time',
                 value: _formatDuration(_movieWatchTimeMs),
                 icon: Icons.movie_outlined,
+                accentColor: const Color(0xFF38BDF8),
                 s: s,
               ),
             ),
             SizedBox(width: s(24)),
             Expanded(
               child: _StatCard(
-                label: 'TV Watch Time',
+                label: 'Series Watch Time',
                 value: _formatDuration(_tvWatchTimeMs),
                 icon: Icons.tv_rounded,
+                accentColor: const Color(0xFFA855F7),
+                s: s,
+              ),
+            ),
+            SizedBox(width: s(24)),
+            Expanded(
+              child: _StatCard(
+                label: 'Total Streaming',
+                value: _formatDuration(_movieWatchTimeMs + _tvWatchTimeMs),
+                icon: Icons.timer_outlined,
+                accentColor: const Color(0xFFDC2626),
                 s: s,
               ),
             ),
@@ -912,43 +1170,91 @@ class _StatCard extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
+  final Color accentColor;
   final double Function(double) s;
 
   const _StatCard({
     required this.label,
     required this.value,
     required this.icon,
+    this.accentColor = const Color(0xFFDC2626),
     required this.s,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.all(s(24)),
+      padding: EdgeInsets.all(s(28)),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(s(16)),
-        border: Border.all(color: Colors.white10),
+        color: const Color(0xFF16161A).withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(s(20)),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.08),
+          width: s(1.5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: s(16),
+            offset: Offset(0, s(6)),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: const Color(0xFFDC2626), size: s(32)),
-          SizedBox(height: s(16)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                width: s(48),
+                height: s(48),
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: accentColor.withValues(alpha: 0.3),
+                    width: s(1),
+                  ),
+                ),
+                child: Center(
+                  child: Icon(icon, color: accentColor, size: s(24)),
+                ),
+              ),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: s(10), vertical: s(4)),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(s(6)),
+                ),
+                child: Text(
+                  '14d',
+                  style: TextStyle(
+                    color: Colors.white38,
+                    fontSize: s(13),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: s(20)),
           Text(
             value,
             style: TextStyle(
               color: Colors.white,
-              fontSize: s(32),
-              fontWeight: FontWeight.bold,
+              fontSize: s(34),
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.5,
             ),
           ),
-          SizedBox(height: s(4)),
+          SizedBox(height: s(6)),
           Text(
             label,
             style: TextStyle(
-              color: Colors.white54,
-              fontSize: s(16),
+              color: Colors.white60,
+              fontSize: s(17),
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],

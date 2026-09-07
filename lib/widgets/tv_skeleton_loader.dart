@@ -345,3 +345,265 @@ class TvSearchResultsSkeleton extends StatelessWidget {
     );
   }
 }
+
+/// Zero-CLS skeleton screen for SportsScreen mirroring exact header, filters, and game cards.
+class TvSportsScreenSkeleton extends StatelessWidget {
+  const TvSportsScreenSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    double s(double v) => (v * width) / 1920;
+
+    return TvShimmer(
+      child: SingleChildScrollView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.all(s(48)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header Row: Title & Date + Refresh Button
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: s(280),
+                      height: s(56),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1A1A),
+                        borderRadius: BorderRadius.circular(s(8)),
+                      ),
+                    ),
+                    SizedBox(height: s(8)),
+                    Container(
+                      width: s(180),
+                      height: s(24),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1A1A),
+                        borderRadius: BorderRadius.circular(s(4)),
+                      ),
+                    ),
+                  ],
+                ),
+                Container(
+                  width: s(130),
+                  height: s(52),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A1A),
+                    borderRadius: BorderRadius.circular(s(12)),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: s(40)),
+
+            // Sport Filter Chips Row
+            SizedBox(
+              height: s(60),
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _buildChipSkeleton(s, s(90)),
+                  _buildChipSkeleton(s, s(120)),
+                  _buildChipSkeleton(s, s(105)),
+                  _buildChipSkeleton(s, s(140)),
+                  _buildChipSkeleton(s, s(110)),
+                  _buildChipSkeleton(s, s(130)),
+                  _buildChipSkeleton(s, s(95)),
+                ],
+              ),
+            ),
+            SizedBox(height: s(40)),
+
+            // Section 1: LIVE NOW
+            _buildSectionSkeleton(s, titleWidth: s(180), eventCountWidth: s(80)),
+            SizedBox(height: s(48)),
+
+            // Section 2: UPCOMING
+            _buildSectionSkeleton(s, titleWidth: s(160), eventCountWidth: s(90)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChipSkeleton(double Function(double) s, double width) {
+    return Container(
+      width: width,
+      height: s(46),
+      margin: EdgeInsets.only(right: s(16)),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(s(30)),
+      ),
+    );
+  }
+
+  Widget _buildSectionSkeleton(
+    double Function(double) s, {
+    required double titleWidth,
+    required double eventCountWidth,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section Header Row
+        Row(
+          children: [
+            Container(
+              width: s(4),
+              height: s(32),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(s(2)),
+              ),
+            ),
+            SizedBox(width: s(12)),
+            Container(
+              width: titleWidth,
+              height: s(34),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(s(6)),
+              ),
+            ),
+            const Spacer(),
+            Container(
+              width: eventCountWidth,
+              height: s(18),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(s(4)),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: s(24)),
+
+        // Horizontal Game Cards Rail
+        SizedBox(
+          height: s(200),
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: 5,
+            separatorBuilder: (_, _) => SizedBox(width: s(16)),
+            itemBuilder: (_, _) => _buildGameCardSkeleton(s),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGameCardSkeleton(double Function(double) s) {
+    return Container(
+      width: s(360),
+      height: s(200),
+      padding: EdgeInsets.all(s(20)),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0F14),
+        borderRadius: BorderRadius.circular(s(16)),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Status row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                width: s(80),
+                height: s(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(s(4)),
+                ),
+              ),
+              Container(
+                width: s(60),
+                height: s(22),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(s(6)),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: s(16)),
+
+          // Team 1
+          Row(
+            children: [
+              Container(
+                width: s(36),
+                height: s(36),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(s(6)),
+                ),
+              ),
+              SizedBox(width: s(12)),
+              Container(
+                width: s(140),
+                height: s(18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(s(4)),
+                ),
+              ),
+              const Spacer(),
+              Container(
+                width: s(28),
+                height: s(18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(s(4)),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: s(10)),
+
+          // Team 2
+          Row(
+            children: [
+              Container(
+                width: s(36),
+                height: s(36),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(s(6)),
+                ),
+              ),
+              SizedBox(width: s(12)),
+              Container(
+                width: s(120),
+                height: s(18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(s(4)),
+                ),
+              ),
+              const Spacer(),
+              Container(
+                width: s(28),
+                height: s(18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(s(4)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+

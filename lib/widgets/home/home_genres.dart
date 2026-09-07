@@ -1,8 +1,8 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:reelriot_tv/theme/dashboard_theme.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 class HomeGenresRow extends StatelessWidget {
   final List<Map<String, dynamic>> genres;
@@ -22,26 +22,24 @@ class HomeGenresRow extends StatelessWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'Browse by Genre',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: s(40),
-            fontWeight: FontWeight.w700,
-          ),
+          'BROWSE BY GENRE',
+          style: DashboardTheme.sectionTitle(context),
         ),
-        SizedBox(height: s(42)),
+        SizedBox(height: s(16)),
         SizedBox(
-          height: s(120),
+          height: s(84),
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.none,
             itemCount: genres.length,
             itemBuilder: (context, index) {
               final g = genres[index];
               final color = g['color'] as Color;
               return Padding(
-                padding: EdgeInsets.only(right: s(24)),
+                padding: EdgeInsets.only(right: s(16)),
                 child: Focus(
                   onKeyEvent: (node, event) {
                     if (event is KeyDownEvent &&
@@ -54,38 +52,45 @@ class HomeGenresRow extends StatelessWidget {
                   child: Builder(
                     builder: (context) {
                       final focused = Focus.of(context).hasFocus;
-                      // Each genre keeps one flat identity color — no
-                      // gradient wash — dimmed at rest, full and lifted
-                      // under focus.
-                      return GestureDetector(
-                        onTap: () => onGenreTap(g),
-                        child: AnimatedScale(
-                          scale: focused ? 1.06 : 1.0,
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeOutCubic,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            width: s(220),
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: color.withValues(
-                                alpha: focused ? 1.0 : 0.55,
+                      return Semantics(
+                        label: g['name'],
+                        button: true,
+                        child: GestureDetector(
+                          onTap: () => onGenreTap(g),
+                          child: AnimatedScale(
+                            scale: focused ? 1.06 : 1.0,
+                            duration: const Duration(milliseconds: 180),
+                            curve: Curves.easeOutCubic,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              width: s(180),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: color.withValues(
+                                  alpha: focused ? 1.0 : 0.55,
+                                ),
+                                borderRadius: BorderRadius.circular(s(10)),
+                                border: Border.all(
+                                  color: focused
+                                      ? Colors.white
+                                      : Colors.white.withValues(alpha: 0.1),
+                                  width: focused ? s(2) : s(1),
+                                ),
+                                boxShadow: focused
+                                    ? DashboardDecorations.focusGlow(
+                                        context,
+                                        strength: 0.6,
+                                      )
+                                    : null,
                               ),
-                              borderRadius: BorderRadius.circular(s(12)),
-                              boxShadow: focused
-                                  ? DashboardDecorations.focusGlow(
-                                      context,
-                                      strength: 0.5,
-                                    )
-                                  : null,
-                            ),
-                            child: Text(
-                              g['name'],
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: s(26),
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: s(0.5),
+                              child: Text(
+                                g['name'],
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: s(20),
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                ),
                               ),
                             ),
                           ),

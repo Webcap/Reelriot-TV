@@ -31,13 +31,11 @@ import 'package:reelriot_tv/widgets/home/home_media_row.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:reelriot_tv/widgets/home/home_top_bar.dart';
-import 'package:reelriot_tv/widgets/home/home_category_tiles.dart';
+import 'package:reelriot_tv/widgets/home/cinematic_hero.dart';
 import 'package:reelriot_tv/widgets/home/home_continue_watching.dart';
 import 'package:reelriot_tv/widgets/home/home_genres.dart';
 import 'package:reelriot_tv/widgets/home/home_providers.dart';
 import 'package:reelriot_tv/widgets/home/home_up_next.dart';
-import 'package:reelriot_tv/widgets/home/home_spotlight_tile.dart';
-import 'package:reelriot_tv/widgets/home/home_quick_tiles.dart';
 import 'package:reelriot_tv/widgets/long_press_focus.dart';
 import 'package:reelriot_tv/widgets/home/home_airing_today.dart';
 import 'package:reelriot_tv/widgets/home/home_ai_recommendations.dart';
@@ -63,6 +61,9 @@ class HomeScreenState extends State<HomeScreen> {
       context.findAncestorStateOfType<HomeScreenState>();
 
   int _selectedIndex = 1;
+  String _currentCategory = 'Home';
+  final ValueNotifier<double> _homeScrollNotifier = ValueNotifier<double>(0.0);
+
   final GlobalKey<SearchScreenState> _searchKey =
       GlobalKey<SearchScreenState>();
   final GlobalKey<FavoritesScreenState> _favoritesKey =
@@ -81,31 +82,17 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  List<_Tab> get _visibleTabs {
-    final List<_Tab> tabs = [
-      const _Tab(label: 'Search', icon: Icons.search),
-      const _Tab(label: 'Home', icon: Icons.home_filled),
-    ];
-
-    if (SettingsService().sportsEnabled) {
-      tabs.add(const _Tab(label: 'Sports', icon: Icons.sports_soccer));
-    }
-
-    tabs.add(const _Tab(label: 'Profile', icon: Icons.person_outline));
-    tabs.add(const _Tab(label: 'Favorites', icon: Icons.favorite_border));
-    return tabs;
-  }
-
   @override
   void initState() {
     super.initState();
-    _navNodes = List.generate(5, (_) => FocusNode());
+    // 7 navigation nodes: Categories (Home, Movies, Series, [Sports]) + Actions (Search, Favorites, Profile)
+    _navNodes = List.generate(7, (_) => FocusNode());
     SettingsService().addListener(_onSettingsChanged);
 
-    // Request initial focus on the Home tab (index 1)
+    // Request initial focus on the first category item (HOME)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_navNodes.length > 1) {
-        _navNodes[1].requestFocus();
+      if (_navNodes.isNotEmpty) {
+        _navNodes[0].requestFocus();
       }
     });
   }
@@ -117,6 +104,7 @@ class HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     SettingsService().removeListener(_onSettingsChanged);
+    _homeScrollNotifier.dispose();
     for (var node in _navNodes) {
       node.dispose();
     }
@@ -136,12 +124,22 @@ class HomeScreenState extends State<HomeScreen> {
     }
 
     if (!navHasFocus) {
-      // If navigation doesn't have focus, reset focus to the current tab
-      _navNodes[_selectedIndex].requestFocus();
+      if (_selectedIndex == 1) {
+        if (_currentCategory == 'Movies') {
+          _navNodes[1].requestFocus();
+        } else if (_currentCategory == 'TV Shows') {
+          _navNodes[2].requestFocus();
+        } else {
+          _navNodes[0].requestFocus();
+        }
+      } else if (_selectedIndex == 0) {
+        _navNodes[SettingsService().sportsEnabled ? 4 : 3].requestFocus();
+      } else {
+        _navNodes[0].requestFocus();
+      }
       return;
     }
 
-    // If navigation already has focus, show the exit dialog
     final shouldExit = await showDialog<bool>(
       context: context,
       barrierDismissible: true,
@@ -149,25 +147,16 @@ class HomeScreenState extends State<HomeScreen> {
     );
 
     if (shouldExit == true) {
-      // Exit the application
       SystemNavigator.pop();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final tabs = _visibleTabs
-        .map((t) => HomeTab(label: t.label, icon: t.icon))
-        .toList();
-    if (_selectedIndex >= tabs.length) {
-      _selectedIndex = 1; // Default to Home
-    }
-
-    if (_navNodes.length < tabs.length) {
-      _navNodes.addAll(
-        List.generate(tabs.length - _navNodes.length, (_) => FocusNode()),
-      );
-    }
+    double s(double v) => ResponsiveUtils.scale(context, v);
+    final isHomeTab = _selectedIndex == 1;
+    final topNavHeight = s(DashboardTheme.topNavHeight);
+    final sportsEnabled = SettingsService().sportsEnabled;
 
     return PopScope(
       canPop: false,
@@ -183,61 +172,93 @@ class HomeScreenState extends State<HomeScreen> {
             return KeyEventResult.ignored;
           },
           child: Scaffold(
-            backgroundColor: const Color(0xFF000000),
-            body: Column(
+            backgroundColor: DashboardTheme.canvasBlack,
+            body: Stack(
               children: [
-                HomeTopBar(
-                  selectedIndex: _selectedIndex,
-                  navNodes: _navNodes,
-                  tabs: tabs,
-                  onTabSelected: (index) {
-                    if (mounted) setState(() => _selectedIndex = index);
-                    final tabLabel = tabs[index].label;
-                    if (tabLabel == 'Sports') {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        _sportsKey.currentState?.load();
-                      });
-                    } else if (tabLabel == 'Favorites') {
-                      _favoritesKey.currentState?.refresh();
-                    } else if (tabLabel == 'Profile') {
-                      _settingsKey.currentState?.refresh();
-                    }
-                  },
-                  onTabReset: (index) {
-                    if (tabs[index].label == 'Home') {
-                      _homeKey.currentState?.resetToTop();
-                    } else if (tabs[index].label == 'Sports') {
-                      _sportsKey.currentState?.load();
-                    } else if (tabs[index].label == 'Profile') {
-                      _settingsKey.currentState?.refresh();
-                    }
-                  },
-                  onMoveIntoContent: () {
-                    final tabLabel = tabs[_selectedIndex].label;
-                    if (tabLabel == 'Search') {
-                      _searchKey.currentState?.requestFocus();
-                    } else if (tabLabel == 'Home') {
-                      _homeKey.currentState?.requestFocus();
-                    } else if (tabLabel == 'Sports') {
-                      _sportsKey.currentState?.requestFocus();
-                    } else if (tabLabel == 'Profile') {
-                      _settingsKey.currentState?.requestFocus();
-                    } else if (tabLabel == 'Favorites') {
-                      _favoritesKey.currentState?.requestFocus();
-                    }
-                  },
+                IndexedStack(
+                  index: _selectedIndex,
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.only(top: topNavHeight),
+                      child: SearchScreen(key: _searchKey),
+                    ),
+                    _buildMainView(),
+                    if (sportsEnabled)
+                      Padding(
+                        padding: EdgeInsets.only(top: topNavHeight),
+                        child: RepaintBoundary(
+                          child: SportsScreen(key: _sportsKey),
+                        ),
+                      ),
+                    Padding(
+                      padding: EdgeInsets.only(top: topNavHeight),
+                      child: SettingsScreen(key: _settingsKey),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.only(top: topNavHeight),
+                      child: FavoritesScreen(key: _favoritesKey),
+                    ),
+                  ],
                 ),
-                Expanded(
-                  child: IndexedStack(
-                    index: _selectedIndex,
-                    children: [
-                      SearchScreen(key: _searchKey),
-                      _buildMainView(),
-                      if (SettingsService().sportsEnabled)
-                        RepaintBoundary(child: SportsScreen(key: _sportsKey)),
-                      SettingsScreen(key: _settingsKey),
-                      FavoritesScreen(key: _favoritesKey),
-                    ],
+
+                // Floating Cinematic Top Nav Bar
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: ValueListenableBuilder<double>(
+                    valueListenable: _homeScrollNotifier,
+                    builder: (context, scrollOffset, _) {
+                      return HomeTopBar(
+                        scrollOffset: scrollOffset,
+                        isHomeTab: isHomeTab,
+                        selectedCategory: _currentCategory,
+                        selectedTabIndex: _selectedIndex,
+                        navNodes: _navNodes,
+                        onCategorySelected: (cat) {
+                          setState(() {
+                            _currentCategory = cat;
+                            _selectedIndex = 1;
+                          });
+                          _homeKey.currentState?.setCategory(cat);
+                          _homeKey.currentState?.scrollToTop();
+                        },
+                        onTabSelected: (index) {
+                          if (mounted) setState(() => _selectedIndex = index);
+                          if (index == 2 && sportsEnabled) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              _sportsKey.currentState?.load();
+                            });
+                          } else if (index == (sportsEnabled ? 4 : 3)) {
+                            _favoritesKey.currentState?.refresh();
+                          } else if (index == (sportsEnabled ? 3 : 2)) {
+                            _settingsKey.currentState?.refresh();
+                          }
+                        },
+                        onTabReset: (index) {
+                          if (index == 1) {
+                            _homeKey.currentState?.resetToTop();
+                          } else if (index == 2 && sportsEnabled) {
+                            _sportsKey.currentState?.load();
+                          } else if (index == (sportsEnabled ? 3 : 2)) {
+                            _settingsKey.currentState?.refresh();
+                          }
+                        },
+                        onMoveIntoContent: () {
+                          if (_selectedIndex == 0) {
+                            _searchKey.currentState?.requestFocus();
+                          } else if (_selectedIndex == 1) {
+                            _homeKey.currentState?.requestFocus();
+                          } else if (_selectedIndex == 2 && sportsEnabled) {
+                            _sportsKey.currentState?.requestFocus();
+                          } else if (_selectedIndex == (sportsEnabled ? 3 : 2)) {
+                            _settingsKey.currentState?.requestFocus();
+                          } else {
+                            _favoritesKey.currentState?.requestFocus();
+                          }
+                        },
+                      );
+                    },
                   ),
                 ),
               ],
@@ -248,28 +269,43 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _focusNavNode() {
+    _homeKey.currentState?.scrollToTop();
+    int targetIndex = 0;
+    if (_currentCategory == 'Movies') {
+      targetIndex = 1;
+    } else if (_currentCategory == 'TV Shows') {
+      targetIndex = 2;
+    } else if (_currentCategory == 'Sports' && SettingsService().sportsEnabled) {
+      targetIndex = 3;
+    }
+
+    if (targetIndex < _navNodes.length) {
+      _navNodes[targetIndex].requestFocus();
+    } else if (_navNodes.isNotEmpty) {
+      _navNodes[0].requestFocus();
+    }
+  }
+
   Widget _buildMainView() {
-    // If we have no session and the API is 401-ing, show a friendly message
-    // instead of a blank screen.
     return RepaintBoundary(
-      child: Stack(
-        children: [
-          _MainHomeView(key: _homeKey),
-          // We can add a "Please Sign In" overlay here if needed
-        ],
+      child: _MainHomeView(
+        key: _homeKey,
+        scrollNotifier: _homeScrollNotifier,
+        onMoveToNav: _focusNavNode,
       ),
     );
   }
 }
 
-class _Tab {
-  final String label;
-  final IconData icon;
-  const _Tab({required this.label, required this.icon});
-}
-
 class _MainHomeView extends StatefulWidget {
-  const _MainHomeView({super.key});
+  final ValueNotifier<double>? scrollNotifier;
+  final VoidCallback? onMoveToNav;
+  const _MainHomeView({
+    super.key,
+    this.scrollNotifier,
+    this.onMoveToNav,
+  });
 
   @override
   State<_MainHomeView> createState() => _MainHomeViewState();
@@ -279,10 +315,37 @@ class _MainHomeViewState extends State<_MainHomeView> {
   final ApiService _api = ApiService();
   final WatchHistoryService _historyService = WatchHistoryService();
   final FocusNode _entryFocusNode = FocusNode();
+  final ValueNotifier<double> _localScrollNotifier = ValueNotifier<double>(0.0);
 
-  void requestFocus() {
+  void scrollToTop() {
+    if (_scrollController.hasClients && _scrollController.offset > 0) {
+      _scrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  void _onMoveUpFromFirstShelf() {
+    scrollToTop();
     _entryFocusNode.requestFocus();
   }
+
+  void requestFocus() {
+    scrollToTop();
+    _entryFocusNode.requestFocus();
+  }
+
+  void setCategory(String category) {
+    if (_selectedCategory == category) return;
+    setState(() {
+      _selectedCategory = category;
+    });
+    _loadContent();
+  }
+
+
 
   void _showItemContextMenu({
     required dynamic item,
@@ -467,9 +530,16 @@ class _MainHomeViewState extends State<_MainHomeView> {
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_onScroll);
+    _entryFocusNode.addListener(_onEntryFocusChanged);
     _loadContent();
     _listenToAuthChanges();
     _historyService.addListener(_onHistoryChanged);
+  }
+
+  void _onEntryFocusChanged() {
+    if (_entryFocusNode.hasFocus) {
+      scrollToTop();
+    }
   }
 
   @override
@@ -554,6 +624,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
   void _onScroll() {
     if (!mounted) return;
     final offset = _scrollController.offset;
+    widget.scrollNotifier?.value = offset;
+    _localScrollNotifier.value = offset;
     final inView = offset < 400; // Threshold for hero visibility
     if (inView != _isHeroInView) {
       if (inView) {
@@ -641,7 +713,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
       final watchingShows = results[1];
       List<Map<String, dynamic>>? upNextItems;
       if (isTv && watchingShows != null) {
-        upNextItems = await _processUpNext(watchingShows);
+        upNextItems = await _processUpNext(
+          watchingShows,
+          continueWatchingHistory: history,
+        );
       }
 
       // 3. Map Discovery Sections to existing variables
@@ -833,10 +908,26 @@ class _MainHomeViewState extends State<_MainHomeView> {
   }
 
   Future<List<Map<String, dynamic>>> _processUpNext(
-    List<Map<String, dynamic>> watchingShows,
-  ) async {
+    List<Map<String, dynamic>> watchingShows, {
+    List<Map<String, dynamic>>? continueWatchingHistory,
+  }) async {
     final List<Map<String, dynamic>> upNextItems = [];
     final now = DateTime.now();
+
+    // Identify any series currently in Continue Watching (in-progress episodes)
+    final historyToCheck = continueWatchingHistory ?? _history;
+    final inProgressSeriesIds = <int>{};
+    if (historyToCheck != null) {
+      for (final item in historyToCheck) {
+        final rawId = item['media_id'] ?? item['id'];
+        if (rawId is int) {
+          inProgressSeriesIds.add(rawId);
+        } else if (rawId != null) {
+          final parsed = int.tryParse(rawId.toString());
+          if (parsed != null) inProgressSeriesIds.add(parsed);
+        }
+      }
+    }
 
     bool isEpReleased(String? airDate) {
       if (airDate == null || airDate.isEmpty) return false;
@@ -849,6 +940,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
       }
     }
 
+    final seenShowIds = <int>{};
+
     for (var originalShow in watchingShows) {
       final showTitle =
           originalShow['name'] ?? originalShow['title'] ?? 'Unknown Show';
@@ -860,16 +953,23 @@ class _MainHomeViewState extends State<_MainHomeView> {
       // Skip live games or sports from "Up Next" episode calculation
       if (isLive || isSports) continue;
 
-      // Rule: Only calculate next episode if previous episode was completed, otherwise use current in-progress episode
+      final dynamic rawId = originalShow['id'] ?? originalShow['media_id'];
+      if (rawId == null) continue;
+
+      final showId = rawId is int ? rawId : int.tryParse(rawId.toString());
+      if (showId == null) continue;
+
+      // Rule: If the same series is currently in Continue Watching,
+      // it must not appear in Up Next until the in-progress episode is completed.
+      if (inProgressSeriesIds.contains(showId)) continue;
+
+      // Deduplicate so a series only appears once in Up Next
+      if (!seenShowIds.add(showId)) continue;
+
+      // Rule: Only calculate next episode if previous episode was completed
       if (originalShow['is_completed'] == true) {
         try {
           final show = Map<String, dynamic>.from(originalShow);
-          final dynamic rawId = show['id'] ?? show['media_id'];
-          if (rawId == null) continue;
-
-          final showId = rawId is int ? rawId : int.tryParse(rawId.toString());
-          if (showId == null) continue;
-
           final seasonNum = show['season_num'] as int? ?? 1;
           final episodeNum = show['episode_num'] as int? ?? 1;
 
@@ -914,17 +1014,6 @@ class _MainHomeViewState extends State<_MainHomeView> {
             '[HomeScreen] ❌ Error calculating next episode for "$showTitle": $e',
           );
         }
-      } else {
-        try {
-          final show = Map<String, dynamic>.from(originalShow);
-          show['season_num'] = show['season_num'] as int? ?? 1;
-          show['episode_num'] = show['episode_num'] as int? ?? 1;
-          upNextItems.add(show);
-        } catch (e) {
-          debugPrint(
-            '[HomeScreen] ❌ Error processing in-progress episode for "$showTitle": $e',
-          );
-        }
       }
       if (upNextItems.length >= 10) break;
     }
@@ -945,7 +1034,10 @@ class _MainHomeViewState extends State<_MainHomeView> {
       final watchingShows = await _historyService.getRecentlyWatchedShows(
         forceRefresh: forceRefresh,
       );
-      upNext = await _processUpNext(watchingShows);
+      upNext = await _processUpNext(
+        watchingShows,
+        continueWatchingHistory: h,
+      );
     }
     if (mounted) {
       setState(() {
@@ -1025,13 +1117,16 @@ class _MainHomeViewState extends State<_MainHomeView> {
       }
     });
     _resetAutoSlide();
+    _entryFocusNode.requestFocus();
   }
 
   @override
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _localScrollNotifier.dispose();
     _autoSlideTimer?.cancel();
+    _entryFocusNode.removeListener(_onEntryFocusChanged);
     _entryFocusNode.dispose();
     _authSubscription?.cancel();
     _debounceTimer?.cancel();
@@ -1089,32 +1184,42 @@ class _MainHomeViewState extends State<_MainHomeView> {
   // nothing.
   Widget _buildLoadingSkeleton(BuildContext context) {
     double s(double v) => ResponsiveUtils.scale(context, v);
-    return TvShimmer(
-      baseColor: DashboardTheme.surface,
-      highlightColor: DashboardTheme.surfaceRaised,
-      child: SingleChildScrollView(
-        physics: const NeverScrollableScrollPhysics(),
-        padding: EdgeInsets.symmetric(horizontal: s(96), vertical: s(48)),
+
+    return SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: s(56)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              height: s(620),
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: DashboardTheme.surface,
-                borderRadius: BorderRadius.circular(s(12)),
+            SizedBox(height: s(120)),
+            const CinematicHeroBlock(
+              focusedMovie: null,
+              trending: null,
+              trendingIndex: 0,
+              liveStreamUrls: {},
+              onWatchNow: _noop,
+              onFavorite: _noop,
+            ),
+            SizedBox(height: s(36)),
+            const TvShimmer(
+              child: Column(
+                children: [
+                  TvRowSkeleton(),
+                  SizedBox(height: 16),
+                  TvRowSkeleton(),
+                  SizedBox(height: 16),
+                  TvRowSkeleton(),
+                ],
               ),
             ),
-            SizedBox(height: s(72)),
-            const TvRowSkeleton(),
-            const TvRowSkeleton(),
-            const TvRowSkeleton(),
           ],
         ),
       ),
     );
   }
+
+  static void _noop() {}
 
   @override
   Widget build(BuildContext context) {
@@ -1247,122 +1352,154 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
     double s(double v) => ResponsiveUtils.scale(context, v);
     _shelfCounter = 0;
+    bool firstShelfAssigned = false;
+    VoidCallback? getFirstShelfMoveUp() {
+      if (!firstShelfAssigned) {
+        firstShelfAssigned = true;
+        return _onMoveUpFromFirstShelf;
+      }
+      return null;
+    }
 
-    return SingleChildScrollView(
-      controller: _scrollController,
-      primary: false,
-      padding: EdgeInsets.symmetric(horizontal: s(56), vertical: s(32)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_updateInfo != null) HomeUpdateCard(updateInfo: _updateInfo!),
-          // The dashboard's top fold: one large spotlight tile beside a
-          // stack of compact quick-access tiles, instead of a full-bleed
-          // hero banner with nothing else visible above the scroll.
-          if (_focusedMovie != null)
-            SizedBox(
-              height: s(420),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: HomeSpotlightTile(
-                      focusNode: _entryFocusNode,
-                      focusedMovie: _focusedMovie,
-                      trending: _trending,
-                      trendingIndex: _trendingIndex,
-                      liveStreamUrls: _liveStreamUrls,
-                      onWatchNow: _onSpotlightWatchNow,
-                      onFavorite: () {},
-                    ),
-                  ),
-                  SizedBox(width: s(20)),
-                  SizedBox(
-                    width: s(400),
-                    child: Column(
-                      children: _buildQuickTiles(context, s),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          SizedBox(height: s(40)),
-          HomeCategoryTiles(
-            selectedCategory: _selectedCategory,
-            onCategorySelected: (cat) {
-              setState(() => _selectedCategory = cat);
-              _loadContent();
+    return Stack(
+      children: [
+        // 1. Full-Bleed Parallax Hero Backdrop (Background Layer)
+        Positioned.fill(
+          child: ValueListenableBuilder<double>(
+            valueListenable: _localScrollNotifier,
+            builder: (context, scrollOffset, _) {
+              return CinematicBackdrop(
+                focusedMovie: _focusedMovie,
+                parallaxOffset: scrollOffset,
+              );
             },
           ),
-          SizedBox(height: s(56)),
-          AnimatedSwitcher(
-                duration: const Duration(milliseconds: 500),
-                transitionBuilder: (Widget child, Animation<double> animation) {
-                  return SizeTransition(
-                    sizeFactor: animation,
-                    alignment: Alignment.topCenter,
-                    child: FadeTransition(opacity: animation, child: child),
-                  );
-                },
-                child: (_history == null || _history!.isEmpty)
-                    ? const SizedBox.shrink()
-                    : Column(
-                        key: const ValueKey('continue_watching_section'),
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildContinueWatchingRow(context, s, _nextShelf()),
-                          SizedBox(height: s(96)),
-                        ],
-                      ),
-              ),
-              // --- UP NEXT ROW (TV ONLY) ---
-              if (_selectedCategory == 'TV Shows')
-                _buildUpNextRow(context, s, _nextShelf()),
-              // --- DYNAMIC DISCOVERY ROWS ---
-              if (_apiSections != null)
-                ..._apiSections!.map((section) {
-                  if (section.items.isEmpty) return const SizedBox.shrink();
+        ),
 
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      HomeMediaRow(
-                        title: section.title,
-                        items: section.items,
-                        index: _nextShelf(),
-                        isSocial:
-                            section.type ==
-                            'social', // We can add a social icon in the row widget
-                        onFocus: (id) => _updateFocusedMovie(id),
-                        onTap: (m) => _navigateToDetail(m),
-                        onLongPress: (m) => _showItemContextMenu(
-                          item: m,
-                          isMovie: m.mediaType != 'tv',
+        // 2. Linear Scrollable Content (Hero Content + Shelves)
+        SingleChildScrollView(
+          controller: _scrollController,
+          primary: false,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: s(56)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top spacing below floating TopNav (104px nav + breathing room = 144px)
+                SizedBox(height: s(144)),
+
+                // Cinematic Hero Content (in-flow, never collides with shelves)
+                CinematicHeroBlock(
+                  focusedMovie: _focusedMovie,
+                  trending: _trending,
+                  trendingIndex: _trendingIndex,
+                  liveStreamUrls: _liveStreamUrls,
+                  onWatchNow: _onSpotlightWatchNow,
+                  onFavorite: () {},
+                  focusNode: _entryFocusNode,
+                  onMoveToNav: widget.onMoveToNav,
+                  onHeroFocused: scrollToTop,
+                ),
+
+                // Clean breathing room between hero actions and first shelf
+                SizedBox(height: s(36)),
+
+                if (_updateInfo != null)
+                  Padding(
+                    padding: EdgeInsets.only(bottom: s(32)),
+                    child: HomeUpdateCard(updateInfo: _updateInfo!),
+                  ),
+
+                // --- CONTINUE WATCHING ROW ---
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 500),
+                  transitionBuilder:
+                      (Widget child, Animation<double> animation) {
+                    return SizeTransition(
+                      sizeFactor: animation,
+                      alignment: Alignment.topCenter,
+                      child:
+                          FadeTransition(opacity: animation, child: child),
+                    );
+                  },
+                  child: (_history == null || _history!.isEmpty)
+                      ? const SizedBox.shrink()
+                      : Column(
+                          key: const ValueKey('continue_watching_section'),
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildContinueWatchingRow(
+                              context,
+                              s,
+                              _nextShelf(),
+                              onMoveUp: getFirstShelfMoveUp(),
+                            ),
+                            SizedBox(height: s(48)),
+                          ],
                         ),
-                      ),
-                      SizedBox(height: s(96)),
-                    ],
-                  );
-                }),
+                ),
 
-              // Fallback to genres and other static rows if needed
-              HomeGenresRow(
-                genres: _selectedCategory == 'TV Shows'
-                    ? _tvGenres
-                    : _movieGenres,
-                index: _nextShelf(),
-                onGenreTap: (g) => _navigateToGenre(g),
-              ),
-              SizedBox(height: s(96)),
-              HomeProvidersRow(
-                index: _nextShelf(),
-                onProviderTap: (p) => _navigateToProvider(p),
-              ),
-              SizedBox(height: s(150)),
-            ],
+                // --- UP NEXT ROW (TV ONLY) ---
+                if (_selectedCategory == 'TV Shows') ...[
+                  _buildUpNextRow(
+                    context,
+                    s,
+                    _nextShelf(),
+                    onMoveUp: getFirstShelfMoveUp(),
+                  ),
+                  SizedBox(height: s(48)),
+                ],
+
+                // --- DYNAMIC DISCOVERY ROWS ---
+                if (_apiSections != null)
+                  ..._apiSections!.map((section) {
+                    if (section.items.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        HomeMediaRow(
+                          title: section.title,
+                          items: section.items,
+                          index: _nextShelf(),
+                          isSocial: section.type == 'social',
+                          onFocus: (id) => _updateFocusedMovie(id),
+                          onTap: (m) => _navigateToDetail(m),
+                          onLongPress: (m) => _showItemContextMenu(
+                            item: m,
+                            isMovie: m.mediaType != 'tv',
+                          ),
+                          onMoveUp: getFirstShelfMoveUp(),
+                        ),
+                        SizedBox(height: s(48)),
+                      ],
+                    );
+                  }),
+
+                // --- GENRES ROW ---
+                HomeGenresRow(
+                  genres: _selectedCategory == 'TV Shows'
+                      ? _tvGenres
+                      : _movieGenres,
+                  index: _nextShelf(),
+                  onGenreTap: (g) => _navigateToGenre(g),
+                ),
+                SizedBox(height: s(48)),
+
+                // --- PROVIDERS ROW ---
+                HomeProvidersRow(
+                  index: _nextShelf(),
+                  onProviderTap: (p) => _navigateToProvider(p),
+                ),
+                SizedBox(height: s(120)),
+              ],
+            ),
           ),
-        );
+        ),
+      ],
+    );
   }
 
   Future<void> _onSpotlightWatchNow() async {
@@ -1424,124 +1561,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     }
   }
 
-  List<Widget> _buildQuickTiles(
-    BuildContext context,
-    double Function(double) s,
-  ) {
-    final tiles = <Widget>[];
 
-    Map<String, dynamic>? firstHistory;
-    if (_history != null) {
-      for (final h in _history!) {
-        if (h['media_id'] != null && h['title'] != null) {
-          firstHistory = h;
-          break;
-        }
-      }
-    }
-
-    if (firstHistory != null) {
-      final h = firstHistory;
-      final positionMs = h['position_ms'] as int? ?? 0;
-      final durationMs = h['duration_ms'] as int? ?? 0;
-      String? subtitle;
-      if (h['type'] != 'movie' &&
-          h['season_num'] != null &&
-          h['episode_num'] != null) {
-        subtitle =
-            'S${(h['season_num'] as int).toString().padLeft(2, '0')} '
-            'E${(h['episode_num'] as int).toString().padLeft(2, '0')}';
-      }
-      tiles.add(
-        HomeQuickTile(
-          imageUrl: h['poster_path'] != null
-              ? 'https://image.tmdb.org/t/p/w300${h['poster_path']}'
-              : null,
-          title: h['title'] ?? '',
-          subtitle: subtitle,
-          badgeLabel: 'KEEP WATCHING',
-          badgeColor: Colors.white.withValues(alpha: 0.18),
-          leadingIcon: Icons.play_circle_outline,
-          progress: durationMs > 0 ? positionMs / durationMs : null,
-          onTap: () => _onContinueWatchingTap(h),
-          onFocus: () => _updateFocusedMovie(
-            h['media_id'] as int,
-            isMovie: h['type'] == 'movie',
-          ),
-          onLongPress: () => _showItemContextMenu(
-            item: h,
-            isMovie: h['type'] == 'movie',
-            season: h['season_num'] as int?,
-            episode: h['episode_num'] as int?,
-            episodeId: h['id'],
-            episodeName: h['episode_name'],
-            showId: h['media_id'],
-          ),
-        ),
-      );
-    }
-
-    Map<String, dynamic>? firstUpNext;
-    if (_selectedCategory == 'TV Shows' &&
-        _watchingShows != null &&
-        _watchingShows!.isNotEmpty) {
-      firstUpNext = _watchingShows!.first;
-    }
-
-    if (firstUpNext != null) {
-      final show = firstUpNext;
-      final season = show['season_num'] as int?;
-      final episode = show['episode_num'] as int?;
-      tiles.add(
-        HomeQuickTile(
-          imageUrl: show['poster_path'] != null
-              ? 'https://image.tmdb.org/t/p/w300${show['poster_path']}'
-              : null,
-          title: show['name'] ?? '',
-          subtitle: (season != null && episode != null)
-              ? 'S${season.toString().padLeft(2, '0')} '
-                    'E${episode.toString().padLeft(2, '0')}'
-              : null,
-          badgeLabel: 'UP NEXT',
-          badgeColor: Colors.white.withValues(alpha: 0.18),
-          leadingIcon: Icons.tv_outlined,
-          onTap: () => _onUpNextTap(show),
-          onFocus: () => _updateFocusedMovie(show['id'], isMovie: false),
-        ),
-      );
-    }
-
-    // Keep exactly two slots so the layout stays stable; fill any gap with
-    // more trending items so the space is never left empty.
-    var fallbackIndex = tiles.isEmpty ? 1 : 1;
-    while (tiles.length < 2 &&
-        _trending != null &&
-        fallbackIndex < _trending!.length) {
-      final item = _trending![fallbackIndex];
-      tiles.add(
-        HomeQuickTile(
-          imageUrl: item.posterPath != null
-              ? 'https://image.tmdb.org/t/p/w300${item.posterPath}'
-              : null,
-          title: item.title ?? '',
-          badgeLabel: 'ALSO TRENDING',
-          badgeColor: Colors.white.withValues(alpha: 0.18),
-          leadingIcon: Icons.local_fire_department_outlined,
-          onTap: () => _navigateToDetail(item),
-          onFocus: () =>
-              _updateFocusedMovie(item.id, isMovie: item.mediaType != 'tv'),
-        ),
-      );
-      fallbackIndex++;
-    }
-
-    final spaced = <Widget>[];
-    for (var i = 0; i < tiles.length; i++) {
-      if (i > 0) spaced.add(SizedBox(height: s(16)));
-      spaced.add(Expanded(child: tiles[i]));
-    }
-    return spaced;
-  }
 
   void _navigateToDetail(MovieListItem m) async {
     if (m.mediaType == 'ad' || m.isSponsored) {
@@ -1727,8 +1747,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
   Widget _buildUpNextRow(
     BuildContext context,
     double Function(double) s,
-    int index,
-  ) {
+    int index, {
+    VoidCallback? onMoveUp,
+  }) {
     if (_watchingShows == null || _watchingShows!.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -1736,6 +1757,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     return HomeUpNextRow(
       watchingShows: _watchingShows!,
       index: index,
+      onMoveUp: onMoveUp,
       onFocus: (id) => _updateFocusedMovie(id, isMovie: false),
       onLongPress: (show) => _showItemContextMenu(
         item: show,
@@ -1812,8 +1834,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
   Widget _buildContinueWatchingRow(
     BuildContext context,
     double Function(double) s,
-    int index,
-  ) {
+    int index, {
+    VoidCallback? onMoveUp,
+  }) {
     if (_history == null) return const SizedBox.shrink();
     final validHistory = _history!
         .where((h) => h['media_id'] != null && h['title'] != null)
@@ -1829,6 +1852,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     return HomeContinueWatchingRow(
       history: dedupedHistory,
       index: index,
+      onMoveUp: onMoveUp,
       onFocus: (id, isMovie) => _updateFocusedMovie(id, isMovie: isMovie),
       onClearAll: () async {
         final confirmed = await showDialog<bool>(

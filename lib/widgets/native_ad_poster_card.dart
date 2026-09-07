@@ -3,14 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:reelriot_tv/widgets/long_press_focus.dart';
+import 'package:reelriot_tv/theme/dashboard_theme.dart';
 import '../models/ad.dart';
 
 class NativeAdPosterCard extends StatelessWidget {
   final Ad ad;
+  final KeyEventResult Function(FocusNode, KeyEvent)? onKeyEvent;
 
   const NativeAdPosterCard({
     super.key,
     required this.ad,
+    this.onKeyEvent,
   });
 
   @override
@@ -18,10 +21,11 @@ class NativeAdPosterCard extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
     double s(double v) => (v * screenWidth) / 1920;
 
-    final cardWidth = s(220);
-    final cardHeight = s(330);
+    final cardWidth = s(140);
+    final cardHeight = s(210);
 
     return LongPressFocus(
+      onKeyEvent: onKeyEvent,
       onTap: () async {
         final url = Uri.parse(ad.link);
         if (await canLaunchUrl(url)) {
@@ -33,25 +37,27 @@ class NativeAdPosterCard extends StatelessWidget {
           final hasFocus = Focus.maybeOf(context)?.hasFocus ?? false;
 
           return AnimatedScale(
-            scale: hasFocus ? 1.05 : 1.0,
-            duration: const Duration(milliseconds: 200),
+            scale: hasFocus ? 1.08 : 1.0,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
             child: Container(
               width: cardWidth,
               height: cardHeight,
-              margin: EdgeInsets.only(right: s(24)),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(s(20)),
+                borderRadius: BorderRadius.circular(s(8)),
                 border: Border.all(
-                  color: hasFocus ? Colors.white : Colors.white10,
-                  width: s(4),
+                  color: hasFocus
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.08),
+                  width: hasFocus ? s(2.5) : s(1),
                 ),
-                boxShadow: hasFocus ? [
-                  BoxShadow(
-                    color: const Color(0xFFDC2626).withValues(alpha: 0.45),
-                    blurRadius: s(28),
-                    spreadRadius: s(3),
-                  )
-                ] : null,
+                boxShadow: hasFocus
+                    ? DashboardDecorations.focusGlow(
+                        context,
+                        strength: 0.8,
+                        color: DashboardTheme.signalRed,
+                      )
+                    : null,
               ),
               clipBehavior: Clip.antiAlias,
               child: Stack(
