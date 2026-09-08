@@ -14,13 +14,13 @@ import 'package:reelriot_tv/utils/tv_keys.dart';
 ///
 /// Features:
 /// - Left: Reelriot TV Brand Logo
-/// - Center-left: Text category labels (HOME, MOVIES, SERIES, SPORTS)
+/// - Center-left: Text category labels (HOME, SERIES, SPORTS)
 ///   with thin Signal Red active underline indicator.
 /// - Right: Frosted icon buttons for Search, Favorites, and Profile.
 class HomeTopBar extends StatelessWidget {
   final double scrollOffset;
   final bool isHomeTab;
-  final String selectedCategory; // 'Home', 'Movies', 'TV Shows'
+  final String selectedCategory; // 'Home', 'TV Shows'
   final int selectedTabIndex;
   final List<FocusNode> navNodes;
   final ValueChanged<String> onCategorySelected;
@@ -56,7 +56,6 @@ class HomeTopBar extends StatelessWidget {
     // Build the list of category items
     final List<Map<String, dynamic>> categoryItems = [
       {'key': 'Home', 'label': 'HOME'},
-      {'key': 'Movies', 'label': 'MOVIES'},
       {'key': 'TV Shows', 'label': 'SERIES'},
       if (sportsEnabled) {'key': 'Sports', 'label': 'SPORTS'},
     ];

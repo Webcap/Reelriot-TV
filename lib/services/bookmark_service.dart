@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:flutter/foundation.dart';
+import 'package:reelriot_tv/utils/auth_error_utils.dart';
 
 class BookmarkService {
   final _supabase = Supabase.instance.client;
@@ -21,6 +22,7 @@ class BookmarkService {
       return items.any((item) => item['id'] == id);
     } catch (e) {
       debugPrint('Error checking bookmark: $e');
+      await handleIfUnrecoverableAuthError(e);
       return false;
     }
   }
@@ -89,6 +91,7 @@ class BookmarkService {
       }
     } catch (e) {
       debugPrint('Error toggling bookmark: $e');
+      await handleIfUnrecoverableAuthError(e);
       rethrow;
     }
   }

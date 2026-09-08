@@ -4,6 +4,7 @@ import 'package:reelriot_tv/screens/sports_game_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:reelriot_tv/utils/auth_error_utils.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reelriot_tv/screens/player_screen.dart';
@@ -831,6 +832,7 @@ class SportsScreenState extends State<SportsScreen> {
             .maybeSingle();
       } catch (e) {
         debugPrint('[SportsScreen] Error fetching featured event: $e');
+        await handleIfUnrecoverableAuthError(e);
       }
 
       if (mounted) {
@@ -848,6 +850,7 @@ class SportsScreenState extends State<SportsScreen> {
           _error = e.toString();
         });
       }
+      await handleIfUnrecoverableAuthError(e);
     }
   }
 

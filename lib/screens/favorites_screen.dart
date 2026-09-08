@@ -5,6 +5,7 @@ import 'package:reelriot_tv/screens/tv_detail_screen.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
 import 'package:reelriot_tv/widgets/tv_skeleton_loader.dart';
 import 'package:reelriot_tv/widgets/long_press_focus.dart';
+import 'package:reelriot_tv/utils/auth_error_utils.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:reelriot_tv/utils/tv_colors.dart';
 import 'package:flutter/material.dart';
@@ -93,6 +94,7 @@ class FavoritesScreenState extends State<FavoritesScreen>
     } catch (e) {
       debugPrint('Error fetching bookmarks: $e');
       setState(() => _error = 'Failed to load favorites');
+      await handleIfUnrecoverableAuthError(e);
     } finally {
       if (mounted) setState(() => _loading = false);
     }

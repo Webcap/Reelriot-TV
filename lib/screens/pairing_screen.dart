@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:reelriot_tv/env.dart';
+import 'package:reelriot_tv/theme/dashboard_theme.dart';
+import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/widgets/long_press_focus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -168,48 +170,24 @@ class _PairingScreenState extends State<PairingScreen> {
         
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         if (data['linked'] == true) {
-          _log('Linked', 'received tokens');
+          _log('Linked', 'received token_hash');
           _pollTimer?.cancel();
-          final accessToken = data['access_token'] as String?;
-          final refreshToken = data['refresh_token'] as String?;
-          
-          if (refreshToken != null && refreshToken.isNotEmpty && mounted) {
-            try {
-              _log('Establishing session. Tokens received:', 'refresh=${refreshToken.length} chars, access=${accessToken?.length ?? 0} chars');
-              
-              _log('Establishing session using recoverSession with JSON');
-              
-              // Extract user ID from JWT to construct a valid Session JSON
-              String? userId = 'unknown';
-              try {
-                final parts = accessToken!.split('.');
-                if (parts.length >= 2) {
-                  final payload = jsonDecode(
-                    utf8.decode(base64Url.decode(base64Url.normalize(parts[1])))
-                  );
-                  userId = payload['sub']?.toString() ?? 'unknown';
-                }
-              } catch (e) {
-                _log('Failed to decode JWT', e);
-              }
+          final tokenHash = data['token_hash'] as String?;
 
-              final sessionJson = jsonEncode({
-                'access_token': accessToken,
-                'refresh_token': refreshToken,
-                'expires_in': 3600,
-                'expires_at': (DateTime.now().millisecondsSinceEpoch ~/ 1000) + 3600,
-                'token_type': 'bearer',
-                'user': {
-                  'id': userId,
-                  'aud': 'authenticated',
-                  'app_metadata': {},
-                  'user_metadata': {},
-                  'created_at': DateTime.now().toIso8601String(),
-                }
-              });
-              
-              await Supabase.instance.client.auth.recoverSession(sessionJson);
-              
+          if (tokenHash != null && tokenHash.isNotEmpty && mounted) {
+            try {
+              _log('Establishing an independent TV session via verifyOTP');
+
+              // The backend mints this TV a one-time magic-link token of its
+              // own (see /tv/pair/confirm) rather than forwarding the
+              // confirming device's session — redeeming it here gives this
+              // TV its own session id and refresh token, so signing out on
+              // one device no longer signs out the other.
+              await Supabase.instance.client.auth.verifyOTP(
+                type: OtpType.magiclink,
+                tokenHash: tokenHash,
+              );
+
               _log('Session established successfully');
               if (mounted) _onLinked();
             } catch (e, st) {
@@ -218,7 +196,7 @@ class _PairingScreenState extends State<PairingScreen> {
               setState(() => _error = 'Session pairing failed: $e');
             }
           } else {
-            _log('Linked but no refresh_token in response');
+            _log('Linked but no token_hash in response');
             setState(() => _error = 'Invalid response from pairing service');
           }
         }
@@ -239,167 +217,385 @@ class _PairingScreenState extends State<PairingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final effectivePairingPageUrl = widget.pairingPageUrl ?? (pairingPageUrl.isEmpty ? 'reelriot.app/activate' : pairingPageUrl);
-    
+    final effectivePairingPageUrl = widget.pairingPageUrl ??
+        (pairingPageUrl.isEmpty ? 'reelriot.app/activate' : pairingPageUrl);
+    double s(double v) => ResponsiveUtils.scale(context, v);
+
+    Widget content;
+    if (_loading) {
+      content = _buildLoadingState(s);
+    } else if (_error != null) {
+      content = _buildErrorState(s);
+    } else if (_code != null) {
+      content = _buildCodeState(s, effectivePairingPageUrl);
+    } else {
+      content = const SizedBox.shrink();
+    }
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0F14),
-      body: Center(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                'Sign in to Reelriot TV',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
+      backgroundColor: DashboardTheme.canvasBlack,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Faint ambient glow, top-left — echoes the signal-red accent used
+          // across the rest of the app without theming this screen on its own.
+          Positioned(
+            top: -s(200),
+            left: -s(200),
+            child: Container(
+              width: s(700),
+              height: s(700),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    DashboardTheme.signalRed.withValues(alpha: 0.14),
+                    Colors.transparent,
+                  ],
                 ),
               ),
-              const SizedBox(height: 24),
-              if (_loading)
-                const Column(
-                  children: [
-                    Text(
-                      'Connecting to sign-in service…',
-                      style: TextStyle(color: Colors.white70, fontSize: 18),
-                    ),
-                    SizedBox(height: 16),
-                    CircularProgressIndicator(color: Colors.white54),
-                  ],
-                )
-              else if (_error != null)
-                Column(
-                  children: [
-                    Text(
-                      _error!,
-                      style: const TextStyle(color: Colors.red, fontSize: 18),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Make sure the Reelriot API is reachable.',
-                      style: TextStyle(color: Colors.white54, fontSize: 14),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildButton('Try again', _createCode),
-                  ],
-                )
-              else if (_code != null) ...[
-                const Text(
-                  'How to sign in',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 24),
-                  child: Text(
-                    '1. On your phone or computer, go to reelriot.app/activate\n'
-                    '2. Sign in with your Reelriot account.\n'
-                    '3. Enter the code shown below.',
-                    style: TextStyle(color: Colors.white70, fontSize: 16),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                if (effectivePairingPageUrl.isNotEmpty) ...[
-                  const Text(
-                    'Open this link:',
-                    style: TextStyle(color: Colors.white54, fontSize: 14),
-                  ),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: SelectableText(
-                      effectivePairingPageUrl,
-                      style: const TextStyle(
-                        color: Color(0xFF60A5FA),
-                        fontSize: 16,
-                        decoration: TextDecoration.underline,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
-                const Text(
-                  'Your code:',
-                  style: TextStyle(color: Colors.white70, fontSize: 18),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1a1a2e),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: Text(
-                    _code!,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 36,
-                      letterSpacing: 8,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                _buildButton('Get new code', _createCode),
-              ],
-            ],
+            ),
           ),
+          Center(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(horizontal: s(56), vertical: s(48)),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: s(1400)),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: content,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _brandMark(double Function(double) s) {
+    return Container(
+      width: s(64),
+      height: s(64),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(s(14)),
+        boxShadow: [
+          BoxShadow(
+            color: DashboardTheme.signalRed.withValues(alpha: 0.35),
+            blurRadius: s(18),
+            spreadRadius: s(1.5),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(s(14)),
+        child: Image.asset(
+          'assets/images/ReelriotTVLogo.png',
+          fit: BoxFit.cover,
         ),
       ),
     );
   }
 
-  Widget _buildButton(String label, VoidCallback onPressed, {bool isSecondary = false}) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 24),
-      child: LongPressFocus(
-        autofocus: !isSecondary, // Default focus to the primary action
-        onTap: () {
-          _log('Button pressed', label);
-          onPressed();
-        },
-        child: Builder(builder: (context) {
-          final focused = Focus.of(context).hasFocus;
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 20),
+  Widget _buildLoadingState(double Function(double) s) {
+    return Column(
+      key: const ValueKey('pairing_loading'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _brandMark(s),
+        SizedBox(height: s(32)),
+        Text(
+          'Connecting to sign-in service…',
+          style: DashboardTheme.heroMeta(context).copyWith(fontSize: s(22)),
+        ),
+        SizedBox(height: s(28)),
+        SizedBox(
+          width: s(28),
+          height: s(28),
+          child: const CircularProgressIndicator(
+            color: DashboardTheme.signalRed,
+            strokeWidth: 3,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildErrorState(double Function(double) s) {
+    return Column(
+      key: const ValueKey('pairing_error'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: s(72),
+          height: s(72),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: DashboardTheme.signalRed.withValues(alpha: 0.12),
+            border: Border.all(
+              color: DashboardTheme.signalRed.withValues(alpha: 0.4),
+              width: s(1.5),
+            ),
+          ),
+          child: Icon(
+            Icons.wifi_off_rounded,
+            color: DashboardTheme.signalRed,
+            size: s(34),
+          ),
+        ),
+        SizedBox(height: s(28)),
+        Text(
+          _error!,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: s(22),
+            fontWeight: FontWeight.w700,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        SizedBox(height: s(10)),
+        Text(
+          'Make sure the Reelriot API is reachable.',
+          style: TextStyle(color: Colors.white54, fontSize: s(16)),
+          textAlign: TextAlign.center,
+        ),
+        SizedBox(height: s(32)),
+        _ActionButton(
+          label: 'Try again',
+          isPrimary: true,
+          autofocus: true,
+          onTap: () {
+            _log('Button pressed', 'Try again');
+            _createCode();
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCodeState(double Function(double) s, String pairingPageUrl) {
+    final steps = [
+      'On your phone or computer, go to $pairingPageUrl',
+      'Sign in with your Reelriot account.',
+      'Enter the code shown here.',
+    ];
+
+    return Row(
+      key: const ValueKey('pairing_code'),
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Left column — brand + step-by-step instructions.
+        Expanded(
+          flex: 5,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _brandMark(s),
+              SizedBox(height: s(28)),
+              Text(
+                'Sign in to Reelriot TV',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: s(42),
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                  height: 1.05,
+                ),
+              ),
+              SizedBox(height: s(28)),
+              Text(
+                'How to sign in',
+                style: DashboardTheme.sectionTitle(context),
+              ),
+              SizedBox(height: s(20)),
+              for (var i = 0; i < steps.length; i++) ...[
+                _buildStep(s, i + 1, steps[i]),
+                if (i != steps.length - 1) SizedBox(height: s(18)),
+              ],
+            ],
+          ),
+        ),
+        SizedBox(width: s(64)),
+        // Right column — the code panel.
+        Expanded(
+          flex: 4,
+          child: Container(
+            padding: EdgeInsets.all(s(36)),
             decoration: BoxDecoration(
-              color: focused 
-                ? Colors.white 
-                : (isSecondary ? Colors.white10 : const Color(0xFFDC2626)),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: focused ? Colors.white : Colors.white24,
-                width: 2,
-              ),
-              boxShadow: focused ? [
-                BoxShadow(
-                  color: (isSecondary ? Colors.white : const Color(0xFFDC2626)).withValues(alpha: 0.4),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                )
-              ] : null,
+              color: DashboardTheme.surface,
+              borderRadius: BorderRadius.circular(s(20)),
+              border: Border.all(color: DashboardTheme.divider),
             ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'YOUR CODE',
+                  style: DashboardTheme.sectionTitle(context)
+                      .copyWith(color: Colors.white54),
+                ),
+                SizedBox(height: s(16)),
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(vertical: s(24)),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: DashboardTheme.surfaceRaised,
+                    borderRadius: BorderRadius.circular(s(14)),
+                    border: Border.all(
+                      color: DashboardTheme.signalRed.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Text(
+                    _code!,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: s(48),
+                      letterSpacing: s(10),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                if (pairingPageUrl.isNotEmpty) ...[
+                  SizedBox(height: s(28)),
+                  Text(
+                    'OPEN THIS LINK',
+                    style: DashboardTheme.sectionTitle(context)
+                        .copyWith(color: Colors.white54),
+                  ),
+                  SizedBox(height: s(10)),
+                  SelectableText(
+                    pairingPageUrl,
+                    style: TextStyle(
+                      color: DashboardTheme.signalRed,
+                      fontSize: s(20),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+                SizedBox(height: s(32)),
+                _ActionButton(
+                  label: 'Get new code',
+                  isPrimary: false,
+                  autofocus: true,
+                  onTap: () {
+                    _log('Button pressed', 'Get new code');
+                    _createCode();
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStep(double Function(double) s, int number, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: s(30),
+          height: s(30),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: DashboardTheme.surfaceRaised,
+            border: Border.all(color: DashboardTheme.dividerBright),
+          ),
+          child: Text(
+            '$number',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: s(14),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        SizedBox(width: s(16)),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(top: s(4)),
             child: Text(
-              label,
+              text,
               style: TextStyle(
-                color: focused ? Colors.black : Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+                color: Colors.white70,
+                fontSize: s(18),
+                height: 1.35,
               ),
             ),
-          );
-        }),
-      ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Focusable pill button matching the home dashboard's action-button
+/// language (accent gradient primary, soft-lift focus glow).
+class _ActionButton extends StatelessWidget {
+  final String label;
+  final bool isPrimary;
+  final bool autofocus;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.label,
+    required this.isPrimary,
+    required this.onTap,
+    this.autofocus = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    double s(double v) => ResponsiveUtils.scale(context, v);
+    return LongPressFocus(
+      autofocus: autofocus,
+      onTap: onTap,
+      child: Builder(builder: (context) {
+        final focused = Focus.of(context).hasFocus;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: EdgeInsets.symmetric(horizontal: s(36), vertical: s(18)),
+          decoration: BoxDecoration(
+            gradient: isPrimary ? DashboardTheme.accentGradient : null,
+            color: isPrimary
+                ? null
+                : (focused
+                    ? Colors.white.withValues(alpha: 0.25)
+                    : Colors.white.withValues(alpha: 0.1)),
+            borderRadius: BorderRadius.circular(s(30)),
+            border: Border.all(
+              color: focused
+                  ? Colors.white
+                  : (isPrimary
+                      ? Colors.transparent
+                      : Colors.white.withValues(alpha: 0.2)),
+              width: focused ? s(2.5) : s(1),
+            ),
+            boxShadow: focused
+                ? DashboardDecorations.focusGlow(
+                    context,
+                    strength: isPrimary ? 0.9 : 0.6,
+                    color: isPrimary ? DashboardTheme.signalRed : null,
+                  )
+                : null,
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: s(18),
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+            ),
+          ),
+        );
+      }),
     );
   }
 }

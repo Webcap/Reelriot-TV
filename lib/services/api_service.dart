@@ -224,7 +224,12 @@ class ApiService {
   }
 
   /// Explicitly confirm pairing (usually done from phone/web, but here for completeness).
-  Future<http.Response> confirmPairing(String code, String accessToken, String refreshToken) async {
+  ///
+  /// Only the confirming device's own access token is needed — the backend
+  /// verifies it identifies a real session, then mints the TV an
+  /// independent magic-link token via the Admin API rather than forwarding
+  /// this device's tokens (see caffeine-api's /tv/pair/confirm).
+  Future<http.Response> confirmPairing(String code, String accessToken) async {
     final url = Uri.parse('$caffeineBaseUrl/tv/pair/confirm');
     return http.post(
       url,
@@ -232,7 +237,6 @@ class ApiService {
       body: jsonEncode({
         'code': code,
         'access_token': accessToken,
-        'refresh_token': refreshToken,
       }),
     ).timeout(const Duration(seconds: 10));
   }
@@ -448,50 +452,5 @@ class ApiService {
       debugPrint('[ApiService] Error fetching media quality for $type:$id: $e');
     }
     return null;
-  }
-
-  @Deprecated('Use fetchMediaQuality via Caffeine API instead')
-  Future<bool> isDigitalRelease(int movieId) async {
-    try {
-      final url = core.Endpoints.movieDetailsUrl(tmdbBaseUrl, _tmdbKey, movieId, language);
-      final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
-      if (res.statusCode != 200) return false;
-      
-      final data = jsonDecode(res.body);
-      final homepage = data['homepage'] as String? ?? '';
-      final productionCompanies = data['production_companies'] as List? ?? [];
-
-      const streamers = ["netflix.com", "amazon.com", "apple.com", "disneyplus.com", "hbomax.com", "paramountplus.com", "peacocktv.com"];
-      if (streamers.any((s) => homepage.contains(s))) return true;
-
-      const digitalStudios = ["Netflix", "Amazon Studios", "Apple", "Disney", "Paramount+", "Peacock", "Hulu", "HBO"];
-      if (productionCompanies.any((c) => digitalStudios.any((s) => (c['name'] as String).contains(s)))) return true;
-
-      // Also check release dates for type 4 (Digital) or 5 (Physical)
-      final releaseUrl = '$tmdbBaseUrl/movie/$movieId/release_dates?api_key=$_tmdbKey';
-      final releaseRes = await http.get(Uri.parse(releaseUrl)).timeout(const Duration(seconds: 10));
-      if (releaseRes.statusCode == 200) {
-        final releaseData = jsonDecode(releaseRes.body);
-        final results = releaseData['results'] as List? ?? [];
-        for (var country in results) {
-          final dates = country['release_dates'] as List? ?? [];
-          for (var d in dates) {
-            final type = d['type'] as int?;
-            if (type == 4 || type == 5) {
-              final releaseDateStr = d['release_date'] as String?;
-              if (releaseDateStr != null) {
-                final rDate = DateTime.parse(releaseDateStr);
-                if (rDate.isBefore(DateTime.now())) return true;
-              }
-            }
-          }
-        }
-      }
-
-      return false;
-    } catch (e) {
-      debugPrint('[ApiService] Error checking digital release: $e');
-      return false;
-    }
   }
 }

@@ -2,7 +2,14 @@ import 'package:reelriot_tv/services/api_service.dart';
 import 'package:flutter/material.dart';
 
 class QualityUtils {
-  static final Map<String, String> _cache = {};
+  static final Map<String, String?> _cache = {};
+  static final Map<String, Future<String?>> _pendingRequests = {};
+
+  /// Clears the in-memory cache and any pending requests.
+  static void clearCache() {
+    _cache.clear();
+    _pendingRequests.clear();
+  }
 
   static String? getQualityBadgeSync({
     required String? releaseDate,
@@ -27,7 +34,8 @@ class QualityUtils {
   }
 
   /// Fetches the quality badge from the centralized Caffeine API.
-  /// Uses in-memory cache to prevent duplicate requests across screens and lists.
+  /// Uses in-memory cache and in-flight request deduplication to prevent
+  /// duplicate network requests across screens and simultaneously rendered cards.
   static Future<String?> getQualityBadgeAsync({
     required int mediaId,
     required String? releaseDate,
@@ -39,26 +47,40 @@ class QualityUtils {
     final mediaType = isMovie ? 'movie' : 'tv';
     final cacheKey = '$mediaType:$mediaId';
 
+    // 1. Return from cache if already resolved
     if (_cache.containsKey(cacheKey)) {
       return _cache[cacheKey];
     }
 
-    // Fallback sync estimate while awaiting or on failure
+    // 2. Return in-flight Future if request is already ongoing (prevents thundering herd)
+    if (_pendingRequests.containsKey(cacheKey)) {
+      return _pendingRequests[cacheKey];
+    }
+
+    // Fallback sync estimate while awaiting or on network failure
     final syncQuality = getQualityBadgeSync(releaseDate: releaseDate, isMovie: isMovie);
 
-    try {
-      final serverQuality = await ApiService().fetchMediaQuality(mediaType, mediaId);
-      if (serverQuality != null && serverQuality.isNotEmpty) {
-        _cache[cacheKey] = serverQuality;
-        return serverQuality;
+    final future = () async {
+      try {
+        final serverQuality = await ApiService().fetchMediaQuality(mediaType, mediaId);
+        if (serverQuality != null && serverQuality.isNotEmpty) {
+          _cache[cacheKey] = serverQuality;
+          return serverQuality;
+        }
+      } catch (e) {
+        debugPrint('[QualityUtils] Error resolving quality for $cacheKey: $e');
       }
-    } catch (e) {
-      debugPrint('[QualityUtils] Error resolving quality for $cacheKey: $e');
-    }
 
-    if (syncQuality != null) {
+      // Cache fallback (including null) to prevent redundant network retries
       _cache[cacheKey] = syncQuality;
+      return syncQuality;
+    }();
+
+    _pendingRequests[cacheKey] = future;
+    try {
+      return await future;
+    } finally {
+      _pendingRequests.remove(cacheKey);
     }
-    return syncQuality;
   }
 }

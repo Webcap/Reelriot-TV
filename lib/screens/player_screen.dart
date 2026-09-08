@@ -6,6 +6,7 @@ import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
 import 'package:reelriot_tv/services/settings_service.dart';
 import 'package:reelriot_tv/services/watch_history_service.dart';
+import 'package:reelriot_tv/utils/auth_error_utils.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:reelriot_tv/widgets/player_settings_overlay.dart';
 import 'package:reelriot_tv/widgets/tv_player_controls.dart';
@@ -698,6 +699,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     } catch (e) {
       debugPrint('[PlayerScreen] ❌ Supabase sports refresh error: $e');
+      await handleIfUnrecoverableAuthError(e);
     }
     return null;
   }

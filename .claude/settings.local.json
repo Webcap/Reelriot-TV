@@ -16,7 +16,14 @@
       "Skill(impeccable)",
       "Bash(dart format *)",
       "Bash(flutter devices *)",
-      "Bash(flutter emulators *)"
+      "Bash(flutter emulators *)",
+      "Bash(flutter test *)",
+      "Bash(xargs grep -ln \"GenerateLink\")",
+      "Bash(npx tsc *)",
+      "Bash(PORT=3099 npx tsx src/index.ts)",
+      "Bash(echo \"started with PID $!\")",
+      "Bash(grep -E \"\\\\[E\\\\]$|All tests passed\")",
+      "Bash(powershell -NoProfile -Command \"Stop-Process -Id 28136 -Force -ErrorAction SilentlyContinue; Write-Output done\")"
     ]
   },
   "hooks": {

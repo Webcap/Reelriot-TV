@@ -10,6 +10,7 @@ import '../services/update_service.dart';
 import '../env.dart';
 import 'update_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../utils/auth_error_utils.dart';
 import '../utils/avatar_utils.dart';
 import '../utils/responsive_utils.dart';
 
@@ -223,6 +224,7 @@ class SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (e) {
       debugPrint('Error loading settings data: $e');
+      await handleIfUnrecoverableAuthError(e);
     } finally {
       if (mounted) {
         setState(() => _loading = false);
@@ -993,7 +995,11 @@ class SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _signOut(BuildContext context) {
-    Supabase.instance.client.auth.signOut();
+    // Local scope: this ends only this device's session. (Whether that's
+    // actually true for a paired TV depends on the pairing flow having
+    // given this device its own session in the first place — see
+    // pairing_screen.dart.)
+    Supabase.instance.client.auth.signOut(scope: SignOutScope.local);
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
   }
 

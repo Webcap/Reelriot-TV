@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/auth_error_utils.dart';
 import '../utils/avatar_utils.dart';
 
 /// Centralized service managing the logged-in user's profile state, display name,
@@ -91,6 +92,7 @@ class ProfileService extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[ProfileService] ⚠️ Error fetching profile data: $e');
+      await handleIfUnrecoverableAuthError(e);
     }
 
     // Subscribe to real-time updates on the profiles table

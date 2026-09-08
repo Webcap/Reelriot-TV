@@ -7,6 +7,7 @@ import 'package:reelriot_tv/services/ad_service.dart';
 import 'package:reelriot_tv/services/outage_service.dart';
 import 'package:reelriot_tv/services/profile_service.dart';
 import 'package:reelriot_tv/services/settings_service.dart';
+import 'package:reelriot_tv/utils/auth_error_utils.dart';
 import 'package:reelriot_tv/utils/cleanup_utils.dart';
 import 'package:reelriot_tv/widgets/outage_overlay.dart';
 import 'package:flutter/material.dart';
@@ -69,16 +70,10 @@ Future<void> bootstrap(String envFile) async {
       }
     } on AuthApiException catch (e) {
       debugPrint('[Main] 🚫 Auth recovery failed (${e.code}): ${e.message}');
-      // If the refresh token is already used or JWT is bad, the session is unrecoverable.
-      // We must clear it to allow the user to sign in again.
-      if (e.code == 'refresh_token_already_used' || e.code == 'bad_jwt') {
-        debugPrint('[Main] 🧹 Clearing stale unrecoverable session...');
-        // Note: Supabase.instance.client might not be fully initialized if initialize failed,
-        // but supabase_flutter usually handles this. If it fails, we catch it too.
-        try {
-          await Supabase.instance.client.auth.signOut();
-        } catch (_) {}
-      }
+      // If the session is unrecoverable (bad JWT, already-used/missing
+      // refresh token, or the server has dropped the session entirely), we
+      // must clear it to allow the user to sign in again.
+      await handleIfUnrecoverableAuthError(e);
     } catch (e) {
       debugPrint('[Main] ❌ Supabase initialization failed: $e');
     }

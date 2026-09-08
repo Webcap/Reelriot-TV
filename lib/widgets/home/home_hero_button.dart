@@ -56,8 +56,8 @@ class HomeHeroButton extends StatelessWidget {
           if (isCircle) {
             buttonContent = AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              width: s(56),
-              height: s(56),
+              width: s(72),
+              height: s(72),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: focused
@@ -80,7 +80,7 @@ class HomeHeroButton extends StatelessWidget {
                 child: Icon(
                   icon,
                   color: Colors.white,
-                  size: s(28),
+                  size: s(34),
                 ),
               ),
             );
@@ -89,8 +89,8 @@ class HomeHeroButton extends StatelessWidget {
             buttonContent = AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               padding: EdgeInsets.symmetric(
-                horizontal: isPrimary ? s(34) : s(26),
-                vertical: s(14),
+                horizontal: isPrimary ? s(42) : s(32),
+                vertical: s(19),
               ),
               decoration: BoxDecoration(
                 gradient: isPrimary ? DashboardTheme.accentGradient : null,
@@ -99,7 +99,7 @@ class HomeHeroButton extends StatelessWidget {
                     : (focused
                         ? Colors.white.withValues(alpha: 0.25)
                         : Colors.white.withValues(alpha: 0.12)),
-                borderRadius: BorderRadius.circular(s(30)),
+                borderRadius: BorderRadius.circular(s(32)),
                 border: Border.all(
                   color: focused
                       ? Colors.white
@@ -122,16 +122,16 @@ class HomeHeroButton extends StatelessWidget {
                   Icon(
                     icon,
                     color: Colors.white,
-                    size: s(28),
+                    size: s(32),
                   ),
                   if (label != null && label!.isNotEmpty) ...[
-                    SizedBox(width: s(10)),
+                    SizedBox(width: s(12)),
                     Text(
                       label!,
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
-                        fontSize: s(18),
+                        fontSize: s(22),
                         letterSpacing: 0.8,
                       ),
                     ),

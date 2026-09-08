@@ -94,10 +94,10 @@ abstract class DashboardTheme {
     final s = ResponsiveUtils.scale(context, 1.0);
     return TextStyle(
       color: Colors.white,
-      fontSize: 58.0 * s,
+      fontSize: 88.0 * s,
       fontWeight: FontWeight.w900,
       letterSpacing: -0.5,
-      height: 1.08,
+      height: 1.05,
     );
   }
 
@@ -105,7 +105,7 @@ abstract class DashboardTheme {
     final s = ResponsiveUtils.scale(context, 1.0);
     return TextStyle(
       color: Colors.white70,
-      fontSize: 18.0 * s,
+      fontSize: 22.0 * s,
       fontWeight: FontWeight.w600,
       letterSpacing: 0.4,
     );

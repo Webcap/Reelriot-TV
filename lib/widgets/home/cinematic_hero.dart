@@ -180,11 +180,11 @@ class CinematicHeroBlock extends StatelessWidget {
             ],
           ],
         ),
-        SizedBox(height: s(14)),
+        SizedBox(height: s(18)),
 
         // High-impact Title
         ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: s(1050)),
+          constraints: BoxConstraints(maxWidth: s(1350)),
           child: Text(
             (movie.title ?? '').toUpperCase(),
             style: DashboardTheme.heroTitle(context),
@@ -195,15 +195,15 @@ class CinematicHeroBlock extends StatelessWidget {
 
         // Brief Overview
         if (movie.overview != null && movie.overview!.isNotEmpty) ...[
-          SizedBox(height: s(12)),
+          SizedBox(height: s(18)),
           ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: s(820)),
+            constraints: BoxConstraints(maxWidth: s(960)),
             child: Text(
               movie.overview!,
               style: DashboardTheme.heroMeta(context).copyWith(
                 height: 1.4,
                 color: Colors.white.withValues(alpha: 0.82),
-                fontSize: s(18),
+                fontSize: s(22),
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -211,7 +211,7 @@ class CinematicHeroBlock extends StatelessWidget {
           ),
         ],
 
-        SizedBox(height: s(26)),
+        SizedBox(height: s(34)),
 
         // Action Buttons Row & Indicators
         Row(
@@ -328,39 +328,39 @@ class CinematicHeroBlock extends StatelessWidget {
               borderRadius: BorderRadius.circular(s(6)),
             ),
           ),
-          SizedBox(height: s(14)),
+          SizedBox(height: s(18)),
           Container(
-            width: s(560),
-            height: s(60),
+            width: s(740),
+            height: s(90),
             decoration: BoxDecoration(
               color: DashboardTheme.surfaceRaised,
               borderRadius: BorderRadius.circular(s(8)),
             ),
           ),
-          SizedBox(height: s(12)),
+          SizedBox(height: s(18)),
           Container(
-            width: s(480),
-            height: s(36),
+            width: s(540),
+            height: s(40),
             decoration: BoxDecoration(
               color: DashboardTheme.surfaceRaised,
               borderRadius: BorderRadius.circular(s(6)),
             ),
           ),
-          SizedBox(height: s(26)),
+          SizedBox(height: s(34)),
           Row(
             children: [
               Container(
-                width: s(140),
-                height: s(56),
+                width: s(176),
+                height: s(72),
                 decoration: BoxDecoration(
                   color: DashboardTheme.surfaceRaised,
-                  borderRadius: BorderRadius.circular(s(30)),
+                  borderRadius: BorderRadius.circular(s(36)),
                 ),
               ),
               SizedBox(width: s(18)),
               Container(
-                width: s(56),
-                height: s(56),
+                width: s(72),
+                height: s(72),
                 decoration: const BoxDecoration(
                   color: DashboardTheme.surfaceRaised,
                   shape: BoxShape.circle,

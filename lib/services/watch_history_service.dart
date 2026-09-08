@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:reelriot_tv/services/api_service.dart';
+import 'package:reelriot_tv/utils/auth_error_utils.dart';
 
 /// Generates a client-side UUID v4, used as a scrobble session_id and as the
 /// idempotency key for manual watch events. The backend's own UUID
@@ -573,6 +574,7 @@ class WatchHistoryService extends ChangeNotifier {
       return normalized;
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Supabase fallback failed: $e');
+      await handleIfUnrecoverableAuthError(e);
       return [];
     }
   }
@@ -726,6 +728,7 @@ class WatchHistoryService extends ChangeNotifier {
       debugPrint('[WatchHistory] 🧹 Cleared $mediaType history');
     } catch (e) {
       debugPrint('[WatchHistory] ❌ Error clearing history: $e');
+      await handleIfUnrecoverableAuthError(e);
     }
   }
 

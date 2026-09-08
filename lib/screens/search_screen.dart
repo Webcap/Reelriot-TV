@@ -9,6 +9,8 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reelriot_tv/services/ad_service.dart';
+import 'package:reelriot_tv/constants.dart';
+import 'package:reelriot_tv/theme/dashboard_theme.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:reelriot_tv/utils/tv_colors.dart';
 import 'package:reelriot_tv/widgets/tv_skeleton_loader.dart';
@@ -623,9 +625,9 @@ class _ResultTile extends StatelessWidget {
 
         Color badgeColor;
         if (badge == 'CAM') {
-          badgeColor = const Color(0xFFEC1D24);
+          badgeColor = DashboardTheme.signalRed;
         } else if (badge == 'SOON') {
-          badgeColor = const Color(0xFFF59E0B);
+          badgeColor = DashboardTheme.warningAmber;
         } else {
           badgeColor = Colors.white.withValues(alpha: 0.2);
         }

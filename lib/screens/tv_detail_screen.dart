@@ -1,5 +1,6 @@
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:reelriot_tv/constants.dart';
+import 'package:reelriot_tv/theme/dashboard_theme.dart';
 import 'package:reelriot_tv/screens/video_loader_screen.dart';
 import 'package:reelriot_tv/screens/actor_screen.dart';
 import 'package:reelriot_tv/services/api_service.dart';
@@ -15,9 +16,11 @@ import 'package:reelriot_tv/services/ad_service.dart';
 import 'package:reelriot_tv/widgets/long_press_focus.dart';
 import 'package:reelriot_tv/widgets/context_menu_dialog.dart';
 import 'package:reelriot_tv/widgets/add_watch_menu.dart';
+import 'package:reelriot_tv/utils/auth_error_utils.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
-import 'dart:ui';
 import 'package:reelriot_tv/widgets/native_ad_banner.dart';
+import 'package:reelriot_tv/widgets/full_screen_status.dart';
+import 'package:reelriot_tv/widgets/hero_badge.dart';
 import '../models/ad.dart' as model;
 
 class TvDetailScreen extends StatefulWidget {
@@ -163,6 +166,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
   bool _isProcessing = false;
   final Set<int> _recentlyCompletedIds = {};
   model.Ad? _bannerAd;
+  final ScrollController _scrollController = ScrollController();
 
 
   double _scale(BuildContext context, double value) {
@@ -174,6 +178,26 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  // The primary action button autofocuses, and Flutter's focus system
+  // auto-scrolls a newly-focused widget into view — with nothing focusable
+  // above it (the title/badges are plain text), that scroll has nowhere to
+  // go back to, so the page loads permanently scrolled past its own top.
+  // Force it back to 0 once the content (and the autofocus it triggers)
+  // has actually laid out.
+  void _resetScrollToTop() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    });
   }
 
   Future<void> _load() async {
@@ -218,9 +242,11 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
         });
         if (_selectedSeason != null) _loadSeason(_selectedSeason!);
         _checkFavorite();
+        _resetScrollToTop();
       }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
+      await handleIfUnrecoverableAuthError(e);
     }
   }
 
@@ -276,6 +302,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
           SnackBar(content: Text('Failed to update favorites: $e')),
         );
       }
+      await handleIfUnrecoverableAuthError(e);
     }
   }
 
@@ -358,17 +385,17 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
         final resume = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            backgroundColor: const Color(0xFF1A1A1A),
+            backgroundColor: DashboardTheme.surfaceRaised,
             title: const Text('Resume Playback?', style: TextStyle(color: Colors.white)),
             content: Text('Do you want to resume from ${Duration(milliseconds: elapsed).toString().split('.').first}?', style: const TextStyle(color: Colors.white70)),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('START OVER', style: TextStyle(color: Color(0xFFEC1D24))),
+                child: const Text('START OVER', style: TextStyle(color: DashboardTheme.signalRed)),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(context, true),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEC1D24)),
+                style: ElevatedButton.styleFrom(backgroundColor: DashboardTheme.signalRed),
                 child: const Text('RESUME'),
               ),
             ],
@@ -449,32 +476,18 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF0B0F14),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(_error!, style: const TextStyle(color: Colors.red)),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () {
-                  setState(() => _error = null);
-                  _load();
-                },
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
+      return FullScreenError(
+        message: 'This title couldn\'t be loaded',
+        subtitle: _error!,
+        onRetry: () {
+          setState(() => _error = null);
+          _load();
+        },
       );
     }
 
     if (_show == null) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF0B0F14),
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const FullScreenLoading();
     }
 
     final show = _show!;
@@ -488,164 +501,99 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
     final episodes = seasonDetail?.episodes ?? [];
 
     return Scaffold(
-      backgroundColor: const Color(0xFF000000),
+      backgroundColor: DashboardTheme.canvasBlack,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background Backdrop
-          if (backdropUrl != null)
-            Positioned.fill(
-              child: Opacity(
-                opacity: 0.6,
-                child: CachedNetworkImage(
-                  imageUrl: backdropUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => const ColoredBox(color: Colors.black),
-                  errorWidget: (context, url, error) => const ColoredBox(color: Colors.black),
-                ),
-              ),
-            ),
-          // Gradient Overlays
+          // Full-bleed cinematic backdrop — same scrim language as the home
+          // hero, replacing the old poster + frosted-glass-card layout.
           Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.95),
-                    const Color(0xFF7F1D1D).withValues(alpha: 0.6),
-                    Colors.transparent,
-                  ],
-                  stops: const [0.0, 0.45, 1.0],
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (backdropUrl != null)
+                  CachedNetworkImage(
+                    imageUrl: backdropUrl,
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
+                    placeholder: (context, url) => ColoredBox(color: DashboardTheme.surface),
+                    errorWidget: (context, url, error) => ColoredBox(color: DashboardTheme.surface),
+                  )
+                else
+                  ColoredBox(color: DashboardTheme.surface),
+                const Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(gradient: DashboardTheme.heroLeftScrim),
+                  ),
                 ),
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.black.withValues(alpha: 0.1), Colors.black.withValues(alpha: 0.8)],
+                const Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(gradient: DashboardTheme.heroBottomScrim),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
           // Main Content
           SafeArea(
             child: SingleChildScrollView(
-              padding: EdgeInsets.all(s(48)),
+              controller: _scrollController,
+              padding: EdgeInsets.symmetric(horizontal: s(56), vertical: s(48)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Glassmorphic Info Card
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(s(24)),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                      child: Container(
-                        padding: EdgeInsets.all(s(40)),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(s(24)),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.12),
-                            width: s(1.5),
-                          ),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (show.posterPath != null)
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(s(16)),
-                                child: CachedNetworkImage(
-                                  imageUrl: '$tmdbImageBaseUrl/w500${show.posterPath}',
-                                  width: s(280),
-                                  height: s(420),
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            if (show.posterPath != null) SizedBox(width: s(48)),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    show.name?.toUpperCase() ?? 'TV SHOW',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: s(90),
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: s(-2),
-                                      height: 0.9,
-                                      shadows: [
-                                        Shadow(
-                                          color: Colors.black.withValues(alpha: 0.5),
-                                          offset: Offset(0, s(4)),
-                                          blurRadius: s(10),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  SizedBox(height: s(24)),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFEC1D24),
-                                          borderRadius: BorderRadius.circular(s(4)),
-                                        ),
-                                        child: Text(
-                                          'IMDb ${(show.voteAverage ?? 0.0).toStringAsFixed(1)}',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: s(18),
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                      SizedBox(width: s(24)),
-                                      Text(
-                                        _formatDate(show.firstAirDate),
-                                        style: TextStyle(color: Colors.white70, fontSize: s(20)),
-                                      ),
-                                      SizedBox(width: s(24)),
-                                      Text(
-                                        '${show.numberOfSeasons ?? 0} Seasons',
-                                        style: TextStyle(color: Colors.white70, fontSize: s(20)),
-                                      ),
-                                    ],
-                                  ),
-                                  SizedBox(height: s(32)),
-                                  SizedBox(
-                                    width: s(900),
-                                    child: Text(
-                                      show.overview ?? '',
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.85),
-                                        fontSize: s(22),
-                                        height: 1.6,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                  SizedBox(height: s(64)),
+                  // Badges
+                  Row(
+                    children: [
+                      HeroBadge(
+                        label: 'IMDb ${(show.voteAverage ?? 0.0).toStringAsFixed(1)}',
+                        color: DashboardTheme.signalRed,
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: s(18)),
+                  // Title
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: s(1250)),
+                    child: Text(
+                      show.name?.toUpperCase() ?? 'TV SHOW',
+                      style: DashboardTheme.heroTitle(context),
+                    ),
+                  ),
+                  SizedBox(height: s(14)),
+                  // Meta row
+                  Row(
+                    children: [
+                      Text(
+                        _formatDate(show.firstAirDate),
+                        style: DashboardTheme.heroMeta(context),
+                      ),
+                      SizedBox(width: s(18)),
+                      Text(
+                        '${show.numberOfSeasons ?? 0} Seasons',
+                        style: DashboardTheme.heroMeta(context),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: s(20)),
+                  // Overview
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: s(880)),
+                    child: Text(
+                      show.overview ?? '',
+                      style: DashboardTheme.heroMeta(context).copyWith(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        height: 1.5,
                       ),
                     ),
                   ),
-                  SizedBox(height: s(64)),
+                  SizedBox(height: s(36)),
                   // Primary Action Buttons
                   Row(
                     children: [
                       _buildUpNextButton(s),
-                      SizedBox(width: s(24)),
+                      SizedBox(width: s(20)),
                       _ActionBtn(
                         label: '',
                         icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
@@ -769,7 +717,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                                               ? Padding(
                                                                   key: const ValueKey('watched'),
                                                                   padding: EdgeInsets.only(left: s(8)),
-                                                                  child: Icon(Icons.check_circle, color: const Color(0xFFEC1D24), size: s(24)),
+                                                                  child: Icon(Icons.check_circle, color: DashboardTheme.signalRed, size: s(24)),
                                                                 )
                                                               : const SizedBox.shrink(key: ValueKey('not_watched')),
                                                         ),
@@ -830,7 +778,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                                                             height: s(4),
                                                             width: s(200 * progress),
                                                             decoration: BoxDecoration(
-                                                              color: const Color(0xFFEC1D24),
+                                                              color: DashboardTheme.signalRed,
                                                               borderRadius: BorderRadius.circular(s(2)),
                                                             ),
                                                           ),
@@ -1003,12 +951,7 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: TextStyle(
-        color: Colors.white,
-        fontSize: s(28),
-        fontWeight: FontWeight.bold,
-        letterSpacing: s(1.2),
-      ),
+      style: DashboardTheme.sectionTitle(context).copyWith(fontSize: s(20)),
     );
   }
 }
@@ -1071,8 +1014,9 @@ class _ActionBtnState extends State<_ActionBtn> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 decoration: BoxDecoration(
-                  color: widget.isPrimary 
-                      ? (focused ? Colors.white : Colors.white.withValues(alpha: 0.15))
+                  gradient: widget.isPrimary && !focused ? DashboardTheme.accentGradient : null,
+                  color: widget.isPrimary
+                      ? (focused ? Colors.white : null)
                       : (focused ? Colors.white.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.08)),
                   borderRadius: BorderRadius.circular(widget.s(12)),
                   border: Border.all(
@@ -1081,7 +1025,7 @@ class _ActionBtnState extends State<_ActionBtn> {
                   ),
                   boxShadow: focused ? [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
+                      color: (widget.isPrimary ? DashboardTheme.signalRed : Colors.black).withValues(alpha: 0.3),
                       blurRadius: widget.s(15),
                       spreadRadius: widget.s(2),
                     )
@@ -1130,7 +1074,7 @@ class _ActionBtnState extends State<_ActionBtn> {
                             child: FractionallySizedBox(
                               alignment: Alignment.centerLeft,
                               widthFactor: widget.progress!.clamp(0.0, 1.0),
-                              child: Container(color: focused ? Colors.black : const Color(0xFFEC1D24)),
+                              child: Container(color: focused ? Colors.black : DashboardTheme.signalRed),
                             ),
                           ),
                         ),
@@ -1248,7 +1192,7 @@ class _SeasonPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor: DashboardTheme.surfaceRaised,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(s(16))),
       child: Container(
         width: s(400),
@@ -1367,10 +1311,10 @@ class _SeasonItemState extends State<_SeasonItem> {
           margin: EdgeInsets.only(bottom: s(8)),
           padding: EdgeInsets.symmetric(horizontal: s(24), vertical: s(16)),
           decoration: BoxDecoration(
-            color: _isFocused ? Colors.white : (widget.selected ? const Color(0xFFDC2626).withValues(alpha: 0.2) : Colors.transparent),
+            color: _isFocused ? Colors.white : (widget.selected ? DashboardTheme.signalRed.withValues(alpha: 0.2) : Colors.transparent),
             borderRadius: BorderRadius.circular(s(8)),
             border: Border.all(
-              color: _isFocused ? Colors.white : (widget.selected ? const Color(0xFFDC2626) : Colors.transparent),
+              color: _isFocused ? Colors.white : (widget.selected ? DashboardTheme.signalRed : Colors.transparent),
               width: s(2),
             ),
           ),
@@ -1388,7 +1332,7 @@ class _SeasonItemState extends State<_SeasonItem> {
               if (widget.selected)
                 Icon(
                   Icons.check,
-                  color: _isFocused ? Colors.black : const Color(0xFFDC2626),
+                  color: _isFocused ? Colors.black : DashboardTheme.signalRed,
                   size: s(20),
                 ),
             ],

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reelriot_tv/screens/player_screen.dart';
 import 'package:reelriot_tv/services/ad_service.dart';
+import 'package:reelriot_tv/utils/auth_error_utils.dart';
 
 class SportsGameDetailScreen extends StatefulWidget {
   final String sport;
@@ -73,6 +74,7 @@ class _SportsGameDetailScreenState extends State<SportsGameDetailScreen> {
       }
     } catch (e) {
       debugPrint('[SportsGameDetailScreen] Error checking Supabase stream: $e');
+      await handleIfUnrecoverableAuthError(e);
     }
   }
 

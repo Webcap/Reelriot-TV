@@ -28,6 +28,7 @@ import 'package:reelriot_tv/widgets/native_ad_banner.dart';
 import 'package:reelriot_tv/widgets/native_ad_poster_card.dart';
 import 'package:reelriot_tv/models/ad.dart' as model;
 import 'package:reelriot_tv/widgets/home/home_media_row.dart';
+import 'package:reelriot_tv/utils/auth_error_utils.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:reelriot_tv/widgets/home/home_top_bar.dart';
@@ -125,15 +126,13 @@ class HomeScreenState extends State<HomeScreen> {
 
     if (!navHasFocus) {
       if (_selectedIndex == 1) {
-        if (_currentCategory == 'Movies') {
+        if (_currentCategory == 'TV Shows') {
           _navNodes[1].requestFocus();
-        } else if (_currentCategory == 'TV Shows') {
-          _navNodes[2].requestFocus();
         } else {
           _navNodes[0].requestFocus();
         }
       } else if (_selectedIndex == 0) {
-        _navNodes[SettingsService().sportsEnabled ? 4 : 3].requestFocus();
+        _navNodes[SettingsService().sportsEnabled ? 3 : 2].requestFocus();
       } else {
         _navNodes[0].requestFocus();
       }
@@ -272,12 +271,10 @@ class HomeScreenState extends State<HomeScreen> {
   void _focusNavNode() {
     _homeKey.currentState?.scrollToTop();
     int targetIndex = 0;
-    if (_currentCategory == 'Movies') {
+    if (_currentCategory == 'TV Shows') {
       targetIndex = 1;
-    } else if (_currentCategory == 'TV Shows') {
-      targetIndex = 2;
     } else if (_currentCategory == 'Sports' && SettingsService().sportsEnabled) {
-      targetIndex = 3;
+      targetIndex = 2;
     }
 
     if (targetIndex < _navNodes.length) {
@@ -454,7 +451,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
     return _shelfCounter;
   }
 
-  String _selectedCategory = 'Movies';
+  String _selectedCategory = 'Home';
   MovieDetail? _focusedMovie;
   List<MovieListItem>? _trending;
   List<MovieListItem>? _weeklyTrending;
@@ -802,6 +799,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
         }
       } catch (e) {
         debugPrint('[HomeScreen] ❌ Error fetching featured event: $e');
+        await handleIfUnrecoverableAuthError(e);
       }
 
       // --- Ads Integration ---
@@ -831,6 +829,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
           }
         } catch (e) {
           debugPrint('[HomeScreen] ❌ Error fetching ads: $e');
+          await handleIfUnrecoverableAuthError(e);
         }
 
         if (kDebugMode && SettingsService().simulateAds) {
@@ -894,6 +893,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
       }
     } catch (e) {
       debugPrint('[HomeScreen] ❌ Final Discovery Failure: $e');
+      await handleIfUnrecoverableAuthError(e);
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1402,7 +1402,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
                 ),
 
                 // Clean breathing room between hero actions and first shelf
-                SizedBox(height: s(36)),
+                SizedBox(height: s(44)),
 
                 if (_updateInfo != null)
                   Padding(
@@ -1721,6 +1721,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
       }
     } catch (e) {
       debugPrint('[HomeScreen] ❌ Error loading AI recommendations: $e');
+      await handleIfUnrecoverableAuthError(e);
     } finally {
       if (mounted) setState(() => _aiLoading = false);
     }

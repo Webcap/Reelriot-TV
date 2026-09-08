@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:reelriot_tv/constants.dart';
+import 'package:reelriot_tv/theme/dashboard_theme.dart';
 import 'package:reelriot_tv/screens/video_loader_screen.dart';
 import 'package:reelriot_tv/screens/actor_screen.dart';
 import 'package:reelriot_tv/services/api_service.dart';
@@ -16,8 +17,12 @@ import 'package:reelriot_tv/services/bookmark_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:reelriot_tv/services/ad_service.dart';
+import 'package:reelriot_tv/utils/auth_error_utils.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
+import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/widgets/native_ad_banner.dart';
+import 'package:reelriot_tv/widgets/full_screen_status.dart';
+import 'package:reelriot_tv/widgets/hero_badge.dart';
 import '../models/ad.dart' as model;
 
 class MovieDetailScreen extends StatefulWidget {
@@ -44,11 +49,32 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   bool _isProcessing = false;
   model.Ad? _bannerAd;
   String? _qualityBadge;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  // The primary action button autofocuses, and Flutter's focus system
+  // auto-scrolls a newly-focused widget into view — with nothing focusable
+  // above it (the title/badges are plain text), that scroll has nowhere to
+  // go back to, so the page loads permanently scrolled past its own top.
+  // Force it back to 0 once the content (and the autofocus it triggers)
+  // has actually laid out.
+  void _resetScrollToTop() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    });
   }
 
   Future<void> _load() async {
@@ -104,9 +130,11 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
           });
           _checkFavorite();
           _loadQuality();
+          _resetScrollToTop();
         }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
+      await handleIfUnrecoverableAuthError(e);
     }
   }
 
@@ -138,17 +166,17 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
       final resume = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
+          backgroundColor: DashboardTheme.surfaceRaised,
           title: const Text('Resume Playback?', style: TextStyle(color: Colors.white)),
           content: Text('Do you want to resume from ${_movieHistory!.toString().split('.').first}?', style: const TextStyle(color: Colors.white70)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('START OVER', style: TextStyle(color: Color(0xFFEC1D24))),
+              child: const Text('START OVER', style: TextStyle(color: DashboardTheme.signalRed)),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEC1D24)),
+              style: ElevatedButton.styleFrom(backgroundColor: DashboardTheme.signalRed),
               child: const Text('RESUME'),
             ),
           ],
@@ -204,6 +232,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
           SnackBar(content: Text('Failed to update favorites: $e')),
         );
       }
+      await handleIfUnrecoverableAuthError(e);
     }
   }
 
@@ -246,6 +275,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
           SnackBar(content: Text('Failed to update watched status: $e')),
         );
       }
+      await handleIfUnrecoverableAuthError(e);
     }
   }
 
@@ -342,32 +372,18 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF0B0F14),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(_error!, style: const TextStyle(color: Colors.red)),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () {
-                  setState(() => _error = null);
-                  _load();
-                },
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
+      return FullScreenError(
+        message: 'This title couldn\'t be loaded',
+        subtitle: _error!,
+        onRetry: () {
+          setState(() => _error = null);
+          _load();
+        },
       );
     }
 
     if (_movie == null) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF0B0F14),
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const FullScreenLoading();
     }
 
     final m = _movie!;
@@ -375,267 +391,157 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
         ? '$tmdbImageBaseUrl/w780${m.backdropPath}'
         : null;
 
-    double s(double v) => (v * MediaQuery.of(context).size.width) / 1920;
+    double s(double v) => ResponsiveUtils.scale(context, v);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF000000), 
+      backgroundColor: DashboardTheme.canvasBlack,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background Backdrop
-          if (backdropUrl != null)
-            Positioned.fill(
-              child: Opacity(
-                opacity: 0.6,
-                child: CachedNetworkImage(
-                  imageUrl: backdropUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => const ColoredBox(color: Colors.black),
-                  errorWidget: (context, url, error) => const ColoredBox(color: Colors.black),
-                ),
-              ),
-            ),
-          // Accent Overlay Gradient
+          // Full-bleed cinematic backdrop — same scrim language as the home
+          // hero, replacing the old poster + frosted-glass-card layout.
           Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.95),
-                    const Color(0xFF7F1D1D).withValues(alpha: 0.6), 
-                    Colors.transparent,
-                  ],
-                  stops: const [0.0, 0.45, 1.0],
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (backdropUrl != null)
+                  CachedNetworkImage(
+                    imageUrl: backdropUrl,
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
+                    placeholder: (context, url) => ColoredBox(color: DashboardTheme.surface),
+                    errorWidget: (context, url, error) => ColoredBox(color: DashboardTheme.surface),
+                  )
+                else
+                  ColoredBox(color: DashboardTheme.surface),
+                const Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(gradient: DashboardTheme.heroLeftScrim),
+                  ),
                 ),
-              ),
-            ),
-          ),
-          // Vertical Fade
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.black.withValues(alpha: 0.1), Colors.black.withValues(alpha: 0.8)],
+                const Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(gradient: DashboardTheme.heroBottomScrim),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
           SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Row(
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              padding: EdgeInsets.symmetric(horizontal: s(56), vertical: s(48)),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                   if (m.posterPath != null && m.posterPath!.isNotEmpty)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: CachedNetworkImage(
-                        imageUrl: '$tmdbImageBaseUrl/w500${m.posterPath}',
-                        width: 200,
-                        height: 300,
-                        fit: BoxFit.cover,
+                  SizedBox(height: s(64)),
+                  // Badges
+                  Row(
+                    children: [
+                      if (_qualityBadge != null) ...[
+                        HeroBadge(
+                          label: _qualityBadge!.toUpperCase(),
+                          color: _qualityBadge == 'CAM'
+                              ? DashboardTheme.signalRed.withValues(alpha: 0.9)
+                              : _qualityBadge == 'SOON'
+                                  ? DashboardTheme.warningAmber.withValues(alpha: 0.9)
+                                  : Colors.white.withValues(alpha: 0.15),
+                          borderColor: _qualityBadge == 'CAM'
+                              ? DashboardTheme.signalRed.withValues(alpha: 0.5)
+                              : _qualityBadge == 'SOON'
+                                  ? DashboardTheme.warningAmber.withValues(alpha: 0.5)
+                                  : Colors.white24,
+                        ),
+                        SizedBox(width: s(14)),
+                      ],
+                      HeroBadge(
+                        label: 'IMDb ${(m.voteAverage ?? 0.0).toStringAsFixed(1)}',
+                        color: DashboardTheme.signalRed,
+                      ),
+                      if (_isWatched) ...[
+                        SizedBox(width: s(14)),
+                        HeroBadge(
+                          label: 'WATCHED',
+                          icon: Icons.check_circle,
+                          color: DashboardTheme.successGreen.withValues(alpha: 0.18),
+                          borderColor: DashboardTheme.successGreen.withValues(alpha: 0.5),
+                        ),
+                      ],
+                    ],
+                  ),
+                  SizedBox(height: s(18)),
+                  // Title
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: s(1250)),
+                    child: Text(
+                      m.title?.toUpperCase() ?? 'MOVIE',
+                      style: DashboardTheme.heroTitle(context),
+                    ),
+                  ),
+                  SizedBox(height: s(14)),
+                  // Meta row
+                  Row(
+                    children: [
+                      Text(
+                        _formatDate(m.releaseDate),
+                        style: DashboardTheme.heroMeta(context),
+                      ),
+                      if (m.runtime != null) ...[
+                        SizedBox(width: s(18)),
+                        Text('${m.runtime}m', style: DashboardTheme.heroMeta(context)),
+                      ],
+                    ],
+                  ),
+                  SizedBox(height: s(20)),
+                  // Overview
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: s(880)),
+                    child: Text(
+                      m.overview ?? '',
+                      style: DashboardTheme.heroMeta(context).copyWith(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        height: 1.5,
                       ),
                     ),
-                  const SizedBox(width: 32),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.symmetric(vertical: s(60)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(s(24)),
-                            child: BackdropFilter(
-                              filter: ColorFilter.mode(Colors.black.withValues(alpha: 0.35), BlendMode.darken),
-                              child: Container(
-                                padding: EdgeInsets.all(s(40)),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.05),
-                                  borderRadius: BorderRadius.circular(s(24)),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.12),
-                                    width: s(1.5),
-                                  ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Focus(
-                                      descendantsAreFocusable: false,
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            m.title?.toUpperCase() ?? 'MOVIE',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: s(100),
-                                              fontWeight: FontWeight.w900,
-                                              letterSpacing: s(-2),
-                                              height: 0.9,
-                                              shadows: [
-                                                Shadow(
-                                                  color: Colors.black.withValues(alpha: 0.5),
-                                                  offset: Offset(0, s(4)),
-                                                  blurRadius: s(10),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          SizedBox(height: s(24)),
-                                          Row(
-                                            children: [
-                                              if (_qualityBadge != null) ...[
-                                                Container(
-                                                  padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
-                                                  decoration: BoxDecoration(
-                                                    color: _qualityBadge == 'CAM' ? Colors.red.withValues(alpha: 0.9) : 
-                                                           _qualityBadge == 'SOON' ? Colors.amber.withValues(alpha: 0.9) :
-                                                           Colors.white.withValues(alpha: 0.15),
-                                                    borderRadius: BorderRadius.circular(s(6)),
-                                                    border: Border.all(
-                                                      color: _qualityBadge == 'CAM' ? Colors.redAccent.withValues(alpha: 0.5) : 
-                                                             _qualityBadge == 'SOON' ? Colors.amberAccent.withValues(alpha: 0.5) :
-                                                             Colors.white24,
-                                                      width: s(1.5)
-                                                    ),
-                                                  ),
-                                                  child: Text(
-                                                    _qualityBadge!.toUpperCase(),
-                                                    style: TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: s(18),
-                                                      fontWeight: FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                ),
-                                                SizedBox(width: s(24)),
-                                              ],
-                                               Container(
-                                                 padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
-                                                 decoration: BoxDecoration(
-                                                   color: const Color(0xFFEC1D24),
-                                                   borderRadius: BorderRadius.circular(s(4)),
-                                                 ),
-                                                 child: Text(
-                                                   'IMDb ${(m.voteAverage ?? 0.0).toStringAsFixed(1)}',
-                                                   style: TextStyle(
-                                                     color: Colors.white,
-                                                     fontSize: s(18),
-                                                     fontWeight: FontWeight.bold,
-                                                   ),
-                                                 ),
-                                               ),
-                                               if (_isWatched) ...[
-                                                 SizedBox(width: s(24)),
-                                                 Container(
-                                                   padding: EdgeInsets.symmetric(horizontal: s(12), vertical: s(4)),
-                                                   decoration: BoxDecoration(
-                                                     color: Colors.green.withValues(alpha: 0.15),
-                                                     borderRadius: BorderRadius.circular(s(6)),
-                                                     border: Border.all(color: Colors.green.withValues(alpha: 0.5), width: s(1.5)),
-                                                     boxShadow: [
-                                                       BoxShadow(
-                                                         color: Colors.green.withValues(alpha: 0.1),
-                                                         blurRadius: s(8),
-                                                         spreadRadius: s(2),
-                                                       ),
-                                                     ],
-                                                   ),
-                                                   child: Row(
-                                                     mainAxisSize: MainAxisSize.min,
-                                                     children: [
-                                                       Icon(Icons.check_circle, color: Colors.green, size: s(18)),
-                                                       SizedBox(width: s(8)),
-                                                       Text(
-                                                         'WATCHED',
-                                                         style: TextStyle(
-                                                           color: Colors.green,
-                                                           fontSize: s(16),
-                                                           fontWeight: FontWeight.bold,
-                                                           letterSpacing: s(1),
-                                                         ),
-                                                       ),
-                                                     ],
-                                                   ),
-                                                 ),
-                                               ],
-                                              SizedBox(width: s(24)),
-                                              Text(
-                                                _formatDate(m.releaseDate),
-                                                style: TextStyle(color: Colors.white70, fontSize: s(20)),
-                                              ),
-                                              if (m.runtime != null) ...[
-                                                SizedBox(width: s(24)),
-                                                Text(
-                                                  '${m.runtime} m',
-                                                  style: TextStyle(color: Colors.white70, fontSize: s(20)),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                          SizedBox(height: s(32)),
-                                          SizedBox(
-                                            width: s(850),
-                                            child: Text(
-                                              m.overview ?? '',
-                                              style: TextStyle(
-                                                color: Colors.white.withValues(alpha: 0.85),
-                                                fontSize: s(22),
-                                                fontWeight: FontWeight.w400,
-                                                height: 1.6,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    SizedBox(height: s(48)),
-                                    Row(
-                                      children: [
-                                        if (_isReleased) ...[
-                                          _ActionBtn(
-                                            label: _movieHistory != null && _movieHistory! > Duration.zero ? 'CONTINUE' : 'WATCH NOW',
-                                            icon: Icons.play_arrow,
-                                            isPrimary: true,
-                                            onTap: _handlePlay,
-                                            s: s,
-                                            autofocus: true,
-                                            progress: (_movieHistory != null && _movie?.id != null) 
-                                                ? (_movieHistory!.inSeconds / 7200).clamp(0.0, 1.0) 
-                                                : null,
-                                          ),
-                                          SizedBox(width: s(24)),
-                                        ],
-                                        _ActionBtn(
-                                          label: _isFavorite ? 'FAVORITED' : 'FAVORITE',
-                                          icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
-                                          isPrimary: false,
-                                          onTap: _toggleFavorite,
-                                          s: s,
-                                          autofocus: !_isReleased,
-                                        ),
-                                        SizedBox(width: s(24)),
-                                        _ActionBtn(
-                                          label: _isWatched ? 'WATCHED' : 'MARK WATCHED',
-                                          icon: _isWatched ? Icons.check_circle : Icons.check_circle_outline,
-                                          isPrimary: false,
-                                          onTap: () => _showAddWatchMenu(s),
-                                          onLongPress: () => _showWatchedLongPressMenu(s),
-                                          s: s,
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (_credits != null && _credits!.cast.isNotEmpty) ...[
+                  ),
+                  SizedBox(height: s(36)),
+                  // Actions
+                  Row(
+                    children: [
+                      if (_isReleased) ...[
+                        _ActionBtn(
+                          label: _movieHistory != null && _movieHistory! > Duration.zero ? 'CONTINUE' : 'WATCH NOW',
+                          icon: Icons.play_arrow,
+                          isPrimary: true,
+                          onTap: _handlePlay,
+                          s: s,
+                          autofocus: true,
+                          progress: (_movieHistory != null && _movie?.id != null)
+                              ? (_movieHistory!.inSeconds / 7200).clamp(0.0, 1.0)
+                              : null,
+                        ),
+                        SizedBox(width: s(20)),
+                      ],
+                      _ActionBtn(
+                        label: _isFavorite ? 'FAVORITED' : 'FAVORITE',
+                        icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
+                        isPrimary: false,
+                        onTap: _toggleFavorite,
+                        s: s,
+                        autofocus: !_isReleased,
+                      ),
+                      SizedBox(width: s(20)),
+                      _ActionBtn(
+                        label: _isWatched ? 'WATCHED' : 'MARK WATCHED',
+                        icon: _isWatched ? Icons.check_circle : Icons.check_circle_outline,
+                        isPrimary: false,
+                        onTap: () => _showAddWatchMenu(s),
+                        onLongPress: () => _showWatchedLongPressMenu(s),
+                        s: s,
+                      ),
+                    ],
+                  ),
+                  if (_credits != null && _credits!.cast.isNotEmpty) ...[
                              SizedBox(height: s(64)),
                              _SectionHeader(title: 'CAST', s: s),
                              SizedBox(height: s(24)),
@@ -798,14 +704,10 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                ),
                              ),
                            ],
-                           if (_bannerAd != null) ...[
-                             SizedBox(height: s(64)),
-                             NativeAdBanner(ad: _bannerAd!),
-                           ],
-                        ],
-                      ),
-                    ),
-                  ),
+                  if (_bannerAd != null) ...[
+                    SizedBox(height: s(64)),
+                    NativeAdBanner(ad: _bannerAd!),
+                  ],
                 ],
               ),
             ),
@@ -826,12 +728,7 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: TextStyle(
-        color: Colors.white,
-        fontSize: s(28),
-        fontWeight: FontWeight.bold,
-        letterSpacing: s(1.2),
-      ),
+      style: DashboardTheme.sectionTitle(context).copyWith(fontSize: s(20)),
     );
   }
 }
@@ -930,21 +827,22 @@ class _ActionBtnState extends State<_ActionBtn> {
                   transform: Matrix4.identity()..scaleByDouble(focused ? 1.05 : 1.0, focused ? 1.05 : 1.0, 1.0, 1.0),
                   padding: EdgeInsets.symmetric(horizontal: widget.s(40), vertical: widget.s(16)),
                   decoration: BoxDecoration(
-                    color: widget.isPrimary 
-                        ? (focused ? Colors.white : const Color(0xFFEC1D24).withValues(alpha: 0.8))
+                    gradient: widget.isPrimary && !focused ? DashboardTheme.accentGradient : null,
+                    color: widget.isPrimary
+                        ? (focused ? Colors.white : null)
                         : (focused ? Colors.white.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.08)),
                     borderRadius: BorderRadius.circular(widget.s(12)),
                     border: Border.all(
                       color: focused ? Colors.white : Colors.white.withValues(alpha: 0.15),
                       width: widget.s(1.5),
                     ),
-                    boxShadow: focused ? [
-                      BoxShadow(
-                        color: (widget.isPrimary ? const Color(0xFFEC1D24) : Colors.white).withValues(alpha: 0.3),
-                        blurRadius: widget.s(15),
-                        spreadRadius: widget.s(2),
-                      )
-                    ] : [],
+                    boxShadow: focused
+                        ? DashboardDecorations.focusGlow(
+                            context,
+                            strength: widget.isPrimary ? 0.9 : 0.6,
+                            color: widget.isPrimary ? DashboardTheme.signalRed : null,
+                          )
+                        : null,
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -981,7 +879,7 @@ class _ActionBtnState extends State<_ActionBtn> {
                       child: FractionallySizedBox(
                         alignment: Alignment.centerLeft,
                         widthFactor: widget.progress!,
-                        child: Container(color: focused ? Colors.black : const Color(0xFFEC1D24)),
+                        child: Container(color: focused ? Colors.black : DashboardTheme.signalRed),
                       ),
                     ),
                   ),
