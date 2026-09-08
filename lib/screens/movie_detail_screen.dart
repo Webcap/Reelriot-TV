@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:reelriot_tv/constants.dart';
 import 'package:reelriot_tv/theme/dashboard_theme.dart';
@@ -23,6 +21,8 @@ import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/widgets/native_ad_banner.dart';
 import 'package:reelriot_tv/widgets/full_screen_status.dart';
 import 'package:reelriot_tv/widgets/hero_badge.dart';
+import 'package:reelriot_tv/widgets/action_button.dart';
+import 'package:reelriot_tv/widgets/section_header.dart';
 import '../models/ad.dart' as model;
 
 class MovieDetailScreen extends StatefulWidget {
@@ -516,7 +516,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                   Row(
                     children: [
                       if (_isReleased) ...[
-                        _ActionBtn(
+                        ActionButton(
                           label: _movieHistory != null && _movieHistory! > Duration.zero ? 'CONTINUE' : 'WATCH NOW',
                           icon: Icons.play_arrow,
                           isPrimary: true,
@@ -529,7 +529,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                         ),
                         SizedBox(width: s(20)),
                       ],
-                      _ActionBtn(
+                      ActionButton(
                         label: _isFavorite ? 'FAVORITED' : 'FAVORITE',
                         icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
                         isPrimary: false,
@@ -538,7 +538,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                         autofocus: !_isReleased,
                       ),
                       SizedBox(width: s(20)),
-                      _ActionBtn(
+                      ActionButton(
                         label: _isWatched ? 'WATCHED' : 'MARK WATCHED',
                         icon: _isWatched ? Icons.check_circle : Icons.check_circle_outline,
                         isPrimary: false,
@@ -550,7 +550,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                   ),
                   if (_credits != null && _credits!.cast.isNotEmpty) ...[
                              SizedBox(height: s(64)),
-                             _SectionHeader(title: 'CAST', s: s),
+                             SectionHeader(title: 'CAST', s: s),
                              SizedBox(height: s(24)),
                              SizedBox(
                                height: s(260),
@@ -644,7 +644,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                            ],
                            if (_collection != null && _collection!.parts.length > 1) ...[
                              SizedBox(height: s(64)),
-                             _SectionHeader(title: 'PART OF ${_collection!.name?.toUpperCase() ?? 'COLLECTION'}', s: s),
+                             SectionHeader(title: 'PART OF ${_collection!.name?.toUpperCase() ?? 'COLLECTION'}', s: s),
                              SizedBox(height: s(24)),
                              SizedBox(
                                height: s(380),
@@ -683,7 +683,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                            ],
                            if (_recommendations != null && _recommendations!.isNotEmpty) ...[
                              SizedBox(height: s(64)),
-                             _SectionHeader(title: 'MORE LIKE THIS', s: s),
+                             SectionHeader(title: 'MORE LIKE THIS', s: s),
                              SizedBox(height: s(24)),
                              SizedBox(
                                height: s(300),
@@ -727,176 +727,3 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  final double Function(double) s;
-
-  const _SectionHeader({required this.title, required this.s});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: DashboardTheme.sectionTitle(context).copyWith(fontSize: s(20)),
-    );
-  }
-}
-
-class _ActionBtn extends StatefulWidget {
-  final String label;
-  final IconData icon;
-  final bool isPrimary;
-  final VoidCallback onTap;
-  final double Function(double) s;
-  final bool autofocus;
-  final double? progress;
-  final VoidCallback? onLongPress;
-
-  const _ActionBtn({
-    required this.label,
-    required this.icon,
-    required this.isPrimary,
-    required this.onTap,
-    required this.s,
-    this.autofocus = false,
-    this.progress,
-    this.onLongPress,
-  });
-
-  @override
-  State<_ActionBtn> createState() => _ActionBtnState();
-}
-
-class _ActionBtnState extends State<_ActionBtn> {
-  double _scale = 1.0;
-  Timer? _longPressTimer;
-  bool _isLongPress = false;
-
-  void _handleTap() {
-    setState(() => _scale = 1.08);
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (mounted) setState(() => _scale = 1.0);
-    });
-    widget.onTap();
-  }
-
-  void _handleKeyDown() {
-    if (widget.onLongPress == null || _longPressTimer != null) return;
-    _isLongPress = false;
-    _longPressTimer = Timer(const Duration(milliseconds: 500), () {
-      _isLongPress = true;
-      HapticFeedback.mediumImpact();
-      widget.onLongPress?.call();
-    });
-  }
-
-  void _handleKeyUp() {
-    final wasLongPress = _isLongPress;
-    _longPressTimer?.cancel();
-    _longPressTimer = null;
-    if (!wasLongPress) {
-      _handleTap();
-    }
-    _isLongPress = false;
-  }
-
-  @override
-  void dispose() {
-    _longPressTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      autofocus: widget.autofocus,
-      onKeyEvent: (_, event) {
-        if (TvKeys.isSelect(event.logicalKey)) {
-          if (event is KeyDownEvent) {
-            _handleKeyDown();
-            return KeyEventResult.handled;
-          } else if (event is KeyUpEvent) {
-            _handleKeyUp();
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Builder(builder: (context) {
-        final focused = Focus.of(context).hasFocus;
-        return GestureDetector(
-          onTap: _handleTap,
-          onLongPress: widget.onLongPress,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(widget.s(8)),
-            child: Stack(
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  transform: Matrix4.identity()..scaleByDouble(focused ? 1.05 : 1.0, focused ? 1.05 : 1.0, 1.0, 1.0),
-                  padding: EdgeInsets.symmetric(horizontal: widget.s(40), vertical: widget.s(16)),
-                  decoration: BoxDecoration(
-                    gradient: widget.isPrimary && !focused ? DashboardTheme.accentGradient : null,
-                    color: widget.isPrimary
-                        ? (focused ? Colors.white : null)
-                        : (focused ? Colors.white.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.08)),
-                    borderRadius: BorderRadius.circular(widget.s(12)),
-                    border: Border.all(
-                      color: focused ? Colors.white : Colors.white.withValues(alpha: 0.15),
-                      width: widget.s(1.5),
-                    ),
-                    boxShadow: focused
-                        ? DashboardDecorations.focusGlow(
-                            context,
-                            strength: widget.isPrimary ? 0.9 : 0.6,
-                            color: widget.isPrimary ? DashboardTheme.signalRed : null,
-                          )
-                        : null,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        widget.icon, 
-                        color: widget.isPrimary 
-                            ? (focused ? Colors.black : Colors.white)
-                            : Colors.white,
-                        size: widget.s(28)
-                      ),
-                      SizedBox(width: widget.s(12)),
-                      Text(
-                        widget.label,
-                        style: TextStyle(
-                          color: widget.isPrimary 
-                              ? (focused ? Colors.black : Colors.white)
-                              : Colors.white,
-                          fontSize: widget.s(20),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (widget.progress != null && widget.progress! > 0)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      height: widget.s(4),
-                      color: Colors.white.withValues(alpha: 0.2),
-                      child: FractionallySizedBox(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: widget.progress!,
-                        child: Container(color: focused ? Colors.black : DashboardTheme.signalRed),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        );
-      }),
-    );
-  }
-}
