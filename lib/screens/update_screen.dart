@@ -21,6 +21,17 @@ class _UpdateScreenState extends State<UpdateScreen> {
   double s(double v) => (v * MediaQuery.of(context).size.width) / 1920;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.updateInfo.isForced) {
+      UpdateService().reportTelemetry(
+        eventType: 'forced_prompt_shown',
+        isForcedPrompt: true,
+      );
+    }
+  }
+
+  @override
   void dispose() {
     _updateNode.dispose();
     _closeNode.dispose();
@@ -170,6 +181,10 @@ class _UpdateScreenState extends State<UpdateScreen> {
   }
 
   Future<void> _handleUpdate() async {
+    UpdateService().reportTelemetry(
+      eventType: 'update_download_clicked',
+      isForcedPrompt: widget.updateInfo.isForced,
+    );
     if (widget.updateInfo.downloadUrl == null) return;
     final url = Uri.parse(widget.updateInfo.downloadUrl!);
     if (await canLaunchUrl(url)) {
