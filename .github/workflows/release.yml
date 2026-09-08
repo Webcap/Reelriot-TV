@@ -20,6 +20,11 @@ on:
           - 'all'
           - 'apk'
           - 'appbundle'
+      bump_build_number:
+        description: 'Auto-bump build number (+1)'
+        required: false
+        default: true
+        type: boolean
       release_notes:
         description: 'Custom release notes / changelog'
         required: false
@@ -123,6 +128,22 @@ jobs:
       - name: Restore Dependencies
         run: flutter pub get
 
+      - name: Auto-bump Build Number
+        if: ${{ inputs.bump_build_number }}
+        run: dart run tools/build_number_gen.dart
+
+      - name: Resolve Target Build Version
+        id: version_info
+        run: |
+          VERSION_RAW=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d '\r\n')
+          VERSION_NAME=$(echo "$VERSION_RAW" | cut -d'+' -f1)
+          BUILD_NUM=$(echo "$VERSION_RAW" | cut -d'+' -f2)
+          if [ "$BUILD_NUM" = "$VERSION_RAW" ]; then BUILD_NUM="1"; fi
+          echo "APP_VERSION=$VERSION_RAW" >> $GITHUB_OUTPUT
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "BUILD_NUM=$BUILD_NUM" >> $GITHUB_OUTPUT
+          echo "-> Resolved Target Version: $VERSION_RAW (Name: $VERSION_NAME, Code: $BUILD_NUM)"
+
       - name: Configure Keystore & Signing Properties
         if: env.KEYSTORE_BASE64 != ''
         env:
@@ -144,21 +165,21 @@ jobs:
         run: |
           TARGET_ENTRY="lib/main_prod.dart"
           if [ "$BUILD_FLAVOR" = "dev" ]; then TARGET_ENTRY="lib/main_dev.dart"; fi
-          flutter build appbundle --flavor "$BUILD_FLAVOR" -t "$TARGET_ENTRY" --release
+          flutter build appbundle --flavor "$BUILD_FLAVOR" -t "$TARGET_ENTRY" --release --build-name "${{ steps.version_info.outputs.VERSION_NAME }}" --build-number "${{ steps.version_info.outputs.BUILD_NUM }}"
 
       - name: Build Universal APK
         if: env.BUILD_TARGET == 'all' || env.BUILD_TARGET == 'apk'
         run: |
           TARGET_ENTRY="lib/main_prod.dart"
           if [ "$BUILD_FLAVOR" = "dev" ]; then TARGET_ENTRY="lib/main_dev.dart"; fi
-          flutter build apk --flavor "$BUILD_FLAVOR" -t "$TARGET_ENTRY" --release
+          flutter build apk --flavor "$BUILD_FLAVOR" -t "$TARGET_ENTRY" --release --build-name "${{ steps.version_info.outputs.VERSION_NAME }}" --build-number "${{ steps.version_info.outputs.BUILD_NUM }}"
 
       - name: Build Split-per-ABI APKs
         if: env.BUILD_TARGET == 'all' || env.BUILD_TARGET == 'apk'
         run: |
           TARGET_ENTRY="lib/main_prod.dart"
           if [ "$BUILD_FLAVOR" = "dev" ]; then TARGET_ENTRY="lib/main_dev.dart"; fi
-          flutter build apk --flavor "$BUILD_FLAVOR" -t "$TARGET_ENTRY" --release --split-per-abi
+          flutter build apk --flavor "$BUILD_FLAVOR" -t "$TARGET_ENTRY" --release --split-per-abi --build-name "${{ steps.version_info.outputs.VERSION_NAME }}" --build-number "${{ steps.version_info.outputs.BUILD_NUM }}"
 
       - name: Organize & Standardize Release Artifacts
         id: organize_artifacts
@@ -237,4 +258,12 @@ jobs:
             --environment "${BUILD_FLAVOR}" \
             --version "${VERSION_RAW}" \
             --download-url "${DOWNLOAD_URL}"
+
+      - name: Commit Bumped Version to Repository
+        if: ${{ inputs.bump_build_number && github.event_name == 'workflow_dispatch' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pubspec.yaml
+          git diff --staged --quiet || (git commit -m "chore(release): bump build number to ${{ steps.version_info.outputs.APP_VERSION }}" && git push origin HEAD:${{ github.ref }})
 
