@@ -12,10 +12,19 @@ class QualityUtils {
   }
 
   static String? getQualityBadgeSync({
+    int? mediaId,
     required String? releaseDate,
     required bool isMovie,
   }) {
     if (!isMovie) return 'HD';
+
+    if (mediaId != null) {
+      final cacheKey = 'movie:$mediaId';
+      if (_cache.containsKey(cacheKey) && _cache[cacheKey] != null) {
+        return _cache[cacheKey];
+      }
+    }
+
     if (releaseDate == null || releaseDate.isEmpty) return null;
 
     try {
@@ -58,7 +67,11 @@ class QualityUtils {
     }
 
     // Fallback sync estimate while awaiting or on network failure
-    final syncQuality = getQualityBadgeSync(releaseDate: releaseDate, isMovie: isMovie);
+    final syncQuality = getQualityBadgeSync(
+      mediaId: mediaId,
+      releaseDate: releaseDate,
+      isMovie: isMovie,
+    );
 
     final future = () async {
       try {
@@ -71,8 +84,7 @@ class QualityUtils {
         debugPrint('[QualityUtils] Error resolving quality for $cacheKey: $e');
       }
 
-      // Cache fallback (including null) to prevent redundant network retries
-      _cache[cacheKey] = syncQuality;
+      // Return sync estimate on failure without poisoning cache so it can retry
       return syncQuality;
     }();
 

@@ -127,6 +127,11 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
             _movie = m;
             _recommendations = recs;
             _credits = credits;
+            _qualityBadge = QualityUtils.getQualityBadgeSync(
+              mediaId: m.id,
+              releaseDate: m.releaseDate,
+              isMovie: true,
+            );
           });
           _checkFavorite();
           _loadQuality();
@@ -243,7 +248,9 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
       releaseDate: _movie!.releaseDate,
       isMovie: true,
     );
-    if (mounted) setState(() => _qualityBadge = q);
+    if (mounted && q != null && q != _qualityBadge) {
+      setState(() => _qualityBadge = q);
+    }
   }
 
   DateTime? _parseReleaseDate() {
@@ -661,6 +668,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                          );
                                        },
                                        quality: QualityUtils.getQualityBadgeSync(
+                                         mediaId: part.id,
                                          releaseDate: part.releaseDate,
                                          isMovie: true,
                                        ),
@@ -693,6 +701,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                                        );
                                      },
                                      quality: QualityUtils.getQualityBadgeSync(
+                                       mediaId: rec.id,
                                        releaseDate: rec.releaseDate,
                                        isMovie: true,
                                      ),

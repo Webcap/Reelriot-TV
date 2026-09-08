@@ -205,6 +205,7 @@ class FavoritesScreenState extends State<FavoritesScreen>
             }
           },
           quality: QualityUtils.getQualityBadgeSync(
+            mediaId: item.id,
             releaseDate: isMovie
                 ? (item as MovieListItem).releaseDate
                 : (item as TvListItem).firstAirDate,

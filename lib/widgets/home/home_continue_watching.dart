@@ -140,6 +140,7 @@ class HomeContinueWatchingRow extends StatelessWidget {
                   onLongPress: () => onLongPress(h),
                   onTap: () => onTap(h),
                   quality: QualityUtils.getQualityBadgeSync(
+                    mediaId: mediaId,
                     releaseDate: h['release_date'] as String?,
                     isMovie: isMovie,
                   ),

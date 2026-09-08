@@ -547,6 +547,12 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                   Row(
                     children: [
                       HeroBadge(
+                        label: 'HD',
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderColor: Colors.white24,
+                      ),
+                      SizedBox(width: s(14)),
+                      HeroBadge(
                         label: 'IMDb ${(show.voteAverage ?? 0.0).toStringAsFixed(1)}',
                         color: DashboardTheme.signalRed,
                       ),
@@ -920,6 +926,7 @@ class _TvDetailScreenState extends State<TvDetailScreen> {
                               );
                             },
                             quality: QualityUtils.getQualityBadgeSync(
+                              mediaId: rec.id,
                               releaseDate: rec.firstAirDate,
                               isMovie: false,
                             ),

@@ -187,11 +187,12 @@ class _GenreScreenState extends State<GenreScreen> {
                               }
                             },
                             quality: QualityUtils.getQualityBadgeSync(
+                              mediaId: item.id,
                               releaseDate: item.releaseDate,
                               isMovie: widget.isMovie,
                             ),
                             mediaId: item.id,
-                            isMovie: item.mediaType != 'tv',
+                            isMovie: widget.isMovie,
                             releaseDate: item.releaseDate,
                           );
                         },

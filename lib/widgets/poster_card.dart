@@ -53,6 +53,18 @@ class _PosterCardState extends State<PosterCard> {
     _checkQualityOverride();
   }
 
+  @override
+  void didUpdateWidget(covariant PosterCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.mediaId != widget.mediaId ||
+        oldWidget.isMovie != widget.isMovie ||
+        oldWidget.releaseDate != widget.releaseDate ||
+        oldWidget.quality != widget.quality) {
+      _overrideQuality = null;
+      _checkQualityOverride();
+    }
+  }
+
   Future<void> _checkQualityOverride() async {
     // Only check if we have the necessary info and it's not already a fixed quality
     // We only care about movies as TV shows are HD by default
@@ -64,7 +76,7 @@ class _PosterCardState extends State<PosterCard> {
           isMovie: true,
         );
 
-        if (badge != null && badge != widget.quality && mounted) {
+        if (mounted && badge != null && badge != (_overrideQuality ?? widget.quality)) {
           setState(() {
             _overrideQuality = badge;
           });

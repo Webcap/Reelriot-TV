@@ -111,6 +111,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
                   title: m.title ?? 'Movie',
                   onTap: () => _openDetail(m.id),
                   quality: QualityUtils.getQualityBadgeSync(
+                    mediaId: m.id,
                     releaseDate: m.releaseDate,
                     isMovie: true,
                   ),

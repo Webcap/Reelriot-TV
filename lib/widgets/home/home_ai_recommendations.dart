@@ -107,6 +107,7 @@ class HomeAiRecommendationsRow extends StatelessWidget {
                                 onLongPress: () => onLongPress(m),
                                 onTap: () => onTap(m),
                                 quality: QualityUtils.getQualityBadgeSync(
+                                  mediaId: m.id,
                                   releaseDate: m.releaseDate,
                                   isMovie:
                                       true, // Recommendations are currently movies
