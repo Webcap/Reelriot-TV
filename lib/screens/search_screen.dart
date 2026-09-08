@@ -9,7 +9,11 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reelriot_tv/services/ad_service.dart';
+import 'package:reelriot_tv/constants.dart';
+import 'package:reelriot_tv/theme/dashboard_theme.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
+import 'package:reelriot_tv/utils/tv_colors.dart';
+import 'package:reelriot_tv/widgets/tv_skeleton_loader.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -222,7 +226,7 @@ class SearchScreenState extends State<SearchScreen> {
               cursorWidth: 3,
               style: const TextStyle(color: Colors.white, fontSize: 20),
               decoration: InputDecoration(
-                hintText: 'Search for movies or shows',
+                hintText: 'Search',
                 hintStyle: TextStyle(color: Colors.grey[600]),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 border: InputBorder.none,
@@ -237,10 +241,10 @@ class SearchScreenState extends State<SearchScreen> {
 
   Widget _buildResultsSection() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: Color(0xFFDC2626)));
+      return const TvSearchResultsSkeleton(tileCount: 5);
     }
     if (_error != null) {
-      return Center(child: Text(_error!, style: const TextStyle(color: Colors.red)));
+      return Center(child: Text(_error!, style: const TextStyle(color: TvSemanticColors.dangerDefault)));
     }
     if (_movies == null && _tv == null) {
       return Column(
@@ -621,9 +625,9 @@ class _ResultTile extends StatelessWidget {
 
         Color badgeColor;
         if (badge == 'CAM') {
-          badgeColor = const Color(0xFFEC1D24);
+          badgeColor = DashboardTheme.signalRed;
         } else if (badge == 'SOON') {
-          badgeColor = const Color(0xFFF59E0B);
+          badgeColor = DashboardTheme.warningAmber;
         } else {
           badgeColor = Colors.white.withValues(alpha: 0.2);
         }

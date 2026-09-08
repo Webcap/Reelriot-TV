@@ -193,6 +193,7 @@ class _ProviderScreenState extends State<ProviderScreen> {
                             posterPath: item.posterPath,
                             title: item.title ?? 'Unknown',
                             quality: QualityUtils.getQualityBadgeSync(
+                              mediaId: item.id,
                               releaseDate: item.releaseDate,
                               isMovie: item.mediaType != 'tv',
                             ),

@@ -204,11 +204,12 @@ class _ActorScreenState extends State<ActorScreen> {
                         }
                       },
                       quality: QualityUtils.getQualityBadgeSync(
+                        mediaId: item.id,
                         releaseDate: item.mediaType == 'movie' ? item.releaseDate : item.firstAirDate,
                         isMovie: item.mediaType == 'movie',
                       ),
                       mediaId: item.id,
-                      isMovie: item.mediaType != 'tv',
+                      isMovie: item.mediaType == 'movie',
                       releaseDate: item.mediaType == 'movie' ? item.releaseDate : item.firstAirDate,
                     );
                   },

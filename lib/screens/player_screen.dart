@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:reelriot_tv/services/outage_service.dart';
 import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
 import 'package:reelriot_tv/services/settings_service.dart';
 import 'package:reelriot_tv/services/watch_history_service.dart';
+import 'package:reelriot_tv/utils/auth_error_utils.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:reelriot_tv/widgets/player_settings_overlay.dart';
 import 'package:reelriot_tv/widgets/tv_player_controls.dart';
@@ -106,6 +108,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    _lastKnownPosition = widget.startPosition;
     WakelockManager.enable();
     OutageService.instance.pause();
     _setupController();
@@ -227,7 +230,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
         final finalSubs = uniqueSubs.values.toList();
 
         final currentPosition = _controller?.position ?? Duration.zero;
-        final currentUrl = widget.url;
 
         debugPrint(
           '[PlayerScreen] 🔄 Updating data source with ${finalSubs.length} subtitles...',
@@ -241,22 +243,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
           return;
         }
 
-        // Re-setup data source with new subtitles
-        await _controller?.setDataSource(
-          currentUrl,
-          headers: widget.headers,
-          subtitles: finalSubs,
-          startAt: currentPosition,
+        // Directly activate auto-discovered subtitle track without stream reset
+        final autoTrack = SubtitleTrack.uri(
+          downloadUrl,
+          title: '$langName (Auto)',
         );
+        _controller?.setSubtitleTrack(autoTrack);
 
-        if (!_isDisposed && mounted) {
-          _controller?.seekTo(currentPosition);
-          _controller?.play();
-
-          debugPrint(
-            '[PlayerScreen] ✅ Auto-subtitle "$langName (Auto)" added to menu.',
-          );
-        }
+        debugPrint(
+          '[PlayerScreen] ✅ Auto-subtitle "$langName (Auto)" activated.',
+        );
       } else {
         debugPrint(
           '[PlayerScreen] ℹ️ No suitable auto-subtitles found for TMDB ID $tmdbId, language: $langCode',
@@ -307,9 +303,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
       position = duration;
     } else {
       final ctrlPos = _controller!.position;
-      position = (ctrlPos > Duration.zero)
+      position = (ctrlPos > const Duration(seconds: 5))
           ? ctrlPos
-          : (_lastKnownPosition ?? Duration.zero);
+          : (_lastKnownPosition != null && _lastKnownPosition! > const Duration(seconds: 5)
+              ? _lastKnownPosition!
+              : (widget.startPosition ?? Duration.zero));
+    }
+
+    // Do NOT overwrite valid saved history with near-zero initial loading positions
+    if (!isFinished &&
+        position <= const Duration(seconds: 5) &&
+        widget.startPosition != null &&
+        widget.startPosition! > const Duration(seconds: 5)) {
+      debugPrint(
+        '[PlayerScreen] 🛡️ Preserving saved resume position (${widget.startPosition}), skipping startup 0s progress save.',
+      );
+      return;
     }
 
     await _historyService.saveProgress(
@@ -325,10 +334,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _setupController() {
-    if (widget.url.isEmpty) {
-      _safeSetState(() {
-        _hasError = true;
-        _errorMessage = 'Invalid video URL';
+    final lowerUrl = widget.url.toLowerCase();
+    if (widget.url.isEmpty ||
+        lowerUrl.contains('/embed/') ||
+        lowerUrl.contains('web.nxsha.app') ||
+        lowerUrl.contains('vidsrcme.ru/embed')) {
+      debugPrint('[PlayerScreen] ❌ Non-playable HTML embed URL detected: ${widget.url}');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_isDisposed) {
+          _fallbackToNextProvider();
+        }
       });
       return;
     }
@@ -413,9 +428,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       } else if (event.type == CaffeinePlayerEventType.progress) {
         if (!_isDisposed) {
           final progress = event.position;
-          if (progress != null &&
-              (_lastKnownPosition == null ||
-                  (progress.inSeconds != _lastKnownPosition!.inSeconds))) {
+          if (progress != null && progress > const Duration(seconds: 5)) {
             _lastKnownPosition = progress;
           }
         }
@@ -637,9 +650,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final uri = Uri.parse(widget.url);
       final host = uri.host.toLowerCase();
       if (host.contains('vidlink')) return 'VidLink';
-      if (host.contains('vixsrc')) return 'Vixsrc';
       if (host.contains('vidsrc')) return 'Vidsrc';
-      if (host.contains('vidzee')) return 'Vidzee';
       if (host.contains('vidfun')) return 'VidFun';
       if (host.contains('flixhq')) return 'FlixHQ';
       
@@ -651,7 +662,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
           final innerUri = Uri.parse(decoded);
           final innerHost = innerUri.host.toLowerCase();
           if (innerHost.contains('vidlink')) return 'VidLink';
-          if (innerHost.contains('vixsrc')) return 'Vixsrc';
           if (innerHost.contains('vidsrc')) return 'Vidsrc';
         }
       }
@@ -689,6 +699,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     } catch (e) {
       debugPrint('[PlayerScreen] ❌ Supabase sports refresh error: $e');
+      await handleIfUnrecoverableAuthError(e);
     }
     return null;
   }
@@ -733,7 +744,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         return '';
       }
 
-      // Most CDNs (vixsrc, vidlink, vidsrc) require the trailing slash on Referer
+      // Most CDNs (vidlink, vidsrc) require the trailing slash on Referer
       return '${uri.scheme}://${uri.host}/';
     } catch (_) {
       return '';
@@ -873,10 +884,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
         headers['Origin'] = 'https://vidlink.pro';
       }
 
-      if (matchUrl.contains('vixsrc.to') || matchUrl.contains('vixsrc')) {
-        headers['Referer'] = 'https://vixsrc.to/';
-        headers['Origin'] = 'https://vixsrc.to';
-      }
 
       if (matchUrl.contains('instreams.live')) {
         headers['Referer'] = 'https://instreams.click/';
@@ -1118,7 +1125,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
           '[PlayerScreen] ✅ Found ${searchResults.length} new subtitles',
         );
 
-        final List<CaffeinePlayerSubtitlesSource> newSubs = [];
         final langName = supportedLanguages
             .firstWhere(
               (l) => l.languageCode == langCode,
@@ -1130,6 +1136,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             )
             .englishName;
 
+        bool activated = false;
         for (var data in searchResults) {
           final fileId = data.attr?.files?.first.fileId;
           if (fileId != null) {
@@ -1137,57 +1144,57 @@ class _PlayerScreenState extends State<PlayerScreen> {
               fileId,
               SettingsService().opensubtitlesKey,
             );
-            if (downloadUrl != null) {
-              newSubs.add(
-                CaffeinePlayerSubtitlesSource(
-                  name: '$langName (OS)',
-                  url: downloadUrl,
-                ),
+            if (downloadUrl != null && !_isDisposed && mounted) {
+              final trackName = '$langName (OpenSubtitles)';
+              final newTrack = SubtitleTrack.uri(
+                downloadUrl,
+                title: trackName,
               );
+
+              debugPrint(
+                '[PlayerScreen] 🔤 Activating downloaded subtitle track: $trackName ($downloadUrl)',
+              );
+
+              // Directly set subtitle track on active controller without stream reload
+              _controller?.setSubtitleTrack(newTrack);
+              activated = true;
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Subtitles loaded: $langName'),
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+              }
+              break;
             }
           }
         }
 
-        if (newSubs.isEmpty) {
-          debugPrint('[PlayerScreen] ❌ Failed to download any new subtitles');
-          return;
+        if (!activated) {
+          debugPrint('[PlayerScreen] ❌ Failed to download subtitle file');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Could not download subtitles'),
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
         }
-
-        final List<CaffeinePlayerSubtitlesSource> updatedExternalSubs = [
-          ...widget.externalSubtitles ?? [],
-          ...newSubs,
-        ];
-
-        // Unique filter to avoid duplicates
-        final Map<String, CaffeinePlayerSubtitlesSource> uniqueSubs = {};
-        for (var sub in updatedExternalSubs) {
-          uniqueSubs[sub.name!] = sub;
-        }
-
-        final finalSubs = uniqueSubs.values.toList();
-
-        final currentPosition =
-            _controller?.position ?? Duration.zero;
-        final currentUrl = widget.url;
-
-        // Re-setup data source with new subtitles
-        await _controller?.setDataSource(
-          currentUrl,
-          headers: _getMergedHeaders(
-            currentUrl,
-            widget.referrer,
-            widget.headers,
-          ),
-          subtitles: finalSubs,
-          startAt: currentPosition,
-        );
-
-        _controller?.seekTo(currentPosition);
-        _controller?.play();
       } else {
         debugPrint(
           '[PlayerScreen] ℹ️ No subtitles found for language: $langCode',
         );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('No subtitles found for $langCode'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       }
     } catch (e) {
       debugPrint('[PlayerScreen] ❌ Error searching more subtitles: $e');
@@ -1214,7 +1221,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     await _saveCurrentProgress();
-    final currentPosition = _controller?.position ?? _lastKnownPosition;
+    final ctrlPos = _controller?.position;
+    final currentPosition = (ctrlPos != null && ctrlPos > const Duration(seconds: 5))
+        ? ctrlPos
+        : (_lastKnownPosition != null && _lastKnownPosition! > const Duration(seconds: 5)
+            ? _lastKnownPosition
+            : (widget.startPosition ?? Duration.zero));
 
     debugPrint(
       '[PlayerScreen] 🔄 Forcing player reset (media_kit)... '

@@ -9,7 +9,7 @@ class AvatarUtils {
   /// Resolves an avatar ID or partial path to a full URL.
   static String getAvatarUrl(dynamic avatar) {
     if (avatar == null || avatar.toString().isEmpty) {
-      return defaultAvatar;
+      return defaultAvatarUrl;
     }
 
     final avatarStr = avatar.toString();

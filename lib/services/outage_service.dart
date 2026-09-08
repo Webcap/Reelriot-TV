@@ -124,8 +124,7 @@ class OutageService {
 
       // 2. API Status Check (Secondary)
       final base = caffeineApiUrl.replaceFirst(RegExp(r'/$'), '');
-      final env = environment; 
-      final uri = Uri.parse('$base/v1/feature-flags?platform=tv&env=$env'); 
+      final uri = Uri.parse('$base/status'); 
       
       final apiRes = await http.get(uri, headers: {
         'x-platform': 'tv',

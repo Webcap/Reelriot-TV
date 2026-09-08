@@ -4,10 +4,12 @@ import 'package:reelriot_tv/screens/sports_game_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:reelriot_tv/utils/auth_error_utils.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reelriot_tv/screens/player_screen.dart';
 import 'package:reelriot_tv/services/ad_service.dart';
+import 'package:reelriot_tv/widgets/tv_skeleton_loader.dart';
 
 // ---------------------------------------------------------------------------
 // ESPN league config
@@ -34,6 +36,13 @@ const _leagues = [
     name: 'NBA',
     sport: 'basketball',
     league: 'nba',
+    icon: Icons.sports_basketball,
+    color: Color(0xFFF97316),
+  ),
+  _League(
+    name: 'NBA Summer League',
+    sport: 'basketball',
+    league: 'nba-summer',
     icon: Icons.sports_basketball,
     color: Color(0xFFF97316),
   ),
@@ -95,6 +104,14 @@ const _leagues = [
     league: 'nhl',
     icon: Icons.sports_hockey,
     color: Color(0xFF06B6D4),
+  ),
+  // ── Soccer — International ────────────────────────────────────────────────
+  _League(
+    name: 'World Cup',
+    sport: 'soccer',
+    league: 'fifa.world',
+    icon: Icons.sports_soccer,
+    color: Color(0xFFEAB308), // Gold/Yellow
   ),
   // ── Soccer — Club Leagues ────────────────────────────────────────────────
   _League(
@@ -815,6 +832,7 @@ class SportsScreenState extends State<SportsScreen> {
             .maybeSingle();
       } catch (e) {
         debugPrint('[SportsScreen] Error fetching featured event: $e');
+        await handleIfUnrecoverableAuthError(e);
       }
 
       if (mounted) {
@@ -826,11 +844,13 @@ class SportsScreenState extends State<SportsScreen> {
         });
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
           _error = e.toString();
         });
+      }
+      await handleIfUnrecoverableAuthError(e);
     }
   }
 
@@ -851,9 +871,7 @@ class SportsScreenState extends State<SportsScreen> {
         '${_dayName(now.weekday)}, ${_monthName(now.month)} ${now.day}';
 
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFFDC2626)),
-      );
+      return const TvSportsScreenSkeleton();
     }
 
     if (_error != null) {
@@ -999,8 +1017,9 @@ class SportsScreenState extends State<SportsScreen> {
     final allGames = <_EspnGame, _League>{};
     for (var ld in _data!) {
       if (_selectedSport != null &&
-          ld.league.sport.toUpperCase() != _selectedSport)
+          ld.league.sport.toUpperCase() != _selectedSport) {
         continue;
+      }
       for (var g in ld.games) {
         allGames[g] = ld.league;
       }

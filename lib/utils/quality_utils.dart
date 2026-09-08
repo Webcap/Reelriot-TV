@@ -1,13 +1,30 @@
 import 'package:reelriot_tv/services/api_service.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class QualityUtils {
+  static final Map<String, String?> _cache = {};
+  static final Map<String, Future<String?>> _pendingRequests = {};
+
+  /// Clears the in-memory cache and any pending requests.
+  static void clearCache() {
+    _cache.clear();
+    _pendingRequests.clear();
+  }
+
   static String? getQualityBadgeSync({
+    int? mediaId,
     required String? releaseDate,
     required bool isMovie,
   }) {
     if (!isMovie) return 'HD';
+
+    if (mediaId != null) {
+      final cacheKey = 'movie:$mediaId';
+      if (_cache.containsKey(cacheKey) && _cache[cacheKey] != null) {
+        return _cache[cacheKey];
+      }
+    }
+
     if (releaseDate == null || releaseDate.isEmpty) return null;
 
     try {
@@ -17,50 +34,65 @@ class QualityUtils {
       if (release.isAfter(now)) return 'SOON';
 
       final diffDays = now.difference(release).inDays;
-      return diffDays <= 45 ? 'CAM' : 'HD';
+      // 90-day CAM window aligned with caffeine-api standard
+      return diffDays < 90 ? 'CAM' : 'HD';
     } catch (e) {
       debugPrint('[QualityUtils] Error parsing date: $e');
       return null;
     }
   }
 
-  /// Fetches the quality badge, including checking for Supabase overrides.
+  /// Fetches the quality badge from the centralized Caffeine API.
+  /// Uses in-memory cache and in-flight request deduplication to prevent
+  /// duplicate network requests across screens and simultaneously rendered cards.
   static Future<String?> getQualityBadgeAsync({
     required int mediaId,
     required String? releaseDate,
     required bool isMovie,
   }) async {
-    // 1. TV shows are always HD for now
+    // TV shows are always HD
     if (!isMovie) return 'HD';
 
-    // 2. Fetch Manual override from Supabase
-    String? manualQuality;
-    try {
-      final response = await Supabase.instance.client
-          .from('media_quality_overrides')
-          .select('quality')
-          .eq('media_id', mediaId.toString())
-          .maybeSingle();
-      if (response != null && response['quality'] != null) {
-        manualQuality = response['quality'] as String;
+    final mediaType = isMovie ? 'movie' : 'tv';
+    final cacheKey = '$mediaType:$mediaId';
+
+    // 1. Return from cache if already resolved
+    if (_cache.containsKey(cacheKey)) {
+      return _cache[cacheKey];
+    }
+
+    // 2. Return in-flight Future if request is already ongoing (prevents thundering herd)
+    if (_pendingRequests.containsKey(cacheKey)) {
+      return _pendingRequests[cacheKey];
+    }
+
+    // Fallback sync estimate while awaiting or on network failure
+    final syncQuality = getQualityBadgeSync(
+      mediaId: mediaId,
+      releaseDate: releaseDate,
+      isMovie: isMovie,
+    );
+
+    final future = () async {
+      try {
+        final serverQuality = await ApiService().fetchMediaQuality(mediaType, mediaId);
+        if (serverQuality != null && serverQuality.isNotEmpty) {
+          _cache[cacheKey] = serverQuality;
+          return serverQuality;
+        }
+      } catch (e) {
+        debugPrint('[QualityUtils] Error resolving quality for $cacheKey: $e');
       }
-    } catch (e) {
-      // Silent fail
+
+      // Return sync estimate on failure without poisoning cache so it can retry
+      return syncQuality;
+    }();
+
+    _pendingRequests[cacheKey] = future;
+    try {
+      return await future;
+    } finally {
+      _pendingRequests.remove(cacheKey);
     }
-
-    // 3. Fallback to synchronous logic (Date-based)
-    final syncQuality = getQualityBadgeSync(releaseDate: releaseDate, isMovie: isMovie);
-    
-    // 4. Digital Release Detection (Always promotes to HD)
-    // If either the date-based check or manual override says CAM, verify digital status
-    if (isMovie && (syncQuality == 'CAM' || manualQuality == 'CAM')) {
-      final isDigital = await ApiService().isDigitalRelease(mediaId);
-      if (isDigital) return 'HD';
-    }
-
-    // 5. HD always wins if either source says so
-    if (syncQuality == 'HD' || manualQuality == 'HD') return 'HD';
-
-    return manualQuality ?? syncQuality;
   }
 }

@@ -1,0 +1,220 @@
+name: ReelRiot TV Release Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      flavor:
+        description: 'Product flavor to build'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+          - 'prod'
+          - 'dev'
+      build_target:
+        description: 'Build Target'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - 'all'
+          - 'apk'
+          - 'appbundle'
+      release_notes:
+        description: 'Custom release notes / changelog'
+        required: false
+        default: ''
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  quality-gate:
+    name: Quality Gate & Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Clone reelriot_core Dependency
+        run: |
+          mkdir -p ../packages
+          git clone --depth 1 https://github.com/Webcap/reelriot_core.git ../packages/reelriot_core || true
+
+      - name: Clone media-kit Dependency Overrides
+        run: |
+          git clone --depth 1 https://github.com/Webcap/media-kit.git ../media-kit || git clone --depth 1 https://github.com/media-kit/media-kit.git ../media-kit
+
+      - name: Restore Dependencies
+        run: flutter pub get
+
+      - name: Static Code Analysis
+        run: flutter analyze
+
+  build-android:
+    name: Build Android TV Binaries
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    env:
+      BUILD_FLAVOR: ${{ inputs.flavor || 'prod' }}
+      BUILD_TARGET: ${{ inputs.build_target || 'all' }}
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Clone reelriot_core Dependency
+        run: |
+          mkdir -p ../packages
+          git clone --depth 1 https://github.com/Webcap/reelriot_core.git ../packages/reelriot_core || true
+
+      - name: Clone media-kit Dependency Overrides
+        run: |
+          git clone --depth 1 https://github.com/Webcap/media-kit.git ../media-kit || git clone --depth 1 https://github.com/media-kit/media-kit.git ../media-kit
+
+      - name: Reconstruct Environment
+        run: |
+          ENV_FILE=".env.prod"
+          if [ "$BUILD_FLAVOR" = "dev" ]; then ENV_FILE=".env.dev"; fi
+          cat << 'EOF' > "$ENV_FILE"
+          CAFFEINE_API_URL=${{ secrets.CAFFEINE_API_URL }}
+          CAFFEINE_API_KEY=${{ secrets.CAFFEINE_API_KEY }}
+          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANNON_KEY=${{ secrets.SUPABASE_ANNON_KEY }}
+          TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
+          PAIRING_PAGE_URL=${{ secrets.PAIRING_PAGE_URL || 'https://reelriot.app/tv-pair' }}
+          MIXPANEL_API_KEY=${{ secrets.MIXPANEL_API_KEY }}
+          OPENSUBTITLES_API_KEY=${{ secrets.OPENSUBTITLES_API_KEY }}
+          EOF
+          cp "$ENV_FILE" .env
+
+      - name: Restore Dependencies
+        run: flutter pub get
+
+      - name: Configure Keystore & Signing Properties
+        if: env.KEYSTORE_BASE64 != ''
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'reelriot' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'reelriot2026' }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'reelriot2026' }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/reelriot-release.jks
+          cat << EOF > android/key.properties
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=reelriot-release.jks
+          EOF
+
+      - name: Build App Bundle (AAB)
+        if: env.BUILD_TARGET == 'all' || env.BUILD_TARGET == 'appbundle'
+        run: |
+          TARGET_ENTRY="lib/main_prod.dart"
+          if [ "$BUILD_FLAVOR" = "dev" ]; then TARGET_ENTRY="lib/main_dev.dart"; fi
+          flutter build appbundle --flavor "$BUILD_FLAVOR" -t "$TARGET_ENTRY" --release
+
+      - name: Build Universal APK
+        if: env.BUILD_TARGET == 'all' || env.BUILD_TARGET == 'apk'
+        run: |
+          TARGET_ENTRY="lib/main_prod.dart"
+          if [ "$BUILD_FLAVOR" = "dev" ]; then TARGET_ENTRY="lib/main_dev.dart"; fi
+          flutter build apk --flavor "$BUILD_FLAVOR" -t "$TARGET_ENTRY" --release
+
+      - name: Build Split-per-ABI APKs
+        if: env.BUILD_TARGET == 'all' || env.BUILD_TARGET == 'apk'
+        run: |
+          TARGET_ENTRY="lib/main_prod.dart"
+          if [ "$BUILD_FLAVOR" = "dev" ]; then TARGET_ENTRY="lib/main_dev.dart"; fi
+          flutter build apk --flavor "$BUILD_FLAVOR" -t "$TARGET_ENTRY" --release --split-per-abi
+
+      - name: Organize & Standardize Release Artifacts
+        id: organize_artifacts
+        run: |
+          mkdir -p dist/
+          VERSION_RAW=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d '\r\n')
+          VERSION_CLEAN=$(echo "$VERSION_RAW" | tr '+' '_')
+          echo "APP_VERSION=$VERSION_RAW" >> $GITHUB_OUTPUT
+          echo "TAG_NAME=v$VERSION_RAW" >> $GITHUB_OUTPUT
+
+          # Copy AppBundle
+          find build/app/outputs/bundle -name "*.aab" -exec cp {} "dist/ReelriotTV-${BUILD_FLAVOR}-v${VERSION_CLEAN}.aab" \; 2>/dev/null || true
+
+          # Copy Universal APK
+          if [ -f "build/app/outputs/flutter-apk/app-${BUILD_FLAVOR}-release.apk" ]; then
+            cp "build/app/outputs/flutter-apk/app-${BUILD_FLAVOR}-release.apk" "dist/ReelriotTV-${BUILD_FLAVOR}-v${VERSION_CLEAN}-universal.apk"
+          fi
+
+          # Copy Split APKs
+          if [ -f "build/app/outputs/flutter-apk/app-arm64-v8a-${BUILD_FLAVOR}-release.apk" ]; then
+            cp "build/app/outputs/flutter-apk/app-arm64-v8a-${BUILD_FLAVOR}-release.apk" "dist/ReelriotTV-${BUILD_FLAVOR}-v${VERSION_CLEAN}-arm64-v8a.apk"
+          fi
+          if [ -f "build/app/outputs/flutter-apk/app-armeabi-v7a-${BUILD_FLAVOR}-release.apk" ]; then
+            cp "build/app/outputs/flutter-apk/app-armeabi-v7a-${BUILD_FLAVOR}-release.apk" "dist/ReelriotTV-${BUILD_FLAVOR}-v${VERSION_CLEAN}-armeabi-v7a.apk"
+          fi
+          if [ -f "build/app/outputs/flutter-apk/app-x86_64-${BUILD_FLAVOR}-release.apk" ]; then
+            cp "build/app/outputs/flutter-apk/app-x86_64-${BUILD_FLAVOR}-release.apk" "dist/ReelriotTV-${BUILD_FLAVOR}-v${VERSION_CLEAN}-x86_64.apk"
+          fi
+
+          # Checksums
+          cd dist
+          sha256sum * > checksums-sha256.txt
+          cd ..
+          ls -lh dist/
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.organize_artifacts.outputs.TAG_NAME }}
+          name: "ReelRiot TV ${{ steps.organize_artifacts.outputs.TAG_NAME }} (${{ env.BUILD_FLAVOR }})"
+          body: |
+            ## ReelRiot TV Release ${{ steps.organize_artifacts.outputs.TAG_NAME }}
+            
+            **Flavor:** `${{ env.BUILD_FLAVOR }}`  
+            **Version:** `${{ steps.organize_artifacts.outputs.APP_VERSION }}`  
+            
+            ${{ inputs.release_notes }}
+            
+            ### Included Binaries
+            - `ReelriotTV-${{ env.BUILD_FLAVOR }}-v${{ steps.organize_artifacts.outputs.APP_VERSION }}-universal.apk` (All-in-one sideload APK)
+            - `ReelriotTV-${{ env.BUILD_FLAVOR }}-v${{ steps.organize_artifacts.outputs.APP_VERSION }}-arm64-v8a.apk` (Android TV 64-bit devices)
+            - `ReelriotTV-${{ env.BUILD_FLAVOR }}-v${{ steps.organize_artifacts.outputs.APP_VERSION }}-armeabi-v7a.apk` (Fire TV Sticks & 32-bit devices)
+            - `ReelriotTV-${{ env.BUILD_FLAVOR }}-v${{ steps.organize_artifacts.outputs.APP_VERSION }}.aab` (Google Play App Bundle)
+            
+            *Verify integrity with `checksums-sha256.txt`.*
+          files: dist/*
+          draft: false
+          prerelease: ${{ env.BUILD_FLAVOR == 'dev' }}

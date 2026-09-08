@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:startapp_sdk/startapp.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/ad.dart';
+import '../utils/auth_error_utils.dart';
 import 'settings_service.dart';
 
 class AdService extends ChangeNotifier {
@@ -49,6 +50,7 @@ class AdService extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('Error fetching native ads (TV): $e');
+      await handleIfUnrecoverableAuthError(e);
     }
   }
 

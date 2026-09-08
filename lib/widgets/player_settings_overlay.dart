@@ -36,12 +36,30 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
     final currentAudio = widget.controller.player.state.track.audio;
     final currentSubtitle = widget.controller.player.state.track.subtitle;
 
-    return Center(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
+    String getTrackName(dynamic track, int index) {
+      if (track.id == 'auto') return 'Auto';
+      if (track.id == 'no') return 'Off';
+
+      final title = track.title as String?;
+      final lang = track.language as String?;
+
+      if (title != null && title.trim().isNotEmpty && title.trim().toLowerCase() != 'unknown') {
+        return title.trim();
+      }
+      if (lang != null && lang.trim().isNotEmpty && lang.trim().toLowerCase() != 'unknown' && lang.trim().toLowerCase() != 'und') {
+        return lang.trim().toUpperCase();
+      }
+      return 'Track ${index + 1}';
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: Center(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
             constraints: BoxConstraints(
               maxWidth: MediaQuery.of(context).size.width * 0.7,
               maxHeight: MediaQuery.of(context).size.height * 0.8,
@@ -100,10 +118,11 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
                     Wrap(
                       spacing: 16,
                       runSpacing: 16,
-                      children: audioTracks.map((track) {
+                      children: audioTracks.asMap().entries.map((entry) {
+                        final track = entry.value;
                         final isSelected = currentAudio == track;
                         return _TrackChip(
-                          label: track.title ?? track.language ?? 'Unknown',
+                          label: getTrackName(track, entry.key),
                           isSelected: isSelected,
                           onPressed: () {
                             widget.controller.player.setAudioTrack(track);
@@ -120,11 +139,11 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
                     Wrap(
                       spacing: 16,
                       runSpacing: 16,
-                      children: subtitleTracks.map((track) {
+                      children: subtitleTracks.asMap().entries.map((entry) {
+                        final track = entry.value;
                         final isSelected = currentSubtitle == track;
-                        final name = track.title ?? track.language ?? 'Unknown';
                         return _TrackChip(
-                          label: track == SubtitleTrack.no() ? 'Off' : name,
+                          label: getTrackName(track, entry.key),
                           isSelected: isSelected,
                           onPressed: () {
                             widget.controller.player.setSubtitleTrack(track);
@@ -183,6 +202,7 @@ class _PlayerSettingsOverlayState extends State<PlayerSettingsOverlay> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

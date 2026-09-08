@@ -1,10 +1,15 @@
 import 'package:caffeine_core/caffeine_core.dart' as core;
+import 'dart:async';
+import 'dart:convert';
 import 'package:reelriot_tv/services/outage_service.dart';
 import 'package:reelriot_tv/services/player/caffeine_player_controller.dart';
 import 'package:reelriot_tv/constants.dart';
 import 'package:reelriot_tv/models/provider_load_state.dart';
 import 'package:reelriot_tv/screens/player_screen.dart';
+import 'dart:io' show Platform;
+import 'package:reelriot_tv/screens/embedded_web_player_screen.dart';
 import 'package:reelriot_tv/services/api_service.dart';
+import 'package:reelriot_tv/services/embed_stream_resolver.dart';
 import 'package:reelriot_tv/services/settings_service.dart';
 import 'package:reelriot_tv/services/subtitle_service.dart';
 import 'package:reelriot_tv/models/sub_languages.dart';
@@ -51,17 +56,22 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   final SettingsService _settings = SettingsService();
 
   final List<Map<String, String>> _providers = [
-    {'code': 'vidlink', 'name': 'VidLink'},
-    {'code': 'vixsrc', 'name': 'Vixsrc'},
-    {'code': 'vidsrcsu', 'name': 'Vidsrc.su'},
-    {'code': 'vidzee', 'name': 'Vidzee'},
+    {'code': 'vidsrcsu', 'name': 'VidSrc.su'},
+    {'code': 'vidzee', 'name': 'VidZee'},
+    {'code': 'vixsrc', 'name': 'VixSrc'},
     {'code': 'vidfun', 'name': 'VidFun'},
-    {'code': 'flixhq', 'name': 'FlixHQ'},
+    {'code': 'vidsrcme', 'name': 'VidSrc.me'},
+    {'code': 'nxsha', 'name': 'Nxsha'},
   ];
 
   late List<ProviderLoadState> _providerStates;
   int _currentProviderIndex = 0;
   bool _isDone = false;
+
+  // Remembers the last raw embed page URL we couldn't extract a direct
+  // stream from, so we can fall back to a visible embedded browser player
+  // if every provider fails to resolve.
+  String? _lastEmbedCandidateUrl;
 
   // Track current episode state for "Next Episode" looping
   int? _currentSeason;
@@ -207,246 +217,360 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     final nextEpData = await nextEpDataFuture;
     final qualityBadge = await qualityBadgeFuture;
 
+    // 2. Fetch all streams concurrently but stream the results
+    final StreamController<int> resultStream = StreamController<int>();
+    int completedCount = 0;
+    final List<core.ProviderStreamResponse?> responses = List.filled(_providers.length, null);
+    
     for (int i = 0; i < _providers.length; i++) {
-      if (!mounted) return;
-
-      // 1. Determine start position (cached for retries)
-      Duration? startPos;
-      if (_currentStartPosition != null) {
-        startPos = _currentStartPosition;
-      } else {
-        startPos = await _historyService.getSavedProgress(
-          mediaId!,
-          widget.movie != null,
-          season: _currentSeason,
-          episode: _currentEpisode,
-        );
-        // Cache it so subsequent provider retries use the same position
-        _currentStartPosition = startPos;
-      }
-
       final providerCode = _providers[i]['code']!;
       final providerName = _providers[i]['name']!;
-
+      
       setState(() {
-        _currentProviderIndex = i;
         _providerStates[i].status = ProviderStatus.loading;
       });
 
-      debugPrint(
-        '[VideoLoader] 🔍 Trying provider: $providerName ($providerCode) [${i + 1}/${_providers.length}]',
-      );
+      Future<core.ProviderStreamResponse?> fetchFuture;
+      if (widget.movie != null) {
+        fetchFuture = _api.fetchMovieStream(widget.movie!.id, provider: providerCode)
+            .then((res) => res as core.ProviderStreamResponse?);
+      } else {
+        fetchFuture = _api.fetchTvStream(widget.tvShow!.id, _currentSeason!, _currentEpisode!, provider: providerCode)
+            .then((res) => res as core.ProviderStreamResponse?);
+      }
 
-      try {
-        core.ProviderStreamResponse response;
-        if (widget.movie != null) {
-          response = await _api.fetchMovieStream(
-            widget.movie!.id,
-            provider: providerCode,
-          );
-        } else {
-          response = await _api.fetchTvStream(
-            widget.tvShow!.id,
-            _currentSeason!,
-            _currentEpisode!,
-            provider: providerCode,
-          );
-        }
+      fetchFuture.then((response) async {
+        if (response != null && response.success && response.links != null && response.links!.isNotEmpty) {
+          final rawLinks = List<core.ProviderStreamLink>.from(response.links!);
 
-        if (response.success &&
-            response.links != null &&
-            response.links!.isNotEmpty) {
-          debugPrint(
-            '[VideoLoader] ✅ Found ${response.links!.length} stream(s) from $providerName',
-          );
-          if (!mounted) return;
+          // Defensive filter: Only keep playable HLS (.m3u8), MP4 or proxied media stream URLs.
+          // Reject raw HTML iframe embed URLs (e.g. /embed/, web.nxsha.app) even if wrapped in a proxy URL.
+          response.links!.retainWhere((link) {
+            final isPlayable = _isPlayableMediaUrl(link.url, link.isM3U8);
+            if (!isPlayable) {
+              debugPrint('[VideoLoader] ⚠️ Filtering out unplayable/embed URL: ${link.url}');
+            }
+            return isPlayable;
+          });
 
-          // 1. Collect all potential subtitle links
-          List<core.SubtitleLink> allSubtitleLinks = [];
-
-          debugPrint(
-            '[VideoLoader] ℹ️ Subtitle Settings: useExternal=${_settings.useExternalSubtitles}, hasKey=${_settings.opensubtitlesKey.isNotEmpty}',
-          );
-
-          // External Subtitles (Prioritized)
-          if (_settings.useExternalSubtitles &&
-              _settings.opensubtitlesKey.isNotEmpty) {
-            debugPrint(
-              '[VideoLoader] 🔍 External subtitles enabled. Checking Open Subtitles...',
+          if (response.links!.isEmpty) {
+            // Nothing directly playable came back. On Android, try resolving a
+            // raw HTML embed page (e.g. vixsrc.to) into a real HLS stream via
+            // a hidden WebView before giving up on this provider. Tizen has no
+            // WebView implementation, so EmbedStreamResolver.resolve() is a
+            // no-op there and this just falls through to "failed" as before.
+            final embedCandidate = rawLinks.firstWhere(
+              (l) => l.url.trim().toLowerCase().startsWith('http'),
+              orElse: () => rawLinks.first,
             );
-            try {
-              final int tmdbId = widget.movie?.id ?? widget.tvShow!.id;
-              // Search for English, Spanish, and the user's default language
-              final validLangs = {
-                'en',
-                'es',
-                _settings.language,
-              }.where((l) => l.isNotEmpty).toSet();
-              final searchLangs = validLangs.join(',');
-
-              final extSubs = await _subtitleService.searchSubtitles(
-                tmdbId: tmdbId,
-                languageCode: searchLangs,
-                apiKey: _settings.opensubtitlesKey,
-                seasonNumber: _currentSeason,
-                episodeNumber: _currentEpisode,
-              );
-
-              if (extSubs.isNotEmpty) {
-                debugPrint(
-                  '[VideoLoader] ✅ Found ${extSubs.length} Open Subtitles. Adding top tracks...',
-                );
-
-                // Track added languages to ensure diversity (one best per lang)
-                final addedLangs = <String>{};
-                int addedCount = 0;
-
-                for (var sub in extSubs) {
-                  if (addedCount >= 4) break;
-
-                  final lang = sub.attr?.language ?? '';
-                  final fileId = sub.attr?.files?.first.fileId;
-
-                  if (fileId != null && !addedLangs.contains(lang)) {
-                    final downloadUrl = await _subtitleService.downloadSubtitle(
-                      fileId,
-                      _settings.opensubtitlesKey,
-                    );
-
-                    if (downloadUrl != null) {
-                      addedLangs.add(lang);
-                      addedCount++;
-                      allSubtitleLinks.add(
-                        core.SubtitleLink(
-                          file: downloadUrl,
-                          label:
-                              '${sub.attr?.languageName ?? lang} (OpenSubtitles)',
-                        ),
-                      );
-                    }
-                  }
-                }
+            _lastEmbedCandidateUrl = embedCandidate.url;
+            if (mounted) {
+              debugPrint('[VideoLoader] 🧩 Attempting embed resolution for $providerName: ${embedCandidate.url}');
+              final resolvedHls = await EmbedStreamResolver.resolve(context, embedCandidate.url);
+              if (resolvedHls != null && mounted) {
+                debugPrint('[VideoLoader] ✅ Resolved HLS for $providerName: $resolvedHls');
+                response.links!.add(core.ProviderStreamLink(
+                  server: embedCandidate.server,
+                  url: resolvedHls,
+                  isM3U8: true,
+                  quality: embedCandidate.quality,
+                  headers: embedCandidate.headers,
+                  subtitles: embedCandidate.subtitles,
+                ));
               }
-            } catch (e) {
-              debugPrint(
-                '[VideoLoader] ⚠️ External subtitle search failed: $e',
-              );
             }
           }
 
-          // Internal subtitles from provider (Fallback/Secondary)
-          if (response.links!.first.subtitles.isNotEmpty) {
-            debugPrint(
-              '[VideoLoader] 📝 Found ${response.links!.first.subtitles.length} internal subtitles',
-            );
-            allSubtitleLinks.addAll(response.links!.first.subtitles);
-          }
-
-          // 2. Parse and process all collected subtitles
-          final langIndex = supportedLanguages.indexWhere(
-            (l) => l.languageCode == _settings.language,
-          );
-          final defaultLanguage = langIndex != -1
-              ? supportedLanguages[langIndex].englishName
-              : 'English';
-
-          final List<CaffeinePlayerSubtitlesSource> subs = await VideoUtils.parseSubtitles(
-            subtitles: allSubtitleLinks,
-            defaultLanguage: defaultLanguage,
-            fetchAllLanguages: true, // TV app generally wants more choice
-            getSubtitleContent: _subtitleService.getSubtitleContent,
-          );
-
-          debugPrint(
-            '[VideoLoader] 🏁 Total processed subtitles: ${subs.length}',
-          );
-
-          if (!mounted) return;
-          setState(() {
-            _providerStates[i].status = ProviderStatus.success;
-            _isDone = true;
-          });
-
-          debugPrint(
-            '[VideoLoader] 🚀 Launching PlayerScreen with URL: ${response.links!.first.url}',
-          );
-          
-          final result = await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => PlayerScreen(
-                url: response.links!.first.url,
-                title: widget.movie?.title ?? widget.tvShow?.name ?? 'Video',
-                item: widget.movie ?? widget.tvShow,
-                isMovie: widget.movie != null,
-                season: _currentSeason,
-                episode: _currentEpisode,
-                episodeId: _currentEpisodeId,
-                episodeName: _currentEpisodeName,
-                nextEpisode: nextEpData,
-                startPosition: startPos,
-                providerCode: providerCode,
-                allProviders: _providers,
-                quality: qualityBadge,
-                headers: response.links!.first.headers,
-                externalSubtitles: subs,
-              ),
-            ),
-          );
-
-          if (result == true) {
-            debugPrint('[VideoLoader] 🔄 Player signaled fallback. Retrying...');
+          if (response.links!.isNotEmpty) {
+            responses[i] = response;
+            completedCount++;
+            if (!resultStream.isClosed) {
+               resultStream.add(i);
+            }
+            return;
+          } else {
+            debugPrint('[VideoLoader] ⚠️ Provider $providerName returned invalid streams.');
             if (mounted) {
               setState(() {
                 _providerStates[i].status = ProviderStatus.failed;
-                _isDone = false;
               });
-            }
-            continue; 
-          } else if (result is Map && result['action'] == 'next') {
-            debugPrint('[VideoLoader] ⏭️ Player signaled Next Episode.');
-            if (nextEpData != null && mounted) {
-              setState(() {
-                _currentSeason = nextEpData['season'];
-                _currentEpisode = nextEpData['episode'];
-                _currentEpisodeId = nextEpData['episodeId'];
-                _currentEpisodeName = nextEpData['episodeName'];
-                _currentStartPosition = null;
-              });
-              // Loop back to start loading the next one
-              _loadVideo();
-              return;
             }
           }
-
-          // User manually popped or finished video, so we also close the loader
-          debugPrint('[VideoLoader] 🔚 Player session ended. Closing loader.');
-          if (mounted) Navigator.of(context).pop();
-          return;
         } else {
-          debugPrint(
-            '[VideoLoader] ❌ Provider $providerName returned no links or success=false',
-          );
+          debugPrint('[VideoLoader] ❌ Provider $providerName returned no links or success=false');
           if (mounted) {
             setState(() {
               _providerStates[i].status = ProviderStatus.failed;
             });
           }
         }
-      } catch (e) {
+
+        completedCount++;
+        if (completedCount == _providers.length && !resultStream.isClosed) {
+          resultStream.add(-1);
+        }
+      }).catchError((e) {
         debugPrint('[VideoLoader] ⚠️ Error with provider $providerName: $e');
         if (mounted) {
           setState(() {
             _providerStates[i].status = ProviderStatus.failed;
           });
         }
-      }
+        completedCount++;
+        if (completedCount == _providers.length && !resultStream.isClosed) {
+          resultStream.add(-1);
+        }
+      });
     }
+
+    // Start a timer to cycle the loading text to mimic web app
+    Timer? cycleTimer = Timer.periodic(const Duration(milliseconds: 1500), (timer) {
+      if (mounted) {
+        setState(() {
+          _currentProviderIndex = (_currentProviderIndex + 1) % _providers.length;
+        });
+      } else {
+        timer.cancel();
+      }
+    });
+
+    // 1. Determine start position (cached for retries)
+    Duration? startPos;
+    if (_currentStartPosition != null) {
+      startPos = _currentStartPosition;
+    } else {
+      startPos = await _historyService.getSavedProgress(
+        mediaId!,
+        widget.movie != null,
+        season: _currentSeason,
+        episode: _currentEpisode,
+      );
+      // Cache it so subsequent provider retries use the same position
+      _currentStartPosition = startPos;
+    }
+
+    await for (final winningIndex in resultStream.stream) {
+      if (!mounted) break;
+      if (winningIndex == -1) {
+         break; // All failed
+      }
+
+      final providerCode = _providers[winningIndex]['code']!;
+      final providerName = _providers[winningIndex]['name']!;
+      final response = responses[winningIndex]!;
+
+      setState(() {
+        _currentProviderIndex = winningIndex;
+      });
+
+      debugPrint('[VideoLoader] ✅ Found ${response.links!.length} stream(s) from $providerName');
+
+      if (!mounted) return;
+
+      // 1. Collect all potential subtitle links
+      List<core.SubtitleLink> allSubtitleLinks = [];
+
+      debugPrint(
+        '[VideoLoader] ℹ️ Subtitle Settings: useExternal=${_settings.useExternalSubtitles}, hasKey=${_settings.opensubtitlesKey.isNotEmpty}',
+      );
+
+      // External Subtitles (Prioritized)
+      if (_settings.useExternalSubtitles &&
+          _settings.opensubtitlesKey.isNotEmpty) {
+        debugPrint(
+          '[VideoLoader] 🔍 External subtitles enabled. Checking Open Subtitles...',
+        );
+        try {
+          final int tmdbId = widget.movie?.id ?? widget.tvShow!.id;
+          // Search for English, Spanish, and the user's default language
+          final validLangs = {
+            'en',
+            'es',
+            _settings.language,
+          }.where((l) => l.isNotEmpty).toSet();
+          final searchLangs = validLangs.join(',');
+
+          final extSubs = await _subtitleService.searchSubtitles(
+            tmdbId: tmdbId,
+            languageCode: searchLangs,
+            apiKey: _settings.opensubtitlesKey,
+            seasonNumber: _currentSeason,
+            episodeNumber: _currentEpisode,
+          );
+
+          if (extSubs.isNotEmpty) {
+            debugPrint(
+              '[VideoLoader] ✅ Found ${extSubs.length} Open Subtitles. Adding top tracks...',
+            );
+
+            // Track added languages to ensure diversity (one best per lang)
+            final addedLangs = <String>{};
+            int addedCount = 0;
+
+            for (var sub in extSubs) {
+              if (addedCount >= 4) break;
+
+              final lang = sub.attr?.language ?? '';
+              final fileId = sub.attr?.files?.first.fileId;
+
+              if (fileId != null && !addedLangs.contains(lang)) {
+                final downloadUrl = await _subtitleService.downloadSubtitle(
+                  fileId,
+                  _settings.opensubtitlesKey,
+                );
+
+                if (downloadUrl != null) {
+                  addedLangs.add(lang);
+                  addedCount++;
+                  allSubtitleLinks.add(
+                    core.SubtitleLink(
+                      file: downloadUrl,
+                      label:
+                          '${sub.attr?.languageName ?? lang} (OpenSubtitles)',
+                    ),
+                  );
+                }
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint(
+            '[VideoLoader] ⚠️ External subtitle search failed: $e',
+          );
+        }
+      }
+
+      // Internal subtitles from provider (Fallback/Secondary)
+      if (response.links!.first.subtitles.isNotEmpty) {
+        debugPrint(
+          '[VideoLoader] 📝 Found ${response.links!.first.subtitles.length} internal subtitles',
+        );
+        allSubtitleLinks.addAll(response.links!.first.subtitles);
+      }
+
+      // 2. Parse and process all collected subtitles
+      final langIndex = supportedLanguages.indexWhere(
+        (l) => l.languageCode == _settings.language,
+      );
+      final defaultLanguage = langIndex != -1
+          ? supportedLanguages[langIndex].englishName
+          : 'English';
+
+      final List<CaffeinePlayerSubtitlesSource> subs = await VideoUtils.parseSubtitles(
+        subtitles: allSubtitleLinks,
+        defaultLanguage: defaultLanguage,
+        fetchAllLanguages: true, // TV app generally wants more choice
+        getSubtitleContent: _subtitleService.getSubtitleContent,
+      );
+
+      debugPrint(
+        '[VideoLoader] 🏁 Total processed subtitles: ${subs.length}',
+      );
+
+      if (!mounted) return;
+      
+      // Stop the cycling timer as soon as we succeed!
+      cycleTimer.cancel();
+      
+      setState(() {
+        _providerStates[winningIndex].status = ProviderStatus.success;
+        _isDone = true;
+      });
+
+      debugPrint(
+        '[VideoLoader] 🚀 Launching PlayerScreen with URL: ${response.links!.first.url}',
+      );
+      
+      final result = await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => PlayerScreen(
+            url: response.links!.first.url,
+            title: widget.movie?.title ?? widget.tvShow?.name ?? 'Video',
+            item: widget.movie ?? widget.tvShow,
+            isMovie: widget.movie != null,
+            season: _currentSeason,
+            episode: _currentEpisode,
+            episodeId: _currentEpisodeId,
+            episodeName: _currentEpisodeName,
+            nextEpisode: nextEpData,
+            startPosition: startPos,
+            providerCode: providerCode,
+            allProviders: _providers,
+            quality: qualityBadge,
+            headers: response.links!.first.headers,
+            externalSubtitles: subs,
+          ),
+        ),
+      );
+
+      if (result == true) {
+        debugPrint('[VideoLoader] 🔄 Player signaled fallback. Retrying...');
+        if (mounted) {
+          setState(() {
+            _providerStates[winningIndex].status = ProviderStatus.failed;
+            _isDone = false;
+          });
+        }
+        continue; 
+      } else if (result is Map && result['action'] == 'next') {
+        debugPrint('[VideoLoader] ⏭️ Player signaled Next Episode.');
+        if (nextEpData != null && mounted) {
+          setState(() {
+            _currentSeason = nextEpData['season'];
+            _currentEpisode = nextEpData['episode'];
+            _currentEpisodeId = nextEpData['episodeId'];
+            _currentEpisodeName = nextEpData['episodeName'];
+            _currentStartPosition = null;
+          });
+          // Loop back to start loading the next one
+          resultStream.close();
+          _loadVideo();
+          return;
+        }
+      }
+
+      // User manually popped or finished video, so we also close the loader
+      debugPrint('[VideoLoader] 🔚 Player session ended. Closing loader.');
+      resultStream.close();
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+
+    cycleTimer.cancel();
 
     if (mounted && !_isDone) {
       debugPrint(
         '[VideoLoader] 🚫 All providers failed to return a stream for $mediaName',
       );
       if (!mounted) return;
+
+      // Last resort: none of the providers gave us a directly playable link,
+      // but we saw at least one raw embed page load a working video inside
+      // it (we just couldn't extract the URL out of its isolated iframe).
+      // Show that page as the actual player instead of giving up.
+      if (Platform.isAndroid && _lastEmbedCandidateUrl != null) {
+        debugPrint(
+          '[VideoLoader] 🌐 Falling back to visible embedded player: $_lastEmbedCandidateUrl',
+        );
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => EmbeddedWebPlayerScreen(
+              url: _lastEmbedCandidateUrl!,
+              title: mediaName ?? 'Video',
+              item: widget.movie ?? widget.tvShow,
+              isMovie: widget.movie != null,
+              season: _currentSeason,
+              episode: _currentEpisode,
+              episodeId: _currentEpisodeId,
+              episodeName: _currentEpisodeName,
+              startPosition: startPos,
+            ),
+          ),
+        );
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No stream available from any provider')),
       );
@@ -597,5 +721,57 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
         ],
       ),
     );
+  }
+
+  bool _isPlayableMediaUrl(String rawUrl, bool? isM3U8) {
+    final lowerUrl = rawUrl.toLowerCase();
+    if (!lowerUrl.startsWith('http') && !lowerUrl.startsWith('/')) return false;
+
+    // Extract real target URL if proxied via /proxy/stream?url=...
+    String targetUrl = lowerUrl;
+    if (lowerUrl.contains('url=')) {
+      try {
+        final uri = Uri.parse(rawUrl);
+        final encodedTarget = uri.queryParameters['url'];
+        if (encodedTarget != null && encodedTarget.isNotEmpty) {
+          try {
+            final normalizedB64 = encodedTarget.replaceAll('-', '+').replaceAll('_', '/');
+            final padded = normalizedB64.padRight((normalizedB64.length + 3) & ~3, '=');
+            targetUrl = utf8.decode(base64.decode(padded)).toLowerCase();
+          } catch (_) {
+            targetUrl = Uri.decodeComponent(encodedTarget).toLowerCase();
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Check if the target is a raw HTML embed page (e.g. /embed/, web.nxsha.app, vidsrcme.ru).
+    // vixsrc.to/movie/{id} and vixsrc.to/tv/{id}/{s}/{e} are checked explicitly
+    // by pattern rather than relying on the API's isM3U8 flag: it's been
+    // observed to (incorrectly) report isM3U8: true for the TV path even
+    // though, like the movie path, it's always the raw HTML wrapper page.
+    final isEmbed = targetUrl.contains('/embed/') ||
+                    targetUrl.contains('embed.html') ||
+                    targetUrl.contains('web.nxsha.app') ||
+                    targetUrl.contains('vidsrcme.ru') ||
+                    targetUrl.contains('vixsrc.to/movie/') ||
+                    targetUrl.contains('vixsrc.to/tv/');
+
+    // Check if target is a valid direct media stream (.m3u8, .mp4, playlist)
+    final isDirectMedia = targetUrl.contains('.m3u8') ||
+                          targetUrl.contains('.mp4') ||
+                          targetUrl.contains('/proxy/stream/video.m3u8') ||
+                          targetUrl.contains('playlist') ||
+                          targetUrl.contains('/hls/');
+
+    if (isEmbed && !isDirectMedia) {
+      return false;
+    }
+
+    if (isM3U8 == false && !isDirectMedia) {
+      return false;
+    }
+
+    return true;
   }
 }

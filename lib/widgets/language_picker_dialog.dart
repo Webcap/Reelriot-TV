@@ -19,51 +19,54 @@ class _LanguagePickerDialogState extends State<LanguagePickerDialog> {
     // Filter out empty language (index 0)
     final languages = supportedLanguages.where((l) => l.languageCode.isNotEmpty).toList();
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.4,
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.95),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white24, width: 2),
+    return Material(
+      color: Colors.transparent,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.4,
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Select Language',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: 24),
-              Expanded(
-                child: ListView.builder(
-                  controller: _scrollController,
-                  itemCount: languages.length,
-                  itemBuilder: (context, index) {
-                    final lang = languages[index];
-                    return _LanguageItem(
-                      language: lang,
-                      isFocused: _focusedIndex == index,
-                      onFocusChange: (focused) {
-                        if (focused) {
-                          setState(() => _focusedIndex = index);
-                        }
-                      },
-                      onTap: () => Navigator.of(context).pop(lang.languageCode),
-                    );
-                  },
+          child: Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.95),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white24, width: 2),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Select Language',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 24),
+                Expanded(
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    itemCount: languages.length,
+                    itemBuilder: (context, index) {
+                      final lang = languages[index];
+                      return _LanguageItem(
+                        language: lang,
+                        isFocused: _focusedIndex == index,
+                        onFocusChange: (focused) {
+                          if (focused) {
+                            setState(() => _focusedIndex = index);
+                          }
+                        },
+                        onTap: () => Navigator.of(context).pop(lang.languageCode),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -26,7 +26,12 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> loadConfig() async {
-    return core.fetchConfig(caffeineBaseUrl, apiKey: caffeineApiKey);
+    return core.fetchConfig(
+      caffeineBaseUrl,
+      apiKey: caffeineApiKey,
+      platform: 'tv',
+      environment: environment,
+    );
   }
 
   /// Fetches the unified discovery feed (Community Trending, AI Picks, etc.)
@@ -49,6 +54,169 @@ class ApiService {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  /// Fetches server-computed watch-time stats (minutes watched per media
+  /// type) for the given user over the trailing [days] window. Returns
+  /// e.g. {'movies': {'minutes': 135}, 'tv': {'minutes': 420}}.
+  Future<Map<String, dynamic>> fetchWatchStats(String userId, {int days = 14}) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/watch-stats?days=$days';
+    final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 8));
+    if (res.statusCode != 200) {
+      throw Exception('Failed to load watch stats: ${res.statusCode}');
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return (data['stats'] as Map<String, dynamic>?) ?? {};
+  }
+
+  /// Invalidates the server-side watch-stats cache so the next
+  /// [fetchWatchStats] call reflects recently saved progress.
+  Future<void> invalidateWatchStatsCache(String userId) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/watch-stats/cache';
+    try {
+      await http.delete(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 8));
+    } catch (e) {
+      debugPrint('[ApiService] ⚠️ Failed to invalidate watch-stats cache: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Watch history: legacy /history (continue-watching progress + removal)
+  // ─────────────────────────────────────────────────────────────────────
+
+  /// Upserts continue-watching progress, or marks an item completed and logs
+  /// a playback_history_events row when `completed: true` or the elapsed/
+  /// duration ratio crosses the server's own completion threshold.
+  Future<Map<String, dynamic>> postHistory(String userId, Map<String, dynamic> body) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/history';
+    final res = await http
+        .post(Uri.parse(url), headers: {..._caffeineApiHeaders, 'Content-Type': 'application/json'}, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('postHistory failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Removes a single item (movie, or one episode when season_num/episode_num
+  /// are included) from continue-watching and playback_history_events.
+  Future<void> deleteHistory(String userId, Map<String, dynamic> body) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/history';
+    final res = await http
+        .delete(Uri.parse(url), headers: {..._caffeineApiHeaders, 'Content-Type': 'application/json'}, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200 && res.statusCode != 404) {
+      throw Exception('deleteHistory failed: ${res.statusCode}');
+    }
+  }
+
+  /// Unified chronological history: in-progress items plus one row per
+  /// completed play (no aggregate counter — count matching rows for a
+  /// rewatch count).
+  Future<Map<String, dynamic>> getHistory(String userId, {String? type, String? status, int limit = 100}) async {
+    final params = <String, String>{'limit': '$limit'};
+    if (type != null) params['type'] = type;
+    if (status != null) params['status'] = status;
+    final query = Uri(queryParameters: params).query;
+    final url = '$caffeineBaseUrl/v1/user/$userId/history?$query';
+    final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('getHistory failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Wipes all watch history (continue-watching + completed plays) for the user.
+  Future<void> deleteHistoryAll(String userId) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/history/all';
+    final res = await http.delete(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('deleteHistoryAll failed: ${res.statusCode}');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Watch history: scrobble lifecycle (real playback tracking)
+  // ─────────────────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> scrobbleStart(String userId, Map<String, dynamic> body) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/scrobble/start';
+    final res = await http
+        .post(Uri.parse(url), headers: {..._caffeineApiHeaders, 'Content-Type': 'application/json'}, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('scrobbleStart failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> scrobbleProgress(String userId, Map<String, dynamic> body) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/scrobble/progress';
+    final res = await http
+        .post(Uri.parse(url), headers: {..._caffeineApiHeaders, 'Content-Type': 'application/json'}, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('scrobbleProgress failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> scrobbleStop(String userId, Map<String, dynamic> body) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/scrobble/stop';
+    final res = await http
+        .post(Uri.parse(url), headers: {..._caffeineApiHeaders, 'Content-Type': 'application/json'}, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('scrobbleStop failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Watch history: /history/watches (Trakt-style manual "add a watch")
+  // ─────────────────────────────────────────────────────────────────────
+
+  /// Always logs a new watch event (never upserts) — used for manual
+  /// "mark as watched"/rewatch actions with no real playback session.
+  Future<Map<String, dynamic>> postHistoryWatch(String userId, Map<String, dynamic> body) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/history/watches';
+    final res = await http
+        .post(Uri.parse(url), headers: {..._caffeineApiHeaders, 'Content-Type': 'application/json'}, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('postHistoryWatch failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Lists individual logged watch events for one item, most recent first.
+  Future<Map<String, dynamic>> getHistoryWatches(
+    String userId, {
+    required String mediaType,
+    required int mediaId,
+    int? seasonNum,
+    int? episodeNum,
+  }) async {
+    final params = <String, String>{'media_type': mediaType, 'media_id': '$mediaId'};
+    if (seasonNum != null) params['season_num'] = '$seasonNum';
+    if (episodeNum != null) params['episode_num'] = '$episodeNum';
+    final query = Uri(queryParameters: params).query;
+    final url = '$caffeineBaseUrl/v1/user/$userId/history/watches?$query';
+    final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('getHistoryWatches failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Removes a single logged watch event; returns the new watch count.
+  Future<Map<String, dynamic>> deleteHistoryWatch(String userId, String watchId) async {
+    final url = '$caffeineBaseUrl/v1/user/$userId/history/watches/$watchId';
+    final res = await http.delete(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) {
+      throw Exception('deleteHistoryWatch failed: ${res.statusCode}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   /// TV App polls this to see if it's been linked.
   Future<http.Response> pollPairing(String code) async {
     final url = Uri.parse('$caffeineBaseUrl/tv/pair?code=${Uri.encodeComponent(code)}');
@@ -56,7 +224,12 @@ class ApiService {
   }
 
   /// Explicitly confirm pairing (usually done from phone/web, but here for completeness).
-  Future<http.Response> confirmPairing(String code, String accessToken, String refreshToken) async {
+  ///
+  /// Only the confirming device's own access token is needed — the backend
+  /// verifies it identifies a real session, then mints the TV an
+  /// independent magic-link token via the Admin API rather than forwarding
+  /// this device's tokens (see caffeine-api's /tv/pair/confirm).
+  Future<http.Response> confirmPairing(String code, String accessToken) async {
     final url = Uri.parse('$caffeineBaseUrl/tv/pair/confirm');
     return http.post(
       url,
@@ -64,7 +237,6 @@ class ApiService {
       body: jsonEncode({
         'code': code,
         'access_token': accessToken,
-        'refresh_token': refreshToken,
       }),
     ).timeout(const Duration(seconds: 10));
   }
@@ -196,9 +368,9 @@ class ApiService {
     return data['imdb_id'];
   }
 
-  Future<core.ProviderStreamResponse> fetchMovieStream(int movieId, {String provider = 'vixsrc'}) async {
+  Future<core.ProviderStreamResponse> fetchMovieStream(int movieId, {String provider = 'vidsrcsu'}) async {
     final url = core.Endpoints.streamMovieUrl(caffeineBaseUrl, provider, movieId.toString(), language: audioLanguage, country: region);
-    final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 30));
+    final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 60));
     if (res.statusCode != 200) {
       debugPrint('[ApiService] ❌ Movie stream fetch failed for $provider: ${res.statusCode} ${res.body}');
       throw Exception('Stream failed with status ${res.statusCode}');
@@ -207,9 +379,9 @@ class ApiService {
   }
 
   Future<core.ProviderStreamResponse> fetchTvStream(
-      int tmdbId, int season, int episode, {String provider = 'vixsrc'}) async {
+      int tmdbId, int season, int episode, {String provider = 'vidsrcsu'}) async {
     final url = core.Endpoints.streamTvUrl(caffeineBaseUrl, provider, tmdbId.toString(), season, episode, language: audioLanguage, country: region);
-    final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 30));
+    final res = await http.get(Uri.parse(url), headers: _caffeineApiHeaders).timeout(const Duration(seconds: 60));
     if (res.statusCode != 200) {
       debugPrint('[ApiService] ❌ TV stream fetch failed for $provider: ${res.statusCode} ${res.body}');
       throw Exception('Stream failed with status ${res.statusCode}');
@@ -263,47 +435,22 @@ class ApiService {
     return core.TvListResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
-  Future<bool> isDigitalRelease(int movieId) async {
+  /// Fetches media quality from the centralized Caffeine API (/v1/quality/:type/:id).
+  Future<String?> fetchMediaQuality(String type, int id) async {
     try {
-      final url = core.Endpoints.movieDetailsUrl(tmdbBaseUrl, _tmdbKey, movieId, language);
-      final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
-      if (res.statusCode != 200) return false;
-      
-      final data = jsonDecode(res.body);
-      final homepage = data['homepage'] as String? ?? '';
-      final productionCompanies = data['production_companies'] as List? ?? [];
-
-      const streamers = ["netflix.com", "amazon.com", "apple.com", "disneyplus.com", "hbomax.com", "paramountplus.com", "peacocktv.com"];
-      if (streamers.any((s) => homepage.contains(s))) return true;
-
-      const digitalStudios = ["Netflix", "Amazon Studios", "Apple", "Disney", "Paramount+", "Peacock", "Hulu", "HBO"];
-      if (productionCompanies.any((c) => digitalStudios.any((s) => (c['name'] as String).contains(s)))) return true;
-
-      // Also check release dates for type 4 (Digital) or 5 (Physical)
-      final releaseUrl = '$tmdbBaseUrl/movie/$movieId/release_dates?api_key=$_tmdbKey';
-      final releaseRes = await http.get(Uri.parse(releaseUrl)).timeout(const Duration(seconds: 10));
-      if (releaseRes.statusCode == 200) {
-        final releaseData = jsonDecode(releaseRes.body);
-        final results = releaseData['results'] as List? ?? [];
-        for (var country in results) {
-          final dates = country['release_dates'] as List? ?? [];
-          for (var d in dates) {
-            final type = d['type'] as int?;
-            if (type == 4 || type == 5) {
-              final releaseDateStr = d['release_date'] as String?;
-              if (releaseDateStr != null) {
-                final rDate = DateTime.parse(releaseDateStr);
-                if (rDate.isBefore(DateTime.now())) return true;
-              }
-            }
-          }
+      final url = core.Endpoints.qualityUrl(caffeineBaseUrl, type, id);
+      final res = await http
+          .get(Uri.parse(url), headers: _caffeineApiHeaders)
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        if (data['success'] == true && data['quality'] != null) {
+          return (data['quality'] as String).toUpperCase();
         }
       }
-
-      return false;
     } catch (e) {
-      debugPrint('[ApiService] Error checking digital release: $e');
-      return false;
+      debugPrint('[ApiService] Error fetching media quality for $type:$id: $e');
     }
+    return null;
   }
 }

@@ -3,8 +3,11 @@ import 'package:reelriot_tv/screens/home_screen.dart';
 import 'package:reelriot_tv/screens/movie_detail_screen.dart';
 import 'package:reelriot_tv/screens/tv_detail_screen.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/widgets/tv_skeleton_loader.dart';
 import 'package:reelriot_tv/widgets/long_press_focus.dart';
+import 'package:reelriot_tv/utils/auth_error_utils.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
+import 'package:reelriot_tv/utils/tv_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -91,6 +94,7 @@ class FavoritesScreenState extends State<FavoritesScreen>
     } catch (e) {
       debugPrint('Error fetching bookmarks: $e');
       setState(() => _error = 'Failed to load favorites');
+      await handleIfUnrecoverableAuthError(e);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -106,9 +110,7 @@ class FavoritesScreenState extends State<FavoritesScreen>
     }
 
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFFE60000)),
-      );
+      return const TvGridSkeleton(itemCount: 12);
     }
 
     if (_error != null) {
@@ -124,7 +126,7 @@ class FavoritesScreenState extends State<FavoritesScreen>
             ElevatedButton(
               onPressed: _fetchBookmarks,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE60000),
+                backgroundColor: TvSemanticColors.dangerDefault,
               ),
               child: const Text('Retry'),
             ),
@@ -203,6 +205,7 @@ class FavoritesScreenState extends State<FavoritesScreen>
             }
           },
           quality: QualityUtils.getQualityBadgeSync(
+            mediaId: item.id,
             releaseDate: isMovie
                 ? (item as MovieListItem).releaseDate
                 : (item as TvListItem).firstAirDate,
@@ -234,13 +237,7 @@ class FavoritesScreenState extends State<FavoritesScreen>
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 12),
-          const Text(
-            'Keep track of movies and shows you want to watch across all your devices.',
-            style: TextStyle(color: Colors.white54, fontSize: 16),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
           LongPressFocus(
             focusNode: _focusNode,
             onTap: () => Navigator.of(context).pushNamed('/pairing'),
