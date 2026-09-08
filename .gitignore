@@ -47,6 +47,11 @@ app.*.map.json
 .env.prod
 .env.dev
 
+# Key and signing files
+**/android/key.properties
+*.jks
+*.keystore
+
 #Openclaude
 .openclaude/
 .openclaude-profile.json
