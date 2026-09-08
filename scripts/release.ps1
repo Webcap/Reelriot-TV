@@ -39,6 +39,7 @@ param (
     [switch]$Clean,
     [switch]$SkipTests,
     [switch]$PublishGithub,
+    [switch]$SyncUpdateCenter,
     [string]$OutDir = 'build/outputs/releases'
 )
 
@@ -203,5 +204,16 @@ if ($PublishGithub) {
         Write-Host "Alternatively, push tag `v$AppVersion` to trigger the GitHub Actions release workflow:" -ForegroundColor Yellow
         Write-Host "  git tag v$AppVersion" -ForegroundColor Cyan
         Write-Host "  git push origin v$AppVersion" -ForegroundColor Cyan
+    }
+}
+
+# --- 6. Sync to ReelRiot Update Center (Optional) -----------------------------
+if ($SyncUpdateCenter) {
+    Write-Host "`nSyncing release metadata to ReelRiot Update Center..." -ForegroundColor Cyan
+    & dart tools/sync_update_center.dart --platform tv --environment $Flavor --version $AppVersion
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[OK] Update Center synced successfully." -ForegroundColor Green
+    } else {
+        Write-Warning "Update center sync completed with exit code $LASTEXITCODE."
     }
 }

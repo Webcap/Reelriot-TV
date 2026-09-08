@@ -218,3 +218,23 @@ jobs:
           files: dist/*
           draft: false
           prerelease: ${{ env.BUILD_FLAVOR == 'dev' }}
+
+      - name: Sync Release to ReelRiot Update Center
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CAFFEINE_API_URL: ${{ secrets.CAFFEINE_API_URL }}
+          CAFFEINE_API_KEY: ${{ secrets.CAFFEINE_API_KEY || secrets.ADMIN_SECRET }}
+        run: |
+          VERSION_RAW="${{ steps.organize_artifacts.outputs.APP_VERSION }}"
+          VERSION_CLEAN=$(echo "$VERSION_RAW" | tr '+' '_')
+          REPO_NAME="${{ github.repository }}"
+          DOWNLOAD_URL="https://github.com/${REPO_NAME}/releases/download/v${VERSION_RAW}/ReelriotTV-${BUILD_FLAVOR}-v${VERSION_CLEAN}-universal.apk"
+
+          dart tools/sync_update_center.dart \
+            --platform tv \
+            --environment "${BUILD_FLAVOR}" \
+            --version "${VERSION_RAW}" \
+            --download-url "${DOWNLOAD_URL}"
+
