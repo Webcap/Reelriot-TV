@@ -38,6 +38,7 @@ param (
 
     [switch]$Clean,
     [switch]$SkipTests,
+    [switch]$PublishGithub,
     [string]$OutDir = 'build/outputs/releases'
 )
 
@@ -181,3 +182,26 @@ foreach ($Artifact in $Artifacts) {
 }
 
 Write-Host "All done! Binaries located in $OutDir" -ForegroundColor Green
+
+# --- 5. Publish to GitHub Releases (Optional) ---------------------------------
+if ($PublishGithub) {
+    Write-Host "`nPublishing GitHub Release for v$AppVersion..." -ForegroundColor Cyan
+    $GhCmd = Get-Command -Name "gh" -ErrorAction SilentlyContinue
+    if ($null -ne $GhCmd) {
+        $Tag = "v$AppVersion"
+        $Title = "ReelRiot TV v$AppVersion ($Flavor)"
+        Write-Host "-> Creating release page with GitHub CLI..." -ForegroundColor Gray
+        & gh release create $Tag $Artifacts --title $Title --generate-notes
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[OK] GitHub Release published successfully for $Tag" -ForegroundColor Green
+        } else {
+            Write-Warning "Failed to publish GitHub release using GitHub CLI."
+        }
+    } else {
+        Write-Warning "GitHub CLI ('gh') was not found in PATH."
+        Write-Host "To publish automatically from local terminal, install gh (`winget install GitHub.cli`)." -ForegroundColor Yellow
+        Write-Host "Alternatively, push tag `v$AppVersion` to trigger the GitHub Actions release workflow:" -ForegroundColor Yellow
+        Write-Host "  git tag v$AppVersion" -ForegroundColor Cyan
+        Write-Host "  git push origin v$AppVersion" -ForegroundColor Cyan
+    }
+}
