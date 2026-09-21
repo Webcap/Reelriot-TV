@@ -17,6 +17,7 @@ class HomeMediaRow extends StatelessWidget {
   final Function(MovieListItem item) onLongPress;
   final int? index;
   final bool isSocial;
+  final bool isHoliday;
   final VoidCallback? onMoveUp;
 
   const HomeMediaRow({
@@ -27,6 +28,7 @@ class HomeMediaRow extends StatelessWidget {
     required this.onTap,
     required this.onLongPress,
     this.isSocial = false,
+    this.isHoliday = false,
     this.index,
     this.onMoveUp,
   });
@@ -52,6 +54,14 @@ class HomeMediaRow extends StatelessWidget {
               Icon(
                 Icons.trending_up,
                 color: DashboardTheme.signalRed,
+                size: s(22),
+              ),
+            ],
+            if (isHoliday) ...[
+              SizedBox(width: s(12)),
+              Icon(
+                Icons.auto_awesome,
+                color: const Color(0xFFF59E0B),
                 size: s(22),
               ),
             ],

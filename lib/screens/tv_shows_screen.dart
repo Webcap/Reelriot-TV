@@ -36,10 +36,14 @@ class _TvShowsScreenState extends State<TvShowsScreen> {
         region: _api.region,
       );
       
-      final List<DiscoverySection> parsedSections = (discovery['sections'] as List)
-          .map((s) => DiscoverySection.fromJson(s))
-          .where((s) => s.isEnabled && s.items.isNotEmpty)
-          .toList();
+      final rawSections = discovery['sections'] ?? discovery['rows'];
+      final List<DiscoverySection> parsedSections = rawSections is List
+          ? rawSections
+              .whereType<Map>()
+              .map((s) => DiscoverySection.fromJson(Map<String, dynamic>.from(s)))
+              .where((s) => s.isEnabled && s.items.isNotEmpty)
+              .toList()
+          : [];
 
       if (mounted) {
         setState(() {
