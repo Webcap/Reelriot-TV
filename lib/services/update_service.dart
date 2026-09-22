@@ -2,6 +2,7 @@ import 'package:caffeine_core/caffeine_core.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
+import 'package:reelriot_tv/services/analytics_service.dart';
 
 class UpdateService {
   static final UpdateService _instance = UpdateService._internal();
@@ -35,7 +36,9 @@ class UpdateService {
     _lastApiKey = apiKey;
 
     final packageInfo = await PackageInfo.fromPlatform();
-    final currentVersion = packageInfo.version;
+    final currentVersion = packageInfo.buildNumber.isNotEmpty && packageInfo.buildNumber != '0'
+        ? '${packageInfo.version}+${packageInfo.buildNumber}'
+        : packageInfo.version;
     final deviceId = await _getOrCreateDeviceId();
 
     // Fetch from new structured endpoint with version and device ID for rollouts
@@ -43,7 +46,7 @@ class UpdateService {
       caffeineApiUrl: caffeineApiUrl,
       platform: 'tv',
       environment: env,
-      clientVersion: currentVersion,
+      clientVersion: packageInfo.version,
       anonymousId: deviceId,
       apiKey: apiKey,
     );
@@ -58,7 +61,7 @@ class UpdateService {
     }
 
     final latestVersion = updateInfo.latestVersion;
-    final isUpdateAvailable = _isVersionHigher(latestVersion, currentVersion);
+    final isUpdateAvailable = isVersionHigher(latestVersion, currentVersion);
     
     debugPrint('[UpdateService] 🔍 Checking structured update: Current=$currentVersion, Latest=$latestVersion, Avail=$isUpdateAvailable');
 
@@ -86,6 +89,14 @@ class UpdateService {
       final packageInfo = await PackageInfo.fromPlatform();
       final deviceId = await _getOrCreateDeviceId();
 
+      // Dispatch to Mixpanel for product telemetry
+      AnalyticsService.instance.trackEvent('TV Update Telemetry', {
+        'event_type': eventType,
+        'client_version': packageInfo.version,
+        'is_forced': isForcedPrompt,
+      });
+
+      // Dispatch to Caffeine API for fleet telemetry
       await sendUpdateTelemetry(
         caffeineApiUrl: apiUrl,
         platform: 'tv',
@@ -100,20 +111,53 @@ class UpdateService {
     }
   }
 
-  bool _isVersionHigher(String latest, String current) {
-    try {
-      final latestParts = latest.split('.').map(int.parse).toList();
-      final currentParts = current.split('.').map(int.parse).toList();
+  /// Determines whether [latest] is strictly newer than [current].
+  /// Handles SemVer, CalVer, leading 'v', build metadata ('+'), and avoids downgrade loops.
+  bool isVersionHigher(String latest, String current) {
+    if (latest.isEmpty || current.isEmpty) return false;
 
-      for (var i = 0; i < latestParts.length; i++) {
-        if (i >= currentParts.length) return true;
-        if (latestParts[i] > currentParts[i]) return true;
-        if (latestParts[i] < currentParts[i]) return false;
+    // Normalize: strip leading 'v' / 'V' and trim whitespace
+    final cleanLatest = latest.trim().replaceFirst(RegExp(r'^[vV]'), '');
+    final cleanCurrent = current.trim().replaceFirst(RegExp(r'^[vV]'), '');
+
+    if (cleanLatest == cleanCurrent) return false;
+
+    try {
+      // Split base version from build metadata (e.g. "1.0.0+2" -> "1.0.0" and "2")
+      final latestParts = cleanLatest.split('+');
+      final currentParts = cleanCurrent.split('+');
+
+      final latestBase = latestParts[0].split('.').map((e) => int.tryParse(e) ?? 0).toList();
+      final currentBase = currentParts[0].split('.').map((e) => int.tryParse(e) ?? 0).toList();
+
+      final maxLen = latestBase.length > currentBase.length ? latestBase.length : currentBase.length;
+
+      for (var i = 0; i < maxLen; i++) {
+        final l = i < latestBase.length ? latestBase[i] : 0;
+        final c = i < currentBase.length ? currentBase[i] : 0;
+        if (l > c) return true;
+        if (l < c) return false;
       }
+
+      // Base numbers are equal: check build numbers if present
+      final lBuildStr = latestParts.length > 1 ? latestParts[1] : null;
+      final cBuildStr = currentParts.length > 1 ? currentParts[1] : null;
+
+      if (lBuildStr != null && cBuildStr != null) {
+        final lBuild = int.tryParse(lBuildStr);
+        final cBuild = int.tryParse(cBuildStr);
+        if (lBuild != null && cBuild != null) {
+          return lBuild > cBuild;
+        }
+        return lBuildStr.compareTo(cBuildStr) > 0;
+      } else if (lBuildStr != null && cBuildStr == null) {
+        return true;
+      }
+
       return false;
     } catch (e) {
-      // Fallback to simple string comparison or return false if invalid
-      return latest != current;
+      debugPrint('[UpdateService] Error comparing versions: $e');
+      return false;
     }
   }
 }

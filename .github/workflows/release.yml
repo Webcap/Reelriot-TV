@@ -82,6 +82,7 @@ jobs:
     env:
       BUILD_FLAVOR: ${{ inputs.flavor || 'prod' }}
       BUILD_TARGET: ${{ inputs.build_target || 'all' }}
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4

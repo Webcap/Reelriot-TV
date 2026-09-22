@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../env.dart';
+import '../env.dart' as env;
 import 'dart:ui' as ui;
 import 'analytics_service.dart';
 import 'ad_service.dart';
@@ -66,8 +66,14 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  String _opensubtitlesKey = opensubtitlesApiKey;
+  String _opensubtitlesKey = env.opensubtitlesApiKey;
   String get opensubtitlesKey => _opensubtitlesKey;
+
+  String _pairingPageUrl = env.pairingPageUrl;
+  String get pairingPageUrl => _pairingPageUrl;
+
+  String _mixpanelApiKey = env.mixpanelApiKey;
+  String get mixpanelApiKey => _mixpanelApiKey;
   
   bool _useExternalSubtitles = true;
   bool get useExternalSubtitles => _useExternalSubtitles;
@@ -103,8 +109,16 @@ class SettingsService extends ChangeNotifier {
     _simulateAds = (config['simulate_ads'] == true ||
             config['simulate_ads'].toString().toLowerCase() == 'true');
 
-    if (config['opensubtitles_key'] != null) {
-      _opensubtitlesKey = config['opensubtitles_key'];
+    final osKey = config['opensubtitles_key'] ??
+        config['opensubtitles_api_key'] ??
+        config['OPENSUBTITLES_API_KEY'];
+    if (osKey != null && osKey.toString().isNotEmpty) {
+      _opensubtitlesKey = osKey.toString();
+    }
+
+    final pUrl = config['pairing_page_url'] ?? config['PAIRING_PAGE_URL'];
+    if (pUrl != null && pUrl.toString().isNotEmpty) {
+      _pairingPageUrl = pUrl.toString();
     }
 
     if (config['use_external_subtitles'] != null) {
@@ -112,8 +126,12 @@ class SettingsService extends ChangeNotifier {
       _prefs.setBool(_keyUseExternalSubtitles, _useExternalSubtitles);
     }
 
-    if (config['mixpanel_token'] != null && config['mixpanel_token'].toString().isNotEmpty) {
-      AnalyticsService.instance.initialize(config['mixpanel_token'].toString());
+    final mpToken = config['mixpanel_api_key'] ??
+        config['mixpanel_token'] ??
+        config['MIXPANEL_API_KEY'];
+    if (mpToken != null && mpToken.toString().isNotEmpty) {
+      _mixpanelApiKey = mpToken.toString();
+      AnalyticsService.instance.initialize(_mixpanelApiKey);
     }
 
     AdService.instance.updateEnabledStatus(_adsEnabled);

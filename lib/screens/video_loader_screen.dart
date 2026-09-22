@@ -22,6 +22,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:reelriot_tv/utils/wakelock_manager.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
+import 'package:reelriot_tv/env.dart';
 
 class VideoLoaderScreen extends StatefulWidget {
   final core.MovieDetail? movie;
@@ -437,6 +438,31 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
           debugPrint(
             '[VideoLoader] ⚠️ External subtitle search failed: $e',
           );
+        }
+      }
+
+      // Caffeine API Subtitles (Direct Platform Fallback)
+      if (allSubtitleLinks.isEmpty && _settings.useExternalSubtitles) {
+        try {
+          final int tmdbId = widget.movie?.id ?? widget.tvShow!.id;
+          final apiSubs = await _subtitleService.searchSubtitlesFromCaffeineApi(
+            caffeineBaseUrl: caffeineApiUrl,
+            tmdbId: tmdbId,
+            languageCode: _settings.language.isNotEmpty ? _settings.language : 'en',
+            seasonNumber: _currentSeason,
+            episodeNumber: _currentEpisode,
+            apiKey: caffeineApiKey,
+          );
+          for (var sub in apiSubs) {
+            allSubtitleLinks.add(
+              core.SubtitleLink(
+                file: sub.url,
+                label: '${sub.label} (ReelRiot)',
+              ),
+            );
+          }
+        } catch (e) {
+          debugPrint('[VideoLoader] ⚠️ Caffeine API subtitle search failed: $e');
         }
       }
 
