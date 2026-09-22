@@ -120,9 +120,9 @@ jobs:
           SUPABASE_URL=${{ secrets.SUPABASE_URL }}
           SUPABASE_ANNON_KEY=${{ secrets.SUPABASE_ANNON_KEY }}
           TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
-          PAIRING_PAGE_URL=${{ secrets.PAIRING_PAGE_URL || 'https://reelriot.app/tv-pair' }}
-          MIXPANEL_API_KEY=${{ secrets.MIXPANEL_API_KEY }}
-          OPENSUBTITLES_API_KEY=${{ secrets.OPENSUBTITLES_API_KEY }}
+          PAIRING_PAGE_URL=https://reelriot.app/tv-pair
+          MIXPANEL_API_KEY=
+          OPENSUBTITLES_API_KEY=
           EOF
           cp "$ENV_FILE" .env
 
@@ -149,9 +149,9 @@ jobs:
         if: env.KEYSTORE_BASE64 != ''
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'reelriot' }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'reelriot2026' }}
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'reelriot2026' }}
+          KEY_ALIAS: 'reelriot'
+          KEY_PASSWORD: 'reelriot2026'
+          STORE_PASSWORD: 'reelriot2026'
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > android/app/reelriot-release.jks
           cat << EOF > android/key.properties
@@ -244,10 +244,8 @@ jobs:
       - name: Sync Release to ReelRiot Update Center
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           CAFFEINE_API_URL: ${{ secrets.CAFFEINE_API_URL }}
-          CAFFEINE_API_KEY: ${{ secrets.CAFFEINE_API_KEY || secrets.ADMIN_SECRET }}
+          CAFFEINE_API_KEY: ${{ secrets.CAFFEINE_API_KEY }}
         run: |
           VERSION_RAW="${{ steps.organize_artifacts.outputs.APP_VERSION }}"
           VERSION_CLEAN=$(echo "$VERSION_RAW" | tr '+' '_')

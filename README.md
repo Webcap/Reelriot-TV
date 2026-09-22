@@ -29,20 +29,32 @@ flutter run --flavor dev -t lib/main_dev.dart
 flutter run --flavor prod -t lib/main_prod.dart
 ```
 
-### Production with Profile
+### TV Beta & Profile Mode (Production)
+
+> [!IMPORTANT]
+> All TV Beta verification must be executed using the `prod` flavor and the `--profile` flag. This ensures the application connects to production endpoints with Ahead-Of-Time (AOT) compilation while maintaining diagnostic performance telemetry on target TV hardware.
+
+#### 1. Run Beta Build on Connected TV / Emulator
 ```bash
 flutter run --flavor prod -t lib/main_prod.dart --profile
 ```
 
-### Production with Profile and Release
+#### 2. Clean Install for Fresh Beta Verification
+Use this procedure when testing fresh database synchronization or clean companion pairing:
 ```bash
-flutter clean; flutter pub get
+flutter clean && flutter pub get
 flutter run --flavor prod -t lib/main_prod.dart --profile --uninstall-first
-
 ```
 
+#### 3. Compile Standalone Profile APK for Sideload Testing
+To generate a distributable profile-mode APK for beta testers:
+```bash
+flutter build apk --flavor prod -t lib/main_prod.dart --profile
+```
+*Output path: `build/app/outputs/flutter-apk/app-prod-profile.apk`*
+
 > [!NOTE]
-> Using `flutter run` without flags will use the default `main.dart` and `.env`, but it is recommended to use the flavor commands above for consistent environment separation.
+> Using `flutter run` without flags defaults to `main.dart` and `.env`. Always supply `--flavor prod -t lib/main_prod.dart` to maintain strict environment separation.
 
 ## Getting Started
 
