@@ -22,6 +22,11 @@ abstract class DashboardTheme {
   // full-bleed screens).
   static const Color canvasBlack = Color(0xFF000000);
 
+  // Secondary, faintly blue-tinted near-black canvas for detail/"cinematic"
+  // screens — a deliberate atmospheric variant of canvasBlack, not a
+  // substitute for it.
+  static const Color canvasCool = Color(0xFF0B0F14);
+
   // Neutral surfaces — plain dark grays, no material metaphor. Used for
   // cards before artwork loads, panels, and the nav rail.
   static const Color surface = Color(0xFF181818);

@@ -3,6 +3,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'package:reelriot_tv/services/analytics_service.dart';
+import 'package:reelriot_tv/services/beta_service.dart';
+import 'package:uuid/uuid.dart';
 
 class UpdateService {
   static final UpdateService _instance = UpdateService._internal();
@@ -13,25 +15,44 @@ class UpdateService {
   String? _lastApiKey;
   String? _deviceId;
 
+  /// Timestamp of the last successful update check, used to enforce the
+  /// 4-hour re-check cooldown and prevent redundant telemetry per session.
+  DateTime? _lastUpdateCheck;
+
+  /// Returns true when enough time has passed to warrant a fresh check.
+  bool get shouldRecheck {
+    if (_lastUpdateCheck == null) return true;
+    return DateTime.now().difference(_lastUpdateCheck!) > const Duration(hours: 4);
+  }
+
   Future<String> _getOrCreateDeviceId() async {
     if (_deviceId != null) return _deviceId!;
     try {
       final prefs = await SharedPreferences.getInstance();
       String? id = prefs.getString('tv_anonymous_device_id');
       if (id == null || id.isEmpty) {
-        id = 'tv_anon_${DateTime.now().millisecondsSinceEpoch}_${(1000 + (DateTime.now().microsecondsSinceEpoch % 9000))}';
+        // Use UUID v4 for cryptographically strong uniqueness.
+        // The old timestamp+modulo approach had only ~9000 unique values
+        // and could collide across devices starting simultaneously.
+        id = 'tv_${const Uuid().v4()}';
         await prefs.setString('tv_anonymous_device_id', id);
       }
       _deviceId = id;
       return id;
     } catch (_) {
-      return 'tv_anon_fallback';
+      // Even the fallback uses UUID so no two devices share a bucket.
+      return 'tv_${const Uuid().v4()}';
     }
   }
 
   /// Compares current version with latest version using the new structured API.
-  Future<UpdateInfo> checkForUpdate(String caffeineApiUrl,
-      {String env = 'prod', String? apiKey}) async {
+  Future<UpdateInfo> checkForUpdate(
+    String caffeineApiUrl, {
+    String env = 'prod',
+    String? buildChannel,
+    String? betaKey,
+    String? apiKey,
+  }) async {
     _lastCaffeineApiUrl = caffeineApiUrl;
     _lastApiKey = apiKey;
 
@@ -41,11 +62,17 @@ class UpdateService {
         : packageInfo.version;
     final deviceId = await _getOrCreateDeviceId();
 
-    // Fetch from new structured endpoint with version and device ID for rollouts
+    // Determine target build channel and key
+    final targetChannel = buildChannel ?? await BetaService.getBuildChannel();
+    final targetKey = betaKey ?? await BetaService.getBetaKey();
+
+    // Fetch from new structured endpoint with version, channel, and device ID for rollouts
     final updateInfo = await fetchUpdateInfo(
       caffeineApiUrl: caffeineApiUrl,
       platform: 'tv',
       environment: env,
+      buildChannel: targetChannel,
+      betaKey: targetKey,
       clientVersion: packageInfo.version,
       anonymousId: deviceId,
       apiKey: apiKey,
@@ -57,13 +84,15 @@ class UpdateService {
         latestVersion: currentVersion,
         currentVersion: currentVersion,
         isForced: false,
+        buildChannel: targetChannel,
       );
     }
 
     final latestVersion = updateInfo.latestVersion;
     final isUpdateAvailable = isVersionHigher(latestVersion, currentVersion);
     
-    debugPrint('[UpdateService] 🔍 Checking structured update: Current=$currentVersion, Latest=$latestVersion, Avail=$isUpdateAvailable');
+    debugPrint('[UpdateService] 🔍 Checking structured update: Channel=$targetChannel, Current=$currentVersion, Latest=$latestVersion, Avail=$isUpdateAvailable');
+    _lastUpdateCheck = DateTime.now();
 
     return UpdateInfo(
       isUpdateAvailable: isUpdateAvailable,
@@ -72,6 +101,9 @@ class UpdateService {
       isForced: updateInfo.isForced,
       downloadUrl: updateInfo.downloadUrl,
       changelog: updateInfo.changelog,
+      buildChannel: updateInfo.buildChannel,
+      releaseTag: updateInfo.releaseTag,
+      buildNotes: updateInfo.buildNotes,
     );
   }
 
@@ -169,6 +201,9 @@ class UpdateInfo {
   final bool isForced;
   final String? downloadUrl;
   final String? changelog;
+  final String buildChannel;
+  final String? releaseTag;
+  final String? buildNotes;
 
   UpdateInfo({
     required this.isUpdateAvailable,
@@ -177,5 +212,8 @@ class UpdateInfo {
     required this.isForced,
     this.downloadUrl,
     this.changelog,
+    this.buildChannel = 'stable',
+    this.releaseTag,
+    this.buildNotes,
   });
 }

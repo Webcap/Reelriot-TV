@@ -110,7 +110,7 @@ class HomeContinueWatchingRow extends StatelessWidget {
         ),
         SizedBox(height: s(12)),
         SizedBox(
-          height: s(245),
+          height: s(268),
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             primary: false,
@@ -121,7 +121,15 @@ class HomeContinueWatchingRow extends StatelessWidget {
               final isMovie = h['type'] == 'movie';
               final mediaId = h['media_id'] as int;
 
+              final isLast = index == history.length - 1;
               KeyEventResult handleCardKey(FocusNode node, KeyEvent event) {
+                if (isLast && TvKeys.isRight(event.logicalKey)) {
+                  if (event is KeyDownEvent) {
+                    SystemSound.play(SystemSoundType.click);
+                    HapticFeedback.lightImpact();
+                  }
+                  return KeyEventResult.handled;
+                }
                 if (onMoveUp != null &&
                     event is KeyDownEvent &&
                     TvKeys.isUp(event.logicalKey)) {
@@ -148,7 +156,7 @@ class HomeContinueWatchingRow extends StatelessWidget {
                   isMovie: isMovie,
                   releaseDate: h['release_date'] as String?,
                   showTitle: false,
-                  onKeyEvent: onMoveUp != null ? handleCardKey : null,
+                  onKeyEvent: (onMoveUp != null || isLast) ? handleCardKey : null,
                 ),
               );
             },

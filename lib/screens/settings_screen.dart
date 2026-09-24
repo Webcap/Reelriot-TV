@@ -9,6 +9,7 @@ import '../services/api_service.dart';
 import '../services/update_service.dart';
 import '../env.dart';
 import 'update_screen.dart';
+import 'dev_build_settings_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/auth_error_utils.dart';
 import '../utils/avatar_utils.dart';
@@ -851,6 +852,42 @@ class SettingsScreenState extends State<SettingsScreen> {
                   SizedBox(width: s(16)),
                   Text(
                     'Check for Updates',
+                    style: TextStyle(
+                      color: focused ? Colors.black : Colors.white,
+                      fontSize: s(22),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ),
+        SizedBox(height: s(24)),
+        LongPressFocus(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const DevBuildSettingsScreen(),
+              ),
+            );
+          },
+          child: Builder(builder: (context) {
+            final focused = Focus.of(context).hasFocus;
+            return Container(
+              padding: EdgeInsets.symmetric(horizontal: s(32), vertical: s(24)),
+              decoration: BoxDecoration(
+                color: focused ? Colors.white : Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(s(12)),
+                border: Border.all(color: focused ? Colors.white : Colors.white24, width: 2),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.science_outlined, color: focused ? Colors.black : Colors.white, size: s(24)),
+                  SizedBox(width: s(16)),
+                  Text(
+                    'Build Channels (Beta & Dev)',
                     style: TextStyle(
                       color: focused ? Colors.black : Colors.white,
                       fontSize: s(22),

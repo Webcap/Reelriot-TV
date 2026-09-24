@@ -572,6 +572,12 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
   Future<void> _checkForUpdate() async {
     if (SettingsService().isOffline) return;
+    // Skip if the singleton already ran a check recently (e.g. splash screen).
+    // This prevents double version_check telemetry per session.
+    if (!UpdateService().shouldRecheck) {
+      debugPrint('[HomeScreen] ⏩ Skipping update check — within 4-hour cooldown');
+      return;
+    }
     try {
       final config = await _api.loadConfig();
       SettingsService().updateFromConfig(config);

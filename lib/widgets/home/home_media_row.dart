@@ -1,12 +1,14 @@
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:reelriot_tv/screens/see_more_screen.dart';
 import 'package:reelriot_tv/theme/dashboard_theme.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:reelriot_tv/widgets/native_ad_poster_card.dart' as native;
 import 'package:reelriot_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/widgets/see_more_poster_card.dart';
 import '../../models/ad.dart' as model;
 
 class HomeMediaRow extends StatelessWidget {
@@ -19,6 +21,8 @@ class HomeMediaRow extends StatelessWidget {
   final bool isSocial;
   final bool isHoliday;
   final VoidCallback? onMoveUp;
+  final bool showSeeMore;
+  final VoidCallback? onSeeMore;
 
   const HomeMediaRow({
     super.key,
@@ -31,12 +35,17 @@ class HomeMediaRow extends StatelessWidget {
     this.isHoliday = false,
     this.index,
     this.onMoveUp,
+    this.showSeeMore = true,
+    this.onSeeMore,
   });
 
   @override
   Widget build(BuildContext context) {
     if (items == null || items!.isEmpty) return const SizedBox.shrink();
     double s(double v) => ResponsiveUtils.scale(context, v);
+
+    final shouldAppendSeeMore = showSeeMore && items!.length >= 4;
+    final totalCount = shouldAppendSeeMore ? items!.length + 1 : items!.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -71,24 +80,68 @@ class HomeMediaRow extends StatelessWidget {
 
         // Horizontal Shelf Cards
         SizedBox(
-          height: s(245),
+          height: s(268),
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             primary: false,
             clipBehavior: Clip.none,
-            itemCount: items!.length,
+            itemCount: totalCount,
             itemBuilder: (context, index) {
-              final m = items![index];
+              final isLastCard = index == totalCount - 1;
               KeyEventResult handleCardKey(FocusNode node, KeyEvent event) {
-                if (onMoveUp != null &&
-                    event is KeyDownEvent &&
-                    TvKeys.isUp(event.logicalKey)) {
-                  onMoveUp!();
+                if (isLastCard && TvKeys.isRight(event.logicalKey)) {
+                  if (event is KeyDownEvent) {
+                    SystemSound.play(SystemSoundType.click);
+                    HapticFeedback.lightImpact();
+                  }
+                  return KeyEventResult.handled;
+                }
+                if (onMoveUp != null && TvKeys.isUp(event.logicalKey)) {
+                  if (event is KeyDownEvent) {
+                    onMoveUp!();
+                  }
                   return KeyEventResult.handled;
                 }
                 return KeyEventResult.ignored;
               }
 
+              // Render SeeMorePosterCard at the end of the row
+              if (index == items!.length) {
+                return Padding(
+                  padding: EdgeInsets.only(right: s(16)),
+                  child: SeeMorePosterCard(
+                    title: title,
+                    onTap: () {
+                      if (onSeeMore != null) {
+                        onSeeMore!();
+                      } else {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => SeeMoreScreen(
+                              title: title,
+                              items: items!,
+                              isMovie: items!.first.mediaType != 'tv',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    onKeyEvent: onMoveUp != null
+                        ? (node, event) {
+                            if (TvKeys.isUp(event.logicalKey)) {
+                              if (event is KeyDownEvent) {
+                                onMoveUp!();
+                              }
+                              return KeyEventResult.handled;
+                            }
+                            return KeyEventResult.ignored;
+                          }
+                        : null,
+                  ),
+                );
+              }
+
+              final m = items![index];
               return Padding(
                 padding: EdgeInsets.only(right: s(16)),
                 child: m.isSponsored
@@ -102,7 +155,7 @@ class HomeMediaRow extends StatelessWidget {
                           link: 'https://reelriot.app',
                           placement: 'poster',
                         ),
-                        onKeyEvent: onMoveUp != null ? handleCardKey : null,
+                        onKeyEvent: (onMoveUp != null || isLastCard) ? handleCardKey : null,
                       )
                     : PosterCard(
                         posterPath: m.posterPath,
@@ -120,7 +173,7 @@ class HomeMediaRow extends StatelessWidget {
                         isMovie: m.mediaType != 'tv',
                         releaseDate: m.releaseDate,
                         showTitle: false,
-                        onKeyEvent: onMoveUp != null ? handleCardKey : null,
+                        onKeyEvent: (onMoveUp != null || isLastCard) ? handleCardKey : null,
                       ),
               );
             },

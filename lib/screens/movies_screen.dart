@@ -1,10 +1,14 @@
 import 'package:caffeine_core/caffeine_core.dart';
 import 'package:reelriot_tv/screens/movie_detail_screen.dart';
+import 'package:reelriot_tv/screens/see_more_screen.dart';
 import 'package:reelriot_tv/services/api_service.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/widgets/see_more_poster_card.dart';
 import 'package:reelriot_tv/widgets/tv_skeleton_loader.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reelriot_tv/models/discovery_section.dart';
 
@@ -104,24 +108,61 @@ class _MoviesScreenState extends State<MoviesScreen> {
           ),
           const SizedBox(height: 16),
           SizedBox(
-            height: 230,
+            height: 268,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              itemCount: items.length,
+              clipBehavior: Clip.none,
+              itemCount: items.length >= 4 ? items.length + 1 : items.length,
               itemBuilder: (context, index) {
+                if (index == items.length) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: SeeMorePosterCard(
+                      title: title,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => SeeMoreScreen(
+                              title: title,
+                              items: items,
+                              isMovie: true,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                }
                 final m = items[index];
-                return PosterCard(
-                  posterPath: m.posterPath,
-                  title: m.title ?? 'Movie',
-                  onTap: () => _openDetail(m.id),
-                  quality: QualityUtils.getQualityBadgeSync(
+                final isLast = items.length < 4 && index == items.length - 1;
+
+                return Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: PosterCard(
+                    posterPath: m.posterPath,
+                    title: m.title ?? 'Movie',
+                    onTap: () => _openDetail(m.id),
+                    quality: QualityUtils.getQualityBadgeSync(
+                      mediaId: m.id,
+                      releaseDate: m.releaseDate,
+                      isMovie: true,
+                    ),
                     mediaId: m.id,
-                    releaseDate: m.releaseDate,
                     isMovie: true,
+                    releaseDate: m.releaseDate,
+                    onKeyEvent: isLast
+                        ? (node, event) {
+                            if (TvKeys.isRight(event.logicalKey)) {
+                              if (event is KeyDownEvent) {
+                                SystemSound.play(SystemSoundType.click);
+                                HapticFeedback.lightImpact();
+                              }
+                              return KeyEventResult.handled;
+                            }
+                            return KeyEventResult.ignored;
+                          }
+                        : null,
                   ),
-                  mediaId: m.id,
-                  isMovie: true,
-                  releaseDate: m.releaseDate,
                 );
               },
             ),

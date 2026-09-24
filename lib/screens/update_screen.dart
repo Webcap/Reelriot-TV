@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -77,6 +78,16 @@ class _UpdateScreenState extends State<UpdateScreen> {
     );
 
     final client = http.Client();
+    // Hard timeout: close the connection if the full download takes > 10 minutes.
+    // This prevents indefinite hangs on poor TV network conditions.
+    Timer? downloadTimeoutTimer;
+    bool timedOut = false;
+    downloadTimeoutTimer = Timer(const Duration(minutes: 10), () {
+      timedOut = true;
+      client.close();
+      debugPrint('[UpdateScreen] ⏱️ Download timed out after 10 minutes, aborting.');
+    });
+
     try {
       final request = http.Request('GET', Uri.parse(widget.updateInfo.downloadUrl!));
       final response = await client.send(request);
@@ -108,9 +119,18 @@ class _UpdateScreenState extends State<UpdateScreen> {
 
       await sink.flush();
       await sink.close();
+      downloadTimeoutTimer.cancel();
       client.close();
 
       if (!mounted) return;
+
+      if (timedOut) {
+        setState(() {
+          _state = _DownloadState.error;
+          _errorMessage = 'Download timed out. Please check your connection.';
+        });
+        return;
+      }
 
       setState(() {
         _state = _DownloadState.installing;
@@ -131,12 +151,15 @@ class _UpdateScreenState extends State<UpdateScreen> {
         }
       }
     } catch (e) {
+      downloadTimeoutTimer.cancel();
       client.close();
       debugPrint('[UpdateScreen] Update error: $e');
       if (mounted) {
         setState(() {
           _state = _DownloadState.error;
-          _errorMessage = 'Download failed. Please try again.';
+          _errorMessage = timedOut
+              ? 'Download timed out. Please check your connection.'
+              : 'Download failed. Please try again.';
         });
       }
     }
