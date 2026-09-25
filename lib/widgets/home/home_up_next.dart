@@ -38,7 +38,7 @@ class HomeUpNextRow extends StatelessWidget {
         ),
         SizedBox(height: s(12)),
         SizedBox(
-          height: s(245),
+          height: s(268),
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             primary: false,
@@ -46,7 +46,15 @@ class HomeUpNextRow extends StatelessWidget {
             itemCount: watchingShows.length,
             itemBuilder: (context, index) {
               final show = watchingShows[index];
+              final isLast = index == watchingShows.length - 1;
               KeyEventResult handleCardKey(FocusNode node, KeyEvent event) {
+                if (isLast && TvKeys.isRight(event.logicalKey)) {
+                  if (event is KeyDownEvent) {
+                    SystemSound.play(SystemSoundType.click);
+                    HapticFeedback.lightImpact();
+                  }
+                  return KeyEventResult.handled;
+                }
                 if (onMoveUp != null &&
                     event is KeyDownEvent &&
                     TvKeys.isUp(event.logicalKey)) {
@@ -67,7 +75,7 @@ class HomeUpNextRow extends StatelessWidget {
                   mediaId: show['id'] as int,
                   isMovie: false,
                   showTitle: false,
-                  onKeyEvent: onMoveUp != null ? handleCardKey : null,
+                  onKeyEvent: (onMoveUp != null || isLast) ? handleCardKey : null,
                 ),
               );
             },

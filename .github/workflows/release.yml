@@ -20,8 +20,27 @@ on:
           - 'all'
           - 'apk'
           - 'appbundle'
+      bump_build_number:
+        description: 'Auto-bump build number (+1)'
+        required: false
+        default: true
+        type: boolean
       release_notes:
         description: 'Custom release notes / changelog'
+        required: false
+        default: ''
+        type: string
+      channel:
+        description: 'Target build channel'
+        required: false
+        default: 'stable'
+        type: choice
+        options:
+          - 'stable'
+          - 'beta'
+          - 'dev'
+      beta_key:
+        description: 'Optional beta access key'
         required: false
         default: ''
         type: string
@@ -77,6 +96,7 @@ jobs:
     env:
       BUILD_FLAVOR: ${{ inputs.flavor || 'prod' }}
       BUILD_TARGET: ${{ inputs.build_target || 'all' }}
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -114,22 +134,38 @@ jobs:
           SUPABASE_URL=${{ secrets.SUPABASE_URL }}
           SUPABASE_ANNON_KEY=${{ secrets.SUPABASE_ANNON_KEY }}
           TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
-          PAIRING_PAGE_URL=${{ secrets.PAIRING_PAGE_URL || 'https://reelriot.app/tv-pair' }}
-          MIXPANEL_API_KEY=${{ secrets.MIXPANEL_API_KEY }}
-          OPENSUBTITLES_API_KEY=${{ secrets.OPENSUBTITLES_API_KEY }}
+          PAIRING_PAGE_URL=https://reelriot.app/tv-pair
+          MIXPANEL_API_KEY=
+          OPENSUBTITLES_API_KEY=
           EOF
           cp "$ENV_FILE" .env
 
       - name: Restore Dependencies
         run: flutter pub get
 
+      - name: Auto-bump Build Number
+        if: ${{ inputs.bump_build_number }}
+        run: dart run tools/build_number_gen.dart
+
+      - name: Resolve Target Build Version
+        id: version_info
+        run: |
+          VERSION_RAW=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d '\r\n')
+          VERSION_NAME=$(echo "$VERSION_RAW" | cut -d'+' -f1)
+          BUILD_NUM=$(echo "$VERSION_RAW" | cut -d'+' -f2)
+          if [ "$BUILD_NUM" = "$VERSION_RAW" ]; then BUILD_NUM="1"; fi
+          echo "APP_VERSION=$VERSION_RAW" >> $GITHUB_OUTPUT
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "BUILD_NUM=$BUILD_NUM" >> $GITHUB_OUTPUT
+          echo "-> Resolved Target Version: $VERSION_RAW (Name: $VERSION_NAME, Code: $BUILD_NUM)"
+
       - name: Configure Keystore & Signing Properties
         if: env.KEYSTORE_BASE64 != ''
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'reelriot' }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'reelriot2026' }}
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'reelriot2026' }}
+          KEY_ALIAS: 'reelriot'
+          KEY_PASSWORD: 'reelriot2026'
+          STORE_PASSWORD: 'reelriot2026'
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > android/app/reelriot-release.jks
           cat << EOF > android/key.properties
@@ -144,21 +180,21 @@ jobs:
         run: |
           TARGET_ENTRY="lib/main_prod.dart"
           if [ "$BUILD_FLAVOR" = "dev" ]; then TARGET_ENTRY="lib/main_dev.dart"; fi
-          flutter build appbundle --flavor "$BUILD_FLAVOR" -t "$TARGET_ENTRY" --release
+          flutter build appbundle --flavor "$BUILD_FLAVOR" -t "$TARGET_ENTRY" --release --build-name "${{ steps.version_info.outputs.VERSION_NAME }}" --build-number "${{ steps.version_info.outputs.BUILD_NUM }}"
 
       - name: Build Universal APK
         if: env.BUILD_TARGET == 'all' || env.BUILD_TARGET == 'apk'
         run: |
           TARGET_ENTRY="lib/main_prod.dart"
           if [ "$BUILD_FLAVOR" = "dev" ]; then TARGET_ENTRY="lib/main_dev.dart"; fi
-          flutter build apk --flavor "$BUILD_FLAVOR" -t "$TARGET_ENTRY" --release
+          flutter build apk --flavor "$BUILD_FLAVOR" -t "$TARGET_ENTRY" --release --build-name "${{ steps.version_info.outputs.VERSION_NAME }}" --build-number "${{ steps.version_info.outputs.BUILD_NUM }}"
 
       - name: Build Split-per-ABI APKs
         if: env.BUILD_TARGET == 'all' || env.BUILD_TARGET == 'apk'
         run: |
           TARGET_ENTRY="lib/main_prod.dart"
           if [ "$BUILD_FLAVOR" = "dev" ]; then TARGET_ENTRY="lib/main_dev.dart"; fi
-          flutter build apk --flavor "$BUILD_FLAVOR" -t "$TARGET_ENTRY" --release --split-per-abi
+          flutter build apk --flavor "$BUILD_FLAVOR" -t "$TARGET_ENTRY" --release --split-per-abi --build-name "${{ steps.version_info.outputs.VERSION_NAME }}" --build-number "${{ steps.version_info.outputs.BUILD_NUM }}"
 
       - name: Organize & Standardize Release Artifacts
         id: organize_artifacts
@@ -218,3 +254,33 @@ jobs:
           files: dist/*
           draft: false
           prerelease: ${{ env.BUILD_FLAVOR == 'dev' }}
+
+      - name: Sync Release to ReelRiot Update Center
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        env:
+          CAFFEINE_API_URL: ${{ secrets.CAFFEINE_API_URL }}
+          CAFFEINE_API_KEY: ${{ secrets.CAFFEINE_API_KEY }}
+          BETA_ACCESS_KEY: ${{ inputs.beta_key }}
+        run: |
+          VERSION_RAW="${{ steps.organize_artifacts.outputs.APP_VERSION }}"
+          VERSION_CLEAN=$(echo "$VERSION_RAW" | tr '+' '_')
+          REPO_NAME="${{ github.repository }}"
+          DOWNLOAD_URL="https://github.com/${REPO_NAME}/releases/download/v${VERSION_RAW}/ReelriotTV-${BUILD_FLAVOR}-v${VERSION_CLEAN}-universal.apk"
+          TARGET_CHANNEL="${{ inputs.channel || (contains(github.ref_name, 'beta') && 'beta' || 'stable') }}"
+
+          dart tools/sync_update_center.dart \
+            --platform tv \
+            --environment "${BUILD_FLAVOR}" \
+            --channel "${TARGET_CHANNEL}" \
+            --version "${VERSION_RAW}" \
+            --download-url "${DOWNLOAD_URL}" \
+            --release-tag "${{ steps.organize_artifacts.outputs.TAG_NAME }}"
+
+      - name: Commit Bumped Version to Repository
+        if: ${{ inputs.bump_build_number && github.event_name == 'workflow_dispatch' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pubspec.yaml
+          git diff --staged --quiet || (git commit -m "chore(release): bump build number to ${{ steps.version_info.outputs.APP_VERSION }}" && git push origin HEAD:${{ github.ref }})
+

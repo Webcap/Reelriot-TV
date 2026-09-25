@@ -36,9 +36,13 @@ param (
     [ValidateSet('Apk', 'SplitApk', 'AppBundle', 'All')]
     [string]$Target = 'Apk',
 
+    [switch]$BumpVersion,
+    [switch]$CalVer,
+    [int]$BuildNumber = 0,
     [switch]$Clean,
     [switch]$SkipTests,
     [switch]$PublishGithub,
+    [switch]$SyncUpdateCenter,
     [string]$OutDir = 'build/outputs/releases'
 )
 
@@ -87,28 +91,43 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error "flutter pub get failed with exit code $LASTEXITCODE"
 }
 
-# Resolve version from pubspec.yaml
+# --- 3. Build Version Management ---------------------------------------------
+Write-Host "`n[3/5] Resolving build version..." -ForegroundColor Cyan
+if ($BumpVersion -or $CalVer -or $BuildNumber -gt 0) {
+    $bumpArgs = @("run", "tools/build_number_gen.dart")
+    if ($CalVer) { $bumpArgs += "--calver" }
+    if ($BuildNumber -gt 0) { $bumpArgs += @("--build", "$BuildNumber") }
+    & dart @bumpArgs
+    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to bump build number." }
+} else {
+    & dart run tools/build_number_gen.dart --sync
+}
+
 $PubspecContent = Get-Content "pubspec.yaml" -Raw
 if ($PubspecContent -match 'version:\s*([^\r\n]+)') {
     $AppVersion = $matches[1].Trim()
 } else {
-    $AppVersion = "unknown"
+    $AppVersion = "1.0.0+1"
 }
-Write-Host "-> Target Version: $AppVersion" -ForegroundColor Green
 
-# --- 3. Quality Gate ----------------------------------------------------------
+$VersionName = ($AppVersion -split '\+')[0]
+$BuildNumberParsed = if ($AppVersion -match '\+(\d+)') { $matches[1] } else { "1" }
+
+Write-Host "-> Target Version : $AppVersion (Name: $VersionName, Code: $BuildNumberParsed)" -ForegroundColor Green
+
+# --- 4. Quality Gate ----------------------------------------------------------
 if (-not $SkipTests) {
-    Write-Host "`n[3/4] Running Quality Gate (flutter analyze)..." -ForegroundColor Cyan
+    Write-Host "`n[4/5] Running Quality Gate (flutter analyze)..." -ForegroundColor Cyan
     & flutter analyze
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Static analysis failed. Fix issues before creating a release build."
     }
 } else {
-    Write-Host "`n[3/4] Quality Gate skipped (-SkipTests specified)." -ForegroundColor Yellow
+    Write-Host "`n[4/5] Quality Gate skipped (-SkipTests specified)." -ForegroundColor Yellow
 }
 
-# --- 4. Compilation -----------------------------------------------------------
-Write-Host "`n[4/4] Compiling release binaries..." -ForegroundColor Cyan
+# --- 5. Compilation -----------------------------------------------------------
+Write-Host "`n[5/5] Compiling release binaries..." -ForegroundColor Cyan
 
 $EntryPoint = if ($Flavor -eq 'dev') { "lib/main_dev.dart" } else { "lib/main_prod.dart" }
 $SanitizedVersion = $AppVersion -replace '\+', '_'
@@ -123,7 +142,7 @@ $Artifacts = @()
 # Build Universal APK
 if ($Target -eq 'All' -or $Target -eq 'Apk') {
     Write-Host "-> Building Universal APK for $Flavor..." -ForegroundColor Yellow
-    & flutter build apk --flavor $Flavor -t $EntryPoint --release
+    & flutter build apk --flavor $Flavor -t $EntryPoint --release --build-name $VersionName --build-number $BuildNumberParsed
     if ($LASTEXITCODE -ne 0) { Write-Error "Universal APK build failed." }
 
     $SrcApk = "build/app/outputs/flutter-apk/app-$Flavor-release.apk"
@@ -137,7 +156,7 @@ if ($Target -eq 'All' -or $Target -eq 'Apk') {
 # Build Split-per-ABI APKs
 if ($Target -eq 'All' -or $Target -eq 'SplitApk') {
     Write-Host "-> Building Split-per-ABI APKs for $Flavor..." -ForegroundColor Yellow
-    & flutter build apk --flavor $Flavor -t $EntryPoint --release --split-per-abi
+    & flutter build apk --flavor $Flavor -t $EntryPoint --release --split-per-abi --build-name $VersionName --build-number $BuildNumberParsed
     if ($LASTEXITCODE -ne 0) { Write-Error "Split APK build failed." }
 
     $Abis = @('arm64-v8a', 'armeabi-v7a', 'x86_64')
@@ -154,7 +173,7 @@ if ($Target -eq 'All' -or $Target -eq 'SplitApk') {
 # Build AppBundle (AAB)
 if ($Target -eq 'All' -or $Target -eq 'AppBundle') {
     Write-Host "-> Building AppBundle (.aab) for $Flavor..." -ForegroundColor Yellow
-    & flutter build appbundle --flavor $Flavor -t $EntryPoint --release
+    & flutter build appbundle --flavor $Flavor -t $EntryPoint --release --build-name $VersionName --build-number $BuildNumberParsed
     if ($LASTEXITCODE -ne 0) { Write-Error "AppBundle build failed." }
 
     $SrcAab = "build/app/outputs/bundle/${Flavor}Release/app-$Flavor-release.aab"
@@ -203,5 +222,16 @@ if ($PublishGithub) {
         Write-Host "Alternatively, push tag `v$AppVersion` to trigger the GitHub Actions release workflow:" -ForegroundColor Yellow
         Write-Host "  git tag v$AppVersion" -ForegroundColor Cyan
         Write-Host "  git push origin v$AppVersion" -ForegroundColor Cyan
+    }
+}
+
+# --- 6. Sync to ReelRiot Update Center (Optional) -----------------------------
+if ($SyncUpdateCenter) {
+    Write-Host "`nSyncing release metadata to ReelRiot Update Center..." -ForegroundColor Cyan
+    & dart tools/sync_update_center.dart --platform tv --environment $Flavor --version $AppVersion
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[OK] Update Center synced successfully." -ForegroundColor Green
+    } else {
+        Write-Warning "Update center sync completed with exit code $LASTEXITCODE."
     }
 }

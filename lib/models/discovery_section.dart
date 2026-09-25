@@ -32,7 +32,12 @@ class DiscoverySection {
       type: json['type'] ?? '',
       mediaType: json['mediaType'] ?? '',
       isEnabled: enabled,
-      items: (json['items'] as List).map((i) => MovieListItem.fromJson(i as Map<String, dynamic>)).toList(),
+      items: json['items'] is List
+          ? (json['items'] as List)
+              .whereType<Map>()
+              .map((i) => MovieListItem.fromJson(Map<String, dynamic>.from(i)))
+              .toList()
+          : [],
     );
   }
 }

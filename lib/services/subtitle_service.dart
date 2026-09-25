@@ -120,4 +120,63 @@ class SubtitleService {
 
     return null;
   }
+
+  /// Fetches subtitles directly from Caffeine API (/subtitles/movie or /subtitles/tv).
+  /// This endpoint proxies free, multi-language WebVTT subtitles.
+  Future<List<SubtitleTrackInfo>> searchSubtitlesFromCaffeineApi({
+    required String caffeineBaseUrl,
+    required int tmdbId,
+    required String languageCode,
+    int? seasonNumber,
+    int? episodeNumber,
+    String? apiKey,
+  }) async {
+    if (tmdbId == 0) return [];
+    final base = caffeineBaseUrl.replaceFirst(RegExp(r'/$'), '');
+    final String path = (seasonNumber != null && episodeNumber != null)
+        ? '$base/subtitles/tv?tmdbId=$tmdbId&season=$seasonNumber&episode=$episodeNumber&language=$languageCode'
+        : '$base/subtitles/movie?tmdbId=$tmdbId&language=$languageCode';
+
+    try {
+      final headers = <String, String>{
+        'Accept': 'application/json',
+        'User-Agent': 'caffeine_tv v1.0.0',
+      };
+      if (apiKey != null && apiKey.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $apiKey';
+      }
+
+      final response = await http.get(Uri.parse(path), headers: headers).timeout(const Duration(seconds: 10));
+      if (response.statusCode != 200) return [];
+
+      final data = jsonDecode(response.body);
+      if (data is Map<String, dynamic> && data['subtitles'] is List) {
+        final list = data['subtitles'] as List;
+        return list.map((item) {
+          final m = item as Map<String, dynamic>;
+          return SubtitleTrackInfo(
+            url: m['url']?.toString() ?? '',
+            lang: m['lang']?.toString() ?? 'en',
+            label: m['label']?.toString() ?? 'Subtitle',
+          );
+        }).where((t) => t.url.isNotEmpty).toList();
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
 }
+
+class SubtitleTrackInfo {
+  final String url;
+  final String lang;
+  final String label;
+
+  const SubtitleTrackInfo({
+    required this.url,
+    required this.lang,
+    required this.label,
+  });
+}
+

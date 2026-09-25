@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:reelriot_tv/env.dart';
+import 'package:reelriot_tv/services/settings_service.dart';
 import 'package:reelriot_tv/theme/dashboard_theme.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/widgets/long_press_focus.dart';
@@ -53,7 +54,12 @@ class _PairingScreenState extends State<PairingScreen> {
   void initState() {
     super.initState();
     // Proactive check: if we somehow landed here with a session, go home immediately.
-    final session = Supabase.instance.client.auth.currentSession;
+    Session? session;
+    try {
+      session = Supabase.instance.client.auth.currentSession;
+    } catch (_) {
+      // Supabase not initialized (e.g. unit/widget test environment)
+    }
     if (session != null) {
       _log('Proactive check: Session found, navigating home');
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -217,8 +223,11 @@ class _PairingScreenState extends State<PairingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final servicePairingUrl = SettingsService().pairingPageUrl;
     final effectivePairingPageUrl = widget.pairingPageUrl ??
-        (pairingPageUrl.isEmpty ? 'reelriot.app/activate' : pairingPageUrl);
+        (servicePairingUrl.isNotEmpty
+            ? servicePairingUrl
+            : (pairingPageUrl.isEmpty ? 'reelriot.app/activate' : pairingPageUrl));
     double s(double v) => ResponsiveUtils.scale(context, v);
 
     Widget content;

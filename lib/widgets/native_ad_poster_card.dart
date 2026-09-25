@@ -21,10 +21,12 @@ class NativeAdPosterCard extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
     double s(double v) => (v * screenWidth) / 1920;
 
-    final cardWidth = s(140);
-    final cardHeight = s(210);
+    final cardWidth = s(153);
+    final cardHeight = s(230);
 
-    return LongPressFocus(
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: LongPressFocus(
       onKeyEvent: onKeyEvent,
       onTap: () async {
         final url = Uri.parse(ad.link);
@@ -72,8 +74,9 @@ class NativeAdPosterCard extends StatelessWidget {
           );
         },
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildImage() {
     Widget image;

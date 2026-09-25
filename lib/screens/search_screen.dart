@@ -3,17 +3,29 @@ import 'package:reelriot_tv/screens/home_screen.dart';
 import 'package:reelriot_tv/screens/movie_detail_screen.dart';
 import 'package:reelriot_tv/screens/tv_detail_screen.dart';
 import 'package:reelriot_tv/services/api_service.dart';
-import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reelriot_tv/services/ad_service.dart';
-import 'package:reelriot_tv/constants.dart';
 import 'package:reelriot_tv/theme/dashboard_theme.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
+import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/utils/tv_colors.dart';
+import 'package:reelriot_tv/widgets/long_press_focus.dart';
+import 'package:reelriot_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/widgets/section_header.dart';
 import 'package:reelriot_tv/widgets/tv_skeleton_loader.dart';
+
+// Search — canon direction (see dashboard_theme.dart).
+//
+// Previous version was two unstyled columns floating on bare black: a
+// keyboard with no visual container, and results as a description-heavy
+// vertical list unique to this screen. This redesign panelizes the input
+// side (search bar + keyboard live inside one bordered surface, matching
+// the rest of the app's card language) and replaces the list with the
+// same PosterCard grid every other browse screen (Favorites, Genre, Home
+// rows) already uses — search results should look like the app, not like
+// a bespoke results page.
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -67,15 +79,15 @@ class SearchScreenState extends State<SearchScreen> {
     if (query.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     final history = prefs.getStringList('search_history') ?? [];
-    
+
     // Remove if exists and add to front
     history.removeWhere((q) => q.toLowerCase() == query.toLowerCase());
     history.insert(0, query);
-    
+
     // Keep last 10
     final limited = history.take(10).toList();
     await prefs.setStringList('search_history', limited);
-    
+
     if (mounted) {
       setState(() {
         _history = limited;
@@ -131,69 +143,65 @@ class SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    double s(double v) => ResponsiveUtils.scale(context, v);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 32),
+      padding: EdgeInsets.fromLTRB(s(48), s(32), s(48), s(32)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Search',
-            style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: s(32),
+              fontWeight: FontWeight.bold,
+            ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: s(24)),
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Left Column: Keyboard + Search Bar
                 SizedBox(
-                  width: 480,
-                  child: Column(
-                    children: [
-                      _buildSearchBar(),
-                      const SizedBox(height: 16),
-                      Expanded(
-                        child: _VirtualKeyboard(
-                          onKeyPress: (key) {
-                            setState(() {
-                              _queryController.text += key;
-                            });
-                            _onQueryChanged();
-                          },
-                          onBackspace: () {
-                            if (_queryController.text.isNotEmpty) {
-                              setState(() {
-                                _queryController.text = _queryController.text
-                                    .substring(0, _queryController.text.length - 1);
-                              });
-                              _onQueryChanged();
-                            }
-                          },
-                          onClear: () {
-                            setState(() {
-                              _queryController.clear();
-                              _movies = null;
-                              _tv = null;
-                            });
-                          },
-                          onSearch: _search,
-                        ),
-                      ),
-                    ],
+                  width: s(560),
+                  child: _SearchPanel(
+                    s: s,
+                    searchNode: _searchNode,
+                    controller: _queryController,
+                    onKeyPress: (key) {
+                      setState(() {
+                        _queryController.text += key;
+                      });
+                      _onQueryChanged();
+                    },
+                    onBackspace: () {
+                      if (_queryController.text.isNotEmpty) {
+                        setState(() {
+                          _queryController.text = _queryController.text
+                              .substring(0, _queryController.text.length - 1);
+                        });
+                        _onQueryChanged();
+                      }
+                    },
+                    onClear: () {
+                      setState(() {
+                        _queryController.clear();
+                        _movies = null;
+                        _tv = null;
+                      });
+                    },
+                    onSearch: _search,
                   ),
                 ),
-                const SizedBox(width: 64),
-                // Right Column: Results
-                Expanded(
-                  child: _buildResultsSection(),
-                ),
+                SizedBox(width: s(56)),
+                Expanded(child: _buildResultsSection(s)),
               ],
             ),
           ),
           if (AdService.instance.isBannerLoaded)
             Center(
               child: Container(
-                margin: const EdgeInsets.only(top: 16),
+                margin: EdgeInsets.only(top: s(16)),
                 child: AdService.instance.getBannerAd(),
               ),
             ),
@@ -202,46 +210,9 @@ class SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildSearchBar() {
-    return Focus(
-      focusNode: _searchNode,
-      child: Builder(
-        builder: (context) {
-          final focused = Focus.of(context).hasFocus;
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: focused ? const Color(0xFFEC1D24) : Colors.white10,
-                width: 2,
-              ),
-              color: const Color(0xFF111111),
-            ),
-            child: TextField(
-              controller: _queryController,
-              readOnly: true,
-              showCursor: true,
-              cursorColor: const Color(0xFFDC2626),
-              cursorWidth: 3,
-              style: const TextStyle(color: Colors.white, fontSize: 20),
-              decoration: InputDecoration(
-                hintText: 'Search',
-                hintStyle: TextStyle(color: Colors.grey[600]),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                border: InputBorder.none,
-                prefixIcon: const Icon(Icons.search, color: Colors.white54),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildResultsSection() {
+  Widget _buildResultsSection(double Function(double) s) {
     if (_loading) {
-      return const TvSearchResultsSkeleton(tileCount: 5);
+      return _SearchGridSkeleton(s: s);
     }
     if (_error != null) {
       return Center(child: Text(_error!, style: const TextStyle(color: TvSemanticColors.dangerDefault)));
@@ -251,104 +222,224 @@ class SearchScreenState extends State<SearchScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (_history.isNotEmpty) ...[
-            const Text(
-              'Recent Searches',
-              style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
+            SectionHeader(title: 'RECENT SEARCHES', s: s),
+            SizedBox(height: s(20)),
             Wrap(
-              spacing: 12,
-              runSpacing: 12,
+              spacing: s(12),
+              runSpacing: s(12),
               children: _history.map((q) => _HistoryPill(
                 label: q,
+                s: s,
                 onTap: () {
                   _queryController.text = q;
                   _search();
                 },
               )).toList(),
             ),
-            const SizedBox(height: 48),
           ],
-          const Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.search, size: 80, color: Colors.white10),
-                SizedBox(height: 16),
-                Text(
-                  'Search to discover content',
-                  style: TextStyle(color: Colors.white30, fontSize: 18),
-                ),
-              ],
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.search_rounded, size: s(88), color: Colors.white10),
+                  SizedBox(height: s(20)),
+                  Text(
+                    'Search to discover movies and shows',
+                    style: TextStyle(color: Colors.white30, fontSize: s(22)),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
       );
     }
     if (_movies!.isEmpty && _tv!.isEmpty) {
-      return const Center(child: Text('No results found', style: TextStyle(color: Colors.white54, fontSize: 18)));
+      return Center(
+        child: Text(
+          'No results found',
+          style: TextStyle(color: Colors.white54, fontSize: s(22)),
+        ),
+      );
     }
 
-    return ListView(
-      children: [
-        if (_movies!.isNotEmpty) ...[
-          const Text('Movies', style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          ..._movies!.map((m) => _ResultTile(
-            item: m,
-            onTap: () async {
-              if (_isProcessing) return;
-              _isProcessing = true;
-              try {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => MovieDetailScreen(movieId: m.id)),
-                );
-                if (mounted && context.mounted) {
-                  HomeScreenState.of(context)?.setIndex(1);
-                }
-              } finally {
-                _isProcessing = false;
-                if (mounted) setState(() {});
-              }
-            },
-          )),
-          const SizedBox(height: 32),
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_movies!.isNotEmpty) ...[
+            SectionHeader(title: 'MOVIES', s: s),
+            SizedBox(height: s(20)),
+            _buildResultsGrid(_movies!, isMovie: true, s: s),
+            SizedBox(height: s(40)),
+          ],
+          if (_tv!.isNotEmpty) ...[
+            SectionHeader(title: 'TV SHOWS', s: s),
+            SizedBox(height: s(20)),
+            _buildResultsGrid(_tv!, isMovie: false, s: s),
+          ],
         ],
-        if (_tv!.isNotEmpty) ...[
-          const Text('TV Shows', style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          ..._tv!.map((t) => _ResultTile(
-            item: t,
-            onTap: () async {
-              if (_isProcessing) return;
-              _isProcessing = true;
-              try {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: t.id)),
-                );
-                if (mounted && context.mounted) {
-                  HomeScreenState.of(context)?.setIndex(1);
-                }
-              } finally {
-                _isProcessing = false;
-                if (mounted) setState(() {});
+      ),
+    );
+  }
+
+  Widget _buildResultsGrid(List<dynamic> items, {required bool isMovie, required double Function(double) s}) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: s(240),
+        childAspectRatio: 0.6,
+        crossAxisSpacing: s(28),
+        mainAxisSpacing: s(36),
+      ),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        final String? poster = isMovie ? (item as MovieListItem).posterPath : (item as TvListItem).posterPath;
+        final String title = isMovie ? ((item as MovieListItem).title ?? 'Movie') : ((item as TvListItem).name ?? 'TV');
+        final String? date = isMovie ? (item as MovieListItem).releaseDate : (item as TvListItem).firstAirDate;
+
+        return PosterCard(
+          posterPath: poster,
+          title: title,
+          showTitle: true,
+          quality: QualityUtils.getQualityBadgeSync(
+            mediaId: item.id,
+            releaseDate: date,
+            isMovie: isMovie,
+          ),
+          mediaId: item.id,
+          isMovie: isMovie,
+          releaseDate: date,
+          onTap: () async {
+            if (_isProcessing) return;
+            _isProcessing = true;
+            try {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => isMovie
+                      ? MovieDetailScreen(movieId: item.id)
+                      : TvDetailScreen(tvId: item.id),
+                ),
+              );
+              if (mounted && context.mounted) {
+                HomeScreenState.of(context)?.setIndex(1);
               }
-            },
-          )),
-        ],
-      ],
+            } finally {
+              _isProcessing = false;
+              if (mounted) setState(() {});
+            }
+          },
+        );
+      },
     );
   }
 }
 
+/// The bordered input surface — search bar + on-screen keyboard live inside
+/// one panel instead of floating unstyled on the black canvas.
+class _SearchPanel extends StatelessWidget {
+  final double Function(double) s;
+  final FocusNode searchNode;
+  final TextEditingController controller;
+  final void Function(String) onKeyPress;
+  final VoidCallback onBackspace;
+  final VoidCallback onClear;
+  final VoidCallback onSearch;
+
+  const _SearchPanel({
+    required this.s,
+    required this.searchNode,
+    required this.controller,
+    required this.onKeyPress,
+    required this.onBackspace,
+    required this.onClear,
+    required this.onSearch,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.all(s(28)),
+      decoration: BoxDecoration(
+        color: DashboardTheme.surface,
+        borderRadius: BorderRadius.circular(s(20)),
+        border: Border.all(color: DashboardTheme.divider, width: s(1.5)),
+      ),
+      child: Column(
+        children: [
+          _buildSearchBar(context),
+          SizedBox(height: s(28)),
+          Expanded(
+            child: _VirtualKeyboard(
+              s: s,
+              onKeyPress: onKeyPress,
+              onBackspace: onBackspace,
+              onClear: onClear,
+              onSearch: onSearch,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchBar(BuildContext context) {
+    return Focus(
+      focusNode: searchNode,
+      child: Builder(
+        builder: (context) {
+          final focused = Focus.of(context).hasFocus;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(s(12)),
+              border: Border.all(
+                color: focused ? DashboardTheme.signalRed : DashboardTheme.divider,
+                width: s(2),
+              ),
+              color: DashboardTheme.surfaceRaised,
+              boxShadow: focused
+                  ? DashboardDecorations.focusGlow(
+                      context,
+                      strength: 0.7,
+                      color: DashboardTheme.signalRed,
+                    )
+                  : null,
+            ),
+            child: TextField(
+              controller: controller,
+              readOnly: true,
+              showCursor: true,
+              cursorColor: DashboardTheme.signalRed,
+              cursorWidth: s(4),
+              style: TextStyle(color: Colors.white, fontSize: s(26)),
+              decoration: InputDecoration(
+                hintText: 'Search',
+                hintStyle: TextStyle(color: Colors.white38, fontSize: s(26)),
+                contentPadding: EdgeInsets.symmetric(horizontal: s(22), vertical: s(22)),
+                border: InputBorder.none,
+                prefixIcon: Icon(Icons.search_rounded, color: Colors.white54, size: s(30)),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
 
 class _VirtualKeyboard extends StatelessWidget {
+  final double Function(double) s;
   final Function(String) onKeyPress;
   final VoidCallback onBackspace;
   final VoidCallback onClear;
   final VoidCallback onSearch;
 
   const _VirtualKeyboard({
+    required this.s,
     required this.onKeyPress,
     required this.onBackspace,
     required this.onClear,
@@ -368,47 +459,49 @@ class _VirtualKeyboard extends StatelessWidget {
       child: Column(
         children: [
           ..._layout.map((row) => Padding(
-            padding: const EdgeInsets.only(bottom: 6.0),
+            padding: EdgeInsets.only(bottom: s(6)),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: row.map((key) => _Key(
+                s: s,
                 label: key,
                 onTap: () => onKeyPress(key),
               )).toList(),
             ),
           )),
-          const SizedBox(height: 12),
+          SizedBox(height: s(12)),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _Key(
+                s: s,
                 label: 'SPACE',
                 flex: 4,
                 onTap: () => onKeyPress(' '),
               ),
               _Key(
+                s: s,
                 label: '⌫',
                 flex: 2,
                 onTap: onBackspace,
-                color: Colors.white24,
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: s(6)),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _Key(
+                s: s,
                 label: 'CLEAR',
                 flex: 3,
                 onTap: onClear,
-                color: Colors.white10,
               ),
               _Key(
+                s: s,
                 label: 'SEARCH',
                 flex: 3,
                 onTap: onSearch,
-                color: const Color(0xFFDC2626),
                 isPrimary: true,
               ),
             ],
@@ -420,17 +513,17 @@ class _VirtualKeyboard extends StatelessWidget {
 }
 
 class _Key extends StatelessWidget {
+  final double Function(double) s;
   final String label;
   final VoidCallback onTap;
   final int flex;
-  final Color? color;
   final bool isPrimary;
 
   const _Key({
+    required this.s,
     required this.label,
     required this.onTap,
     this.flex = 1,
-    this.color,
     this.isPrimary = false,
   });
 
@@ -439,40 +532,41 @@ class _Key extends StatelessWidget {
     return Expanded(
       flex: flex,
       child: Padding(
-        padding: const EdgeInsets.all(4.0),
-        child: Focus(
-        onKeyEvent: (_, event) {
-          if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
-              onTap();
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
-          },
+        padding: EdgeInsets.all(s(4)),
+        child: LongPressFocus(
+          onTap: onTap,
           child: Builder(builder: (context) {
             final focused = Focus.of(context).hasFocus;
-            return GestureDetector(
-              onTap: onTap,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                height: 48,
-                decoration: BoxDecoration(
-                  color: focused 
-                      ? (isPrimary ? Colors.white : Colors.white24)
-                      : (color ?? Colors.white.withValues(alpha: 0.05)),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: focused ? Colors.white : Colors.white10,
-                    width: focused ? 2 : 1,
-                  ),
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              height: s(68),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                gradient: isPrimary && !focused ? DashboardTheme.accentGradient : null,
+                color: isPrimary
+                    ? (focused ? Colors.white : null)
+                    : (focused ? Colors.white : Colors.white.withValues(alpha: 0.06)),
+                borderRadius: BorderRadius.circular(s(10)),
+                border: Border.all(
+                  color: focused ? Colors.white : Colors.white12,
+                  width: s(1.5),
                 ),
-                alignment: Alignment.center,
-                child: Text(
-                  label.toUpperCase(),
-                  style: TextStyle(
-                    color: focused && !isPrimary ? Colors.white : (focused && isPrimary ? Colors.black : Colors.white70),
-                    fontSize: 16,
-                    fontWeight: focused ? FontWeight.bold : FontWeight.normal,
-                  ),
+                boxShadow: focused
+                    ? DashboardDecorations.focusGlow(
+                        context,
+                        strength: isPrimary ? 0.8 : 0.5,
+                        color: isPrimary ? DashboardTheme.signalRed : null,
+                      )
+                    : null,
+              ),
+              child: Text(
+                label.toUpperCase(),
+                style: TextStyle(
+                  color: focused
+                      ? Colors.black
+                      : (isPrimary ? Colors.white : Colors.white70),
+                  fontSize: s(24),
+                  fontWeight: focused || isPrimary ? FontWeight.bold : FontWeight.normal,
                 ),
               ),
             );
@@ -483,225 +577,77 @@ class _Key extends StatelessWidget {
   }
 }
 
-class _ResultTile extends StatelessWidget {
-  final dynamic item;
+class _HistoryPill extends StatelessWidget {
+  final String label;
+  final double Function(double) s;
   final VoidCallback onTap;
 
-  const _ResultTile({required this.item, required this.onTap});
+  const _HistoryPill({required this.label, required this.s, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final String? poster = (item is MovieListItem) ? item.posterPath : (item as TvListItem).posterPath;
-    final String title = (item is MovieListItem) ? (item.title ?? 'Movie') : (item as TvListItem).name ?? 'TV';
-    final String? overview = (item is MovieListItem) ? item.overview : (item as TvListItem).overview;
-    final String? date = (item is MovieListItem) ? item.releaseDate : (item as TvListItem).firstAirDate;
-    final String year = (date != null && date.length >= 4) ? date.substring(0, 4) : '';
-    final double rating = (item is MovieListItem) ? (item.voteAverage ?? 0) : (item as TvListItem).voteAverage ?? 0;
-
-    return Focus(
-      onKeyEvent: (_, event) {
-        if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
-          onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
+    return LongPressFocus(
+      onTap: onTap,
       child: Builder(builder: (context) {
         final focused = Focus.of(context).hasFocus;
-        return GestureDetector(
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: focused ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: focused ? Colors.white : Colors.white10,
-                width: 1,
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Small Poster
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: SizedBox(
-                    width: 70,
-                    height: 105,
-                    child: Stack(
-                      children: [
-                        (poster != null && poster.isNotEmpty)
-                            ? Image.network(
-                                'https://image.tmdb.org/t/p/w185$poster',
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => Container(color: Colors.grey[900]),
-                              )
-                            : Container(color: Colors.grey[900]),
-                        Positioned(
-                          top: 4,
-                          right: 4,
-                          child: _buildMiniQualityBadge(item),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 24),
-                // Info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          color: focused ? Colors.white : Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          if (year.isNotEmpty) ...[
-                            Text(year, style: const TextStyle(color: Colors.white54, fontSize: 14)),
-                            const SizedBox(width: 16),
-                          ],
-                          const Icon(Icons.star, color: Color(0xFFDC2626), size: 14),
-                          const SizedBox(width: 4),
-                          Text(
-                            rating.toStringAsFixed(1),
-                            style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      if (overview != null && overview.isNotEmpty)
-                        Text(
-                          overview,
-                          style: TextStyle(
-                            color: focused ? Colors.white.withValues(alpha: 0.8) : Colors.white54,
-                            fontSize: 14,
-                            height: 1.4,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                if (focused)
-                  const Center(
-                    child: Icon(Icons.chevron_right, color: Colors.white54),
-                  ),
-              ],
-            ),
-          ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildMiniQualityBadge(dynamic item) {
-    final bool isMovie = item is MovieListItem;
-    final String? date = isMovie ? item.releaseDate : (item as TvListItem).firstAirDate;
-    
-    return FutureBuilder<String?>(
-      future: QualityUtils.getQualityBadgeAsync(
-        mediaId: item.id,
-        releaseDate: date,
-        isMovie: isMovie,
-      ),
-      builder: (context, snapshot) {
-        final badge = snapshot.data ?? QualityUtils.getQualityBadgeSync(releaseDate: date, isMovie: isMovie);
-        
-        if (badge == null || badge.isEmpty) return const SizedBox.shrink();
-
-        Color badgeColor;
-        if (badge == 'CAM') {
-          badgeColor = DashboardTheme.signalRed;
-        } else if (badge == 'SOON') {
-          badgeColor = DashboardTheme.warningAmber;
-        } else {
-          badgeColor = Colors.white.withValues(alpha: 0.2);
-        }
-
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: EdgeInsets.symmetric(horizontal: s(22), vertical: s(14)),
           decoration: BoxDecoration(
-            color: badgeColor,
-            borderRadius: BorderRadius.circular(2),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 2,
-                offset: const Offset(0, 1),
+            color: focused ? Colors.white : Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(s(24)),
+            border: Border.all(
+              color: focused ? Colors.white : Colors.white12,
+              width: s(1.5),
+            ),
+            boxShadow: focused ? DashboardDecorations.focusGlow(context, strength: 0.5) : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.history_rounded, size: s(19), color: focused ? Colors.black : Colors.white38),
+              SizedBox(width: s(10)),
+              Text(
+                label,
+                style: TextStyle(
+                  color: focused ? Colors.black : Colors.white70,
+                  fontSize: s(19),
+                  fontWeight: focused ? FontWeight.bold : FontWeight.normal,
+                ),
               ),
             ],
           ),
-          child: Text(
-            badge,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 8,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
-            ),
-          ),
         );
-      },
+      }),
     );
   }
 }
 
-class _HistoryPill extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-
-  const _HistoryPill({required this.label, required this.onTap});
+class _SearchGridSkeleton extends StatelessWidget {
+  final double Function(double) s;
+  const _SearchGridSkeleton({required this.s});
 
   @override
   Widget build(BuildContext context) {
-    return Focus(
-      onKeyEvent: (_, event) {
-        if (event is KeyDownEvent && TvKeys.isSelect(event.logicalKey)) {
-          onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Builder(builder: (context) {
-        final focused = Focus.of(context).hasFocus;
-        return GestureDetector(
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    return TvShimmer(
+      child: GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: s(240),
+          childAspectRatio: 0.6,
+          crossAxisSpacing: s(28),
+          mainAxisSpacing: s(36),
+        ),
+        itemCount: 10,
+        itemBuilder: (context, index) {
+          return Container(
             decoration: BoxDecoration(
-              color: focused ? Colors.white : Colors.white.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: focused ? Colors.white : Colors.white10,
-                width: 1,
-              ),
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(s(8)),
             ),
-            child: Text(
-              label,
-              style: TextStyle(
-                color: focused ? Colors.black : Colors.white70,
-                fontSize: 14,
-                fontWeight: focused ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ),
-        );
-      }),
+          );
+        },
+      ),
     );
   }
 }

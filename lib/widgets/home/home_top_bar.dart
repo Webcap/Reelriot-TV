@@ -6,6 +6,7 @@ import 'package:reelriot_tv/services/settings_service.dart';
 import 'package:reelriot_tv/theme/dashboard_theme.dart';
 import 'package:reelriot_tv/utils/responsive_utils.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
+import 'package:reelriot_tv/widgets/home/dev_build_badge.dart';
 
 /// Cinematic Top Navigation Bar.
 ///
@@ -295,7 +296,9 @@ class HomeTopBar extends StatelessWidget {
 
           // Right Action Icons (Search, Favorites, Profile)
           Row(
-            children: List.generate(actionItems.length, (j) {
+            children: [
+              const DevBuildBadge(),
+              ...List.generate(actionItems.length, (j) {
               final action = actionItems[j];
               final nodeIndex = categoryItems.length + j;
               final node = nodeIndex < navNodes.length
@@ -482,7 +485,8 @@ class HomeTopBar extends StatelessWidget {
                 ),
               );
             }),
-          ),
+          ],
+        ),
 
           // Offline indicator
           if (SettingsService().isOffline)

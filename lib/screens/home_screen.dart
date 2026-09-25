@@ -572,6 +572,12 @@ class _MainHomeViewState extends State<_MainHomeView> {
 
   Future<void> _checkForUpdate() async {
     if (SettingsService().isOffline) return;
+    // Skip if the singleton already ran a check recently (e.g. splash screen).
+    // This prevents double version_check telemetry per session.
+    if (!UpdateService().shouldRecheck) {
+      debugPrint('[HomeScreen] ⏩ Skipping update check — within 4-hour cooldown');
+      return;
+    }
     try {
       final config = await _api.loadConfig();
       SettingsService().updateFromConfig(config);
@@ -717,10 +723,14 @@ class _MainHomeViewState extends State<_MainHomeView> {
       }
 
       // 3. Map Discovery Sections to existing variables
-      List<DiscoverySection> apiSections = (discovery['sections'] as List)
-          .map((s) => DiscoverySection.fromJson(s))
-          .where((s) => s.isEnabled)
-          .toList();
+      final rawSections = discovery['sections'] ?? discovery['rows'];
+      List<DiscoverySection> apiSections = rawSections is List
+          ? rawSections
+              .whereType<Map>()
+              .map((s) => DiscoverySection.fromJson(Map<String, dynamic>.from(s)))
+              .where((s) => s.isEnabled)
+              .toList()
+          : [];
       debugPrint(
         '[HomeScreen] 📡 Discovery Feed Received: ${apiSections.length} sections',
       );
@@ -1465,6 +1475,9 @@ class _MainHomeViewState extends State<_MainHomeView> {
                           items: section.items,
                           index: _nextShelf(),
                           isSocial: section.type == 'social',
+                          isHoliday: section.type == 'holiday',
+                          sectionType: section.type,
+                          mediaType: section.mediaType,
                           onFocus: (id) => _updateFocusedMovie(id),
                           onTap: (m) => _navigateToDetail(m),
                           onLongPress: (m) => _showItemContextMenu(
@@ -1575,7 +1588,7 @@ class _MainHomeViewState extends State<_MainHomeView> {
       return;
     }
 
-    final isTv = _selectedCategory == 'TV Shows';
+    final isTv = m.mediaType == 'tv' || _selectedCategory == 'TV Shows';
     if (isTv) {
       await Navigator.of(context).push(
         MaterialPageRoute(builder: (context) => TvDetailScreen(tvId: m.id)),

@@ -453,4 +453,187 @@ class ApiService {
     }
     return null;
   }
+
+  /// Fetches a paginated batch of titles for the "See More" screen,
+  /// resolving against TMDB trending, popular, genre, or discovery based
+  /// on section title and metadata.
+  Future<List<core.MovieListItem>> fetchCategoryItems({
+    required String title,
+    String? sectionType,
+    required bool isMovie,
+    required int page,
+    int? genreId,
+  }) async {
+    final lowerTitle = title.toLowerCase().trim();
+    final lowerType = (sectionType ?? '').toLowerCase().trim();
+    final targetType = isMovie ? 'movie' : 'tv';
+
+    String? url;
+
+    // 1. Explicit or detected Genres matching
+    final genreMapMovies = {
+      'action': 28,
+      'adventure': 12,
+      'animation': 16,
+      'anime': 16,
+      'comedy': 35,
+      'crime': 80,
+      'documentary': 99,
+      'drama': 18,
+      'family': 10751,
+      'fantasy': 14,
+      'history': 36,
+      'horror': 27,
+      'music': 10402,
+      'musical': 10402,
+      'mystery': 9648,
+      'romance': 10749,
+      'romantic': 10749,
+      'sci-fi': 878,
+      'science fiction': 878,
+      'thriller': 53,
+      'war': 10752,
+      'western': 37,
+    };
+
+    final genreMapTv = {
+      'action': 10759,
+      'adventure': 10759,
+      'action & adventure': 10759,
+      'animation': 16,
+      'anime': 16,
+      'comedy': 35,
+      'crime': 80,
+      'documentary': 99,
+      'drama': 18,
+      'family': 10751,
+      'kids': 10762,
+      'mystery': 9648,
+      'news': 10763,
+      'reality': 10764,
+      'sci-fi': 10765,
+      'science fiction': 10765,
+      'sci-fi & fantasy': 10765,
+      'soap': 10766,
+      'talk': 10767,
+      'war': 10768,
+      'war & politics': 10768,
+      'western': 37,
+    };
+
+    int? matchedGenreId = genreId;
+    if (matchedGenreId == null) {
+      final activeGenreMap = isMovie ? genreMapMovies : genreMapTv;
+      for (final entry in activeGenreMap.entries) {
+        if (lowerTitle == entry.key || lowerTitle.contains(entry.key)) {
+          matchedGenreId = entry.value;
+          break;
+        }
+      }
+    }
+
+    if (matchedGenreId != null) {
+      url = isMovie
+          ? core.Endpoints.moviesForGenreUrl(tmdbBaseUrl, _tmdbKey, matchedGenreId, page, language)
+          : core.Endpoints.tvShowsForGenreUrl(tmdbBaseUrl, _tmdbKey, matchedGenreId, page, language);
+    }
+    // 2. Trending
+    else if (lowerTitle.contains('trending') || lowerType == 'tmdb') {
+      url = '$tmdbBaseUrl/trending/$targetType/week?api_key=$_tmdbKey&language=$language&page=$page';
+    }
+    // 3. Popular / Community Trending / Trending on Reelriot
+    else if (lowerTitle.contains('popular') || lowerType == 'community' || lowerTitle.contains('reelriot')) {
+      url = '$tmdbBaseUrl/$targetType/popular?api_key=$_tmdbKey&language=$language&page=$page';
+    }
+    // 4. Top Rated / Critically Acclaimed
+    else if (lowerTitle.contains('top rated') || lowerTitle.contains('acclaimed') || lowerTitle.contains('best')) {
+      url = isMovie
+          ? '$tmdbBaseUrl/movie/top_rated?api_key=$_tmdbKey&language=$language&page=$page&region=$region'
+          : '$tmdbBaseUrl/tv/top_rated?api_key=$_tmdbKey&language=$language&page=$page';
+    }
+    // 5. Fresh Drops / New Releases / Now Playing / Airing
+    else if (lowerTitle.contains('fresh') || lowerTitle.contains('new') || lowerTitle.contains('drop') || lowerTitle.contains('playing') || lowerTitle.contains('airing')) {
+      if (isMovie) {
+        url = '$tmdbBaseUrl/movie/now_playing?api_key=$_tmdbKey&language=$language&page=$page';
+      } else {
+        url = '$tmdbBaseUrl/tv/on_the_air?api_key=$_tmdbKey&language=$language&page=$page';
+      }
+    }
+    // 6. Upcoming / Coming Soon
+    else if (lowerTitle.contains('upcoming') || lowerTitle.contains('soon')) {
+      if (isMovie) {
+        url = '$tmdbBaseUrl/movie/upcoming?api_key=$_tmdbKey&language=$language&page=$page';
+      } else {
+        url = '$tmdbBaseUrl/discover/tv?api_key=$_tmdbKey&language=$language&sort_by=first_air_date.desc&page=$page';
+      }
+    }
+    // 7. Holiday & Seasonal (Halloween, Christmas, etc.)
+    else if (lowerType == 'holiday' || lowerTitle.contains('halloween') || lowerTitle.contains('spooky') || lowerTitle.contains('christmas') || lowerTitle.contains('holiday')) {
+      if (lowerTitle.contains('halloween') || lowerTitle.contains('spooky') || lowerTitle.contains('horror')) {
+        url = '$tmdbBaseUrl/discover/$targetType?api_key=$_tmdbKey&language=$language&sort_by=popularity.desc&page=$page&with_genres=27';
+      } else {
+        final q = Uri.encodeComponent(lowerTitle.contains('christmas') ? 'christmas' : 'holiday');
+        url = '$tmdbBaseUrl/search/$targetType?api_key=$_tmdbKey&language=$language&query=$q&page=$page';
+      }
+    }
+    // 8. Viral on Social
+    else if (lowerType == 'social' || lowerTitle.contains('social') || lowerTitle.contains('viral')) {
+      url = '$tmdbBaseUrl/trending/$targetType/week?api_key=$_tmdbKey&language=$language&page=$page';
+    }
+    // 9. Fallback Search by title keywords, or general Discover by popularity
+    else {
+      final clean = title.replaceAll(RegExp(r'magic|picks|collection|specials|featured|spotlight|ai', caseSensitive: false), '').trim();
+      if (clean.length >= 3) {
+        final q = Uri.encodeComponent(clean);
+        url = '$tmdbBaseUrl/search/$targetType?api_key=$_tmdbKey&language=$language&query=$q&page=$page';
+      } else {
+        url = '$tmdbBaseUrl/discover/$targetType?api_key=$_tmdbKey&language=$language&sort_by=popularity.desc&page=$page';
+      }
+    }
+
+    try {
+      final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+      if (res.statusCode != 200) {
+        final fallbackUrl = '$tmdbBaseUrl/discover/$targetType?api_key=$_tmdbKey&language=$language&sort_by=popularity.desc&page=$page';
+        final fbRes = await http.get(Uri.parse(fallbackUrl)).timeout(const Duration(seconds: 10));
+        if (fbRes.statusCode != 200) return [];
+        final data = jsonDecode(fbRes.body) as Map<String, dynamic>;
+        final results = (data['results'] as List<dynamic>?) ?? [];
+        return _parseMovieItems(results, targetType);
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final results = (data['results'] as List<dynamic>?) ?? [];
+
+      if (results.isEmpty && page == 1) {
+        final fallbackUrl = '$tmdbBaseUrl/discover/$targetType?api_key=$_tmdbKey&language=$language&sort_by=popularity.desc&page=1';
+        final fbRes = await http.get(Uri.parse(fallbackUrl)).timeout(const Duration(seconds: 10));
+        if (fbRes.statusCode == 200) {
+          final fbData = jsonDecode(fbRes.body) as Map<String, dynamic>;
+          return _parseMovieItems((fbData['results'] as List<dynamic>?) ?? [], targetType);
+        }
+      }
+
+      return _parseMovieItems(results, targetType);
+    } catch (e) {
+      debugPrint('[ApiService] ⚠️ Error fetching category items for "$title" (page $page): $e');
+      return [];
+    }
+  }
+
+  List<core.MovieListItem> _parseMovieItems(List<dynamic> rawList, String targetType) {
+    return rawList
+        .whereType<Map>()
+        .map((m) {
+          final map = Map<String, dynamic>.from(m);
+          map['media_type'] ??= targetType;
+          return core.MovieListItem.fromJson(map);
+        })
+        .where((item) =>
+            item.id > 0 &&
+            ((item.posterPath != null && item.posterPath!.isNotEmpty) ||
+             (item.backdropPath != null && item.backdropPath!.isNotEmpty)))
+        .toList();
+  }
 }
+

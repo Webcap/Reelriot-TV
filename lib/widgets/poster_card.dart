@@ -98,36 +98,38 @@ class _PosterCardState extends State<PosterCard> {
     final screenWidth = MediaQuery.of(context).size.width;
     double s(double v) => (v * screenWidth) / 1920;
 
-    final cardWidth = s(140);
-    final cardHeight = s(210); // 2:3 aspect ratio
+    final cardWidth = s(153);
+    final cardHeight = s(230); // 2:3 aspect ratio
 
-    return LongPressFocus(
-      focusNode: widget.focusNode,
-      onFocusChange: (focused) {
-        if (focused) widget.onFocus?.call();
-      },
-      onTap: widget.onTap,
-      onLongPress: widget.onLongPress,
-      onKeyEvent: widget.onKeyEvent,
-      child: Builder(
-        builder: (context) {
-          final hasFocus = Focus.maybeOf(context)?.hasFocus ?? false;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: LongPressFocus(
+        focusNode: widget.focusNode,
+        onFocusChange: (focused) {
+          if (focused) widget.onFocus?.call();
+        },
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
+        onKeyEvent: widget.onKeyEvent,
+        child: Builder(
+          builder: (context) {
+            final hasFocus = Focus.maybeOf(context)?.hasFocus ?? false;
 
-          return Semantics(
-            label: widget.title,
-            button: true,
-            child: AnimatedScale(
-              scale: hasFocus ? 1.08 : 1.0,
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOutCubic,
-              child: SizedBox(
-                width: cardWidth,
-                height: widget.showTitle ? cardHeight + s(40) : cardHeight,
-                child: RepaintBoundary(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+            return Semantics(
+              label: widget.title,
+              button: true,
+              child: AnimatedScale(
+                scale: hasFocus ? 1.08 : 1.0,
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                child: SizedBox(
+                  width: cardWidth,
+                  height: widget.showTitle ? cardHeight + s(40) : cardHeight,
+                  child: RepaintBoundary(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                       // Poster Art Container
                       Container(
                         width: cardWidth,
@@ -235,8 +237,9 @@ class _PosterCardState extends State<PosterCard> {
           );
         },
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildSponsoredBadge(double Function(double) s) {
     return ClipRRect(

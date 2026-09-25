@@ -1,10 +1,14 @@
 import 'package:caffeine_core/caffeine_core.dart';
+import 'package:reelriot_tv/screens/see_more_screen.dart';
 import 'package:reelriot_tv/screens/tv_detail_screen.dart';
 import 'package:reelriot_tv/services/api_service.dart';
 import 'package:reelriot_tv/widgets/poster_card.dart';
+import 'package:reelriot_tv/widgets/see_more_poster_card.dart';
 import 'package:reelriot_tv/widgets/tv_skeleton_loader.dart';
 import 'package:reelriot_tv/utils/quality_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reelriot_tv/models/discovery_section.dart';
 
@@ -36,10 +40,14 @@ class _TvShowsScreenState extends State<TvShowsScreen> {
         region: _api.region,
       );
       
-      final List<DiscoverySection> parsedSections = (discovery['sections'] as List)
-          .map((s) => DiscoverySection.fromJson(s))
-          .where((s) => s.isEnabled && s.items.isNotEmpty)
-          .toList();
+      final rawSections = discovery['sections'] ?? discovery['rows'];
+      final List<DiscoverySection> parsedSections = rawSections is List
+          ? rawSections
+              .whereType<Map>()
+              .map((s) => DiscoverySection.fromJson(Map<String, dynamic>.from(s)))
+              .where((s) => s.isEnabled && s.items.isNotEmpty)
+              .toList()
+          : [];
 
       if (mounted) {
         setState(() {
@@ -75,15 +83,14 @@ class _TvShowsScreenState extends State<TvShowsScreen> {
       itemCount: _sections!.length,
       itemBuilder: (context, index) {
         final section = _sections![index];
-        return _buildSection(section.title, section.items);
+        return _buildSection(section);
       },
     );
   }
 
-  Widget _buildSection(String title, List<MovieListItem>? items) {
-    if (items == null) {
-      return const TvRowSkeleton();
-    }
+  Widget _buildSection(DiscoverySection section) {
+    final title = section.title;
+    final items = section.items;
     if (items.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 32),
@@ -100,23 +107,62 @@ class _TvShowsScreenState extends State<TvShowsScreen> {
           ),
           const SizedBox(height: 16),
           SizedBox(
-            height: 230,
+            height: 268,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              itemCount: items.length,
+              clipBehavior: Clip.none,
+              itemCount: items.length >= 4 ? items.length + 1 : items.length,
               itemBuilder: (context, index) {
+                if (index == items.length) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: SeeMorePosterCard(
+                      title: title,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => SeeMoreScreen(
+                              title: title,
+                              items: items,
+                              isMovie: false,
+                              sectionType: section.type,
+                              mediaType: 'tv',
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                }
                 final t = items[index];
-                return PosterCard(
-                  posterPath: t.posterPath,
-                  title: t.title ?? 'TV',
-                  onTap: () => _openDetail(t.id),
-                  quality: QualityUtils.getQualityBadgeSync(
-                    releaseDate: t.releaseDate,
+                final isLast = items.length < 4 && index == items.length - 1;
+
+                return Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: PosterCard(
+                    posterPath: t.posterPath,
+                    title: t.title ?? 'TV',
+                    onTap: () => _openDetail(t.id),
+                    quality: QualityUtils.getQualityBadgeSync(
+                      releaseDate: t.releaseDate,
+                      isMovie: false,
+                    ),
+                    mediaId: t.id,
                     isMovie: false,
+                    releaseDate: t.releaseDate,
+                    onKeyEvent: isLast
+                        ? (node, event) {
+                            if (TvKeys.isRight(event.logicalKey)) {
+                              if (event is KeyDownEvent) {
+                                SystemSound.play(SystemSoundType.click);
+                                HapticFeedback.lightImpact();
+                              }
+                              return KeyEventResult.handled;
+                            }
+                            return KeyEventResult.ignored;
+                          }
+                        : null,
                   ),
-                  mediaId: t.id,
-                  isMovie: false,
-                  releaseDate: t.releaseDate,
                 );
               },
             ),
