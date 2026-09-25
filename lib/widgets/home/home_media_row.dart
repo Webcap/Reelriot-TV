@@ -20,6 +20,8 @@ class HomeMediaRow extends StatelessWidget {
   final int? index;
   final bool isSocial;
   final bool isHoliday;
+  final String? sectionType;
+  final String? mediaType;
   final VoidCallback? onMoveUp;
   final bool showSeeMore;
   final VoidCallback? onSeeMore;
@@ -33,6 +35,8 @@ class HomeMediaRow extends StatelessWidget {
     required this.onLongPress,
     this.isSocial = false,
     this.isHoliday = false,
+    this.sectionType,
+    this.mediaType,
     this.index,
     this.onMoveUp,
     this.showSeeMore = true,
@@ -121,6 +125,8 @@ class HomeMediaRow extends StatelessWidget {
                               title: title,
                               items: items!,
                               isMovie: items!.first.mediaType != 'tv',
+                              sectionType: sectionType,
+                              mediaType: mediaType,
                             ),
                           ),
                         );

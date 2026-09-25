@@ -1476,6 +1476,8 @@ class _MainHomeViewState extends State<_MainHomeView> {
                           index: _nextShelf(),
                           isSocial: section.type == 'social',
                           isHoliday: section.type == 'holiday',
+                          sectionType: section.type,
+                          mediaType: section.mediaType,
                           onFocus: (id) => _updateFocusedMovie(id),
                           onTap: (m) => _navigateToDetail(m),
                           onLongPress: (m) => _showItemContextMenu(

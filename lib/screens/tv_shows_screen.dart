@@ -83,15 +83,14 @@ class _TvShowsScreenState extends State<TvShowsScreen> {
       itemCount: _sections!.length,
       itemBuilder: (context, index) {
         final section = _sections![index];
-        return _buildSection(section.title, section.items);
+        return _buildSection(section);
       },
     );
   }
 
-  Widget _buildSection(String title, List<MovieListItem>? items) {
-    if (items == null) {
-      return const TvRowSkeleton();
-    }
+  Widget _buildSection(DiscoverySection section) {
+    final title = section.title;
+    final items = section.items;
     if (items.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 32),
@@ -126,6 +125,8 @@ class _TvShowsScreenState extends State<TvShowsScreen> {
                               title: title,
                               items: items,
                               isMovie: false,
+                              sectionType: section.type,
+                              mediaType: 'tv',
                             ),
                           ),
                         );
