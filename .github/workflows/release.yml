@@ -30,6 +30,20 @@ on:
         required: false
         default: ''
         type: string
+      channel:
+        description: 'Target build channel'
+        required: false
+        default: 'stable'
+        type: choice
+        options:
+          - 'stable'
+          - 'beta'
+          - 'dev'
+      beta_key:
+        description: 'Optional beta access key'
+        required: false
+        default: ''
+        type: string
   push:
     tags:
       - 'v*'
@@ -246,17 +260,21 @@ jobs:
         env:
           CAFFEINE_API_URL: ${{ secrets.CAFFEINE_API_URL }}
           CAFFEINE_API_KEY: ${{ secrets.CAFFEINE_API_KEY }}
+          BETA_ACCESS_KEY: ${{ inputs.beta_key }}
         run: |
           VERSION_RAW="${{ steps.organize_artifacts.outputs.APP_VERSION }}"
           VERSION_CLEAN=$(echo "$VERSION_RAW" | tr '+' '_')
           REPO_NAME="${{ github.repository }}"
           DOWNLOAD_URL="https://github.com/${REPO_NAME}/releases/download/v${VERSION_RAW}/ReelriotTV-${BUILD_FLAVOR}-v${VERSION_CLEAN}-universal.apk"
+          TARGET_CHANNEL="${{ inputs.channel || (contains(github.ref_name, 'beta') && 'beta' || 'stable') }}"
 
           dart tools/sync_update_center.dart \
             --platform tv \
             --environment "${BUILD_FLAVOR}" \
+            --channel "${TARGET_CHANNEL}" \
             --version "${VERSION_RAW}" \
-            --download-url "${DOWNLOAD_URL}"
+            --download-url "${DOWNLOAD_URL}" \
+            --release-tag "${{ steps.organize_artifacts.outputs.TAG_NAME }}"
 
       - name: Commit Bumped Version to Repository
         if: ${{ inputs.bump_build_number && github.event_name == 'workflow_dispatch' }}
