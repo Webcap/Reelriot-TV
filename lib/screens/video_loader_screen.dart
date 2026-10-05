@@ -60,9 +60,8 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     {'code': 'vidsrcsu', 'name': 'VidSrc.su'},
     {'code': 'vidzee', 'name': 'VidZee'},
     {'code': 'vixsrc', 'name': 'VixSrc'},
-    {'code': 'vidfun', 'name': 'VidFun'},
+    {'code': 'vidlink', 'name': 'VidLink'},
     {'code': 'vidsrcme', 'name': 'VidSrc.me'},
-    {'code': 'nxsha', 'name': 'Nxsha'},
   ];
 
   late List<ProviderLoadState> _providerStates;
@@ -73,6 +72,25 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   // stream from, so we can fall back to a visible embedded browser player
   // if every provider fails to resolve.
   String? _lastEmbedCandidateUrl;
+
+  // Different "providers" from the API frequently turn out to all wrap the
+  // same underlying embed page (e.g. several providers all falling back to
+  // vixsrc.to server-side for an older title) — observed as every provider
+  // in a single load racing an identical embed URL. Without this cache each
+  // one would spin up its own native WebView sniff session concurrently, and
+  // that many simultaneous sessions contending for the device's CPU/network
+  // measurably pushes some of them past the resolution timeout — i.e. pure
+  // self-inflicted contention, not an actual per-provider failure. Keying by
+  // URL means an identical embed only gets sniffed once; every other
+  // provider awaits the same in-flight resolution.
+  final Map<String, Future<ResolvedEmbedStream?>> _embedResolutionCache = {};
+
+  Future<ResolvedEmbedStream?> _resolveEmbedDeduped(String embedUrl) {
+    return _embedResolutionCache.putIfAbsent(
+      embedUrl,
+      () => EmbedStreamResolver.resolve(embedUrl),
+    );
+  }
 
   // Track current episode state for "Next Episode" looping
   int? _currentSeason;
@@ -178,6 +196,138 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     ) ?? 'HD';
   }
 
+  /// Collects and parses subtitles from every source (OpenSubtitles,
+  /// Caffeine API, and whatever the provider itself returned), in the same
+  /// priority order regardless of which player ends up showing them.
+  /// [providerSubtitles] is empty when there's no winning provider response
+  /// to pull internal subtitles from (e.g. the all-providers-failed fallback
+  /// to [EmbeddedWebPlayerScreen]).
+  Future<List<CaffeinePlayerSubtitlesSource>> _collectSubtitles({
+    List<core.SubtitleLink> providerSubtitles = const [],
+  }) async {
+    List<core.SubtitleLink> allSubtitleLinks = [];
+
+    debugPrint(
+      '[VideoLoader] ℹ️ Subtitle Settings: useExternal=${_settings.useExternalSubtitles}, hasKey=${_settings.opensubtitlesKey.isNotEmpty}',
+    );
+
+    // External Subtitles (Prioritized)
+    if (_settings.useExternalSubtitles &&
+        _settings.opensubtitlesKey.isNotEmpty) {
+      debugPrint(
+        '[VideoLoader] 🔍 External subtitles enabled. Checking Open Subtitles...',
+      );
+      try {
+        final int tmdbId = widget.movie?.id ?? widget.tvShow!.id;
+        // Search for English, Spanish, and the user's default language
+        final validLangs = {
+          'en',
+          'es',
+          _settings.language,
+        }.where((l) => l.isNotEmpty).toSet();
+        final searchLangs = validLangs.join(',');
+
+        final extSubs = await _subtitleService.searchSubtitles(
+          tmdbId: tmdbId,
+          languageCode: searchLangs,
+          apiKey: _settings.opensubtitlesKey,
+          seasonNumber: _currentSeason,
+          episodeNumber: _currentEpisode,
+        );
+
+        if (extSubs.isNotEmpty) {
+          debugPrint(
+            '[VideoLoader] ✅ Found ${extSubs.length} Open Subtitles. Adding top tracks...',
+          );
+
+          // Track added languages to ensure diversity (one best per lang)
+          final addedLangs = <String>{};
+          int addedCount = 0;
+
+          for (var sub in extSubs) {
+            if (addedCount >= 4) break;
+
+            final lang = sub.attr?.language ?? '';
+            final fileId = sub.attr?.files?.first.fileId;
+
+            if (fileId != null && !addedLangs.contains(lang)) {
+              final downloadUrl = await _subtitleService.downloadSubtitle(
+                fileId,
+                _settings.opensubtitlesKey,
+              );
+
+              if (downloadUrl != null) {
+                addedLangs.add(lang);
+                addedCount++;
+                allSubtitleLinks.add(
+                  core.SubtitleLink(
+                    file: downloadUrl,
+                    label:
+                        '${sub.attr?.languageName ?? lang} (OpenSubtitles)',
+                  ),
+                );
+              }
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint(
+          '[VideoLoader] ⚠️ External subtitle search failed: $e',
+        );
+      }
+    }
+
+    // Caffeine API Subtitles (Direct Platform Fallback)
+    if (allSubtitleLinks.isEmpty && _settings.useExternalSubtitles) {
+      try {
+        final int tmdbId = widget.movie?.id ?? widget.tvShow!.id;
+        final apiSubs = await _subtitleService.searchSubtitlesFromCaffeineApi(
+          caffeineBaseUrl: caffeineApiUrl,
+          tmdbId: tmdbId,
+          languageCode: _settings.language.isNotEmpty ? _settings.language : 'en',
+          seasonNumber: _currentSeason,
+          episodeNumber: _currentEpisode,
+          apiKey: caffeineApiKey,
+        );
+        for (var sub in apiSubs) {
+          allSubtitleLinks.add(
+            core.SubtitleLink(
+              file: sub.url,
+              label: '${sub.label} (ReelRiot)',
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('[VideoLoader] ⚠️ Caffeine API subtitle search failed: $e');
+      }
+    }
+
+    // Internal subtitles from provider (Fallback/Secondary)
+    if (providerSubtitles.isNotEmpty) {
+      debugPrint(
+        '[VideoLoader] 📝 Found ${providerSubtitles.length} internal subtitles',
+      );
+      allSubtitleLinks.addAll(providerSubtitles);
+    }
+
+    final langIndex = supportedLanguages.indexWhere(
+      (l) => l.languageCode == _settings.language,
+    );
+    final defaultLanguage = langIndex != -1
+        ? supportedLanguages[langIndex].englishName
+        : 'English';
+
+    final subs = await VideoUtils.parseSubtitles(
+      subtitles: allSubtitleLinks,
+      defaultLanguage: defaultLanguage,
+      fetchAllLanguages: true, // TV app generally wants more choice
+      getSubtitleContent: _subtitleService.getSubtitleContent,
+    );
+
+    debugPrint('[VideoLoader] 🏁 Total processed subtitles: ${subs.length}');
+    return subs;
+  }
+
   void _loadVideo() async {
     final mediaId = widget.movie?.id ?? widget.tvShow?.id;
     final mediaName = widget.movie?.title ?? widget.tvShow?.name;
@@ -256,10 +406,11 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
 
           if (response.links!.isEmpty) {
             // Nothing directly playable came back. On Android, try resolving a
-            // raw HTML embed page (e.g. vixsrc.to) into a real HLS stream via
-            // a hidden WebView before giving up on this provider. Tizen has no
-            // WebView implementation, so EmbedStreamResolver.resolve() is a
-            // no-op there and this just falls through to "failed" as before.
+            // raw HTML embed page (e.g. vixsrc.to) into a real HLS/DASH stream
+            // via a native WebView request sniffer (see EmbedStreamResolver)
+            // before giving up on this provider. Tizen has no WebView
+            // implementation, so resolve() is a no-op there and this just
+            // falls through to "failed" as before.
             final embedCandidate = rawLinks.firstWhere(
               (l) => l.url.trim().toLowerCase().startsWith('http'),
               orElse: () => rawLinks.first,
@@ -267,15 +418,19 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
             _lastEmbedCandidateUrl = embedCandidate.url;
             if (mounted) {
               debugPrint('[VideoLoader] 🧩 Attempting embed resolution for $providerName: ${embedCandidate.url}');
-              final resolvedHls = await EmbedStreamResolver.resolve(context, embedCandidate.url);
-              if (resolvedHls != null && mounted) {
-                debugPrint('[VideoLoader] ✅ Resolved HLS for $providerName: $resolvedHls');
+              final resolved = await _resolveEmbedDeduped(embedCandidate.url);
+              if (resolved != null && mounted) {
+                debugPrint('[VideoLoader] ✅ Resolved HLS for $providerName: ${resolved.url}');
                 response.links!.add(core.ProviderStreamLink(
                   server: embedCandidate.server,
-                  url: resolvedHls,
+                  url: resolved.url,
                   isM3U8: true,
                   quality: embedCandidate.quality,
-                  headers: embedCandidate.headers,
+                  // The sniffed headers are what the native WebView actually
+                  // sent to fetch this exact manifest (real Referer/Origin/
+                  // User-Agent/cookies), which is more reliable than the
+                  // embed PAGE's guessed headers.
+                  headers: resolved.headers,
                   subtitles: embedCandidate.subtitles,
                 ));
               }
@@ -368,129 +523,8 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
 
       if (!mounted) return;
 
-      // 1. Collect all potential subtitle links
-      List<core.SubtitleLink> allSubtitleLinks = [];
-
-      debugPrint(
-        '[VideoLoader] ℹ️ Subtitle Settings: useExternal=${_settings.useExternalSubtitles}, hasKey=${_settings.opensubtitlesKey.isNotEmpty}',
-      );
-
-      // External Subtitles (Prioritized)
-      if (_settings.useExternalSubtitles &&
-          _settings.opensubtitlesKey.isNotEmpty) {
-        debugPrint(
-          '[VideoLoader] 🔍 External subtitles enabled. Checking Open Subtitles...',
-        );
-        try {
-          final int tmdbId = widget.movie?.id ?? widget.tvShow!.id;
-          // Search for English, Spanish, and the user's default language
-          final validLangs = {
-            'en',
-            'es',
-            _settings.language,
-          }.where((l) => l.isNotEmpty).toSet();
-          final searchLangs = validLangs.join(',');
-
-          final extSubs = await _subtitleService.searchSubtitles(
-            tmdbId: tmdbId,
-            languageCode: searchLangs,
-            apiKey: _settings.opensubtitlesKey,
-            seasonNumber: _currentSeason,
-            episodeNumber: _currentEpisode,
-          );
-
-          if (extSubs.isNotEmpty) {
-            debugPrint(
-              '[VideoLoader] ✅ Found ${extSubs.length} Open Subtitles. Adding top tracks...',
-            );
-
-            // Track added languages to ensure diversity (one best per lang)
-            final addedLangs = <String>{};
-            int addedCount = 0;
-
-            for (var sub in extSubs) {
-              if (addedCount >= 4) break;
-
-              final lang = sub.attr?.language ?? '';
-              final fileId = sub.attr?.files?.first.fileId;
-
-              if (fileId != null && !addedLangs.contains(lang)) {
-                final downloadUrl = await _subtitleService.downloadSubtitle(
-                  fileId,
-                  _settings.opensubtitlesKey,
-                );
-
-                if (downloadUrl != null) {
-                  addedLangs.add(lang);
-                  addedCount++;
-                  allSubtitleLinks.add(
-                    core.SubtitleLink(
-                      file: downloadUrl,
-                      label:
-                          '${sub.attr?.languageName ?? lang} (OpenSubtitles)',
-                    ),
-                  );
-                }
-              }
-            }
-          }
-        } catch (e) {
-          debugPrint(
-            '[VideoLoader] ⚠️ External subtitle search failed: $e',
-          );
-        }
-      }
-
-      // Caffeine API Subtitles (Direct Platform Fallback)
-      if (allSubtitleLinks.isEmpty && _settings.useExternalSubtitles) {
-        try {
-          final int tmdbId = widget.movie?.id ?? widget.tvShow!.id;
-          final apiSubs = await _subtitleService.searchSubtitlesFromCaffeineApi(
-            caffeineBaseUrl: caffeineApiUrl,
-            tmdbId: tmdbId,
-            languageCode: _settings.language.isNotEmpty ? _settings.language : 'en',
-            seasonNumber: _currentSeason,
-            episodeNumber: _currentEpisode,
-            apiKey: caffeineApiKey,
-          );
-          for (var sub in apiSubs) {
-            allSubtitleLinks.add(
-              core.SubtitleLink(
-                file: sub.url,
-                label: '${sub.label} (ReelRiot)',
-              ),
-            );
-          }
-        } catch (e) {
-          debugPrint('[VideoLoader] ⚠️ Caffeine API subtitle search failed: $e');
-        }
-      }
-
-      // Internal subtitles from provider (Fallback/Secondary)
-      if (response.links!.first.subtitles.isNotEmpty) {
-        debugPrint(
-          '[VideoLoader] 📝 Found ${response.links!.first.subtitles.length} internal subtitles',
-        );
-        allSubtitleLinks.addAll(response.links!.first.subtitles);
-      }
-
-      // 2. Parse and process all collected subtitles
-      final langIndex = supportedLanguages.indexWhere(
-        (l) => l.languageCode == _settings.language,
-      );
-      final defaultLanguage = langIndex != -1
-          ? supportedLanguages[langIndex].englishName
-          : 'English';
-
-      final List<CaffeinePlayerSubtitlesSource> subs = await VideoUtils.parseSubtitles(
-        subtitles: allSubtitleLinks,
-        defaultLanguage: defaultLanguage,
-        fetchAllLanguages: true, // TV app generally wants more choice
-        getSubtitleContent: _subtitleService.getSubtitleContent,
-      );
-
-      debugPrint(
-        '[VideoLoader] 🏁 Total processed subtitles: ${subs.length}',
+      final subs = await _collectSubtitles(
+        providerSubtitles: response.links!.first.subtitles,
       );
 
       if (!mounted) return;
@@ -578,6 +612,8 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
         debugPrint(
           '[VideoLoader] 🌐 Falling back to visible embedded player: $_lastEmbedCandidateUrl',
         );
+        final fallbackSubs = await _collectSubtitles();
+        if (!mounted) return;
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => EmbeddedWebPlayerScreen(
@@ -590,6 +626,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
               episodeId: _currentEpisodeId,
               episodeName: _currentEpisodeName,
               startPosition: startPos,
+              subtitles: fallbackSubs,
             ),
           ),
         );

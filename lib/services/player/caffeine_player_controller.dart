@@ -202,11 +202,23 @@ class CaffeinePlayerController extends ChangeNotifier {
     
     // Force seekable to true for better HLS/Proxy support
     (player.platform as dynamic).setProperty('force-seekable', 'yes');
-    
+
     // HLS specific optimizations
     (player.platform as dynamic).setProperty('hls-bitrate', '5000000'); // Cap at 5Mbps for stability
     (player.platform as dynamic).setProperty('cache-pause-initial', 'yes');
     (player.platform as dynamic).setProperty('stream-buffer-size', '8192k');
+
+    // Network resilience: without this, a dropped TCP connection on a flaky
+    // scraped CDN silently stalls the ffmpeg demuxer instead of surfacing an
+    // error, so our retry/fallback logic in PlayerScreen never gets a chance
+    // to run and the user just sees an endless buffering spinner.
+    (player.platform as dynamic).setProperty(
+      'stream-lavf-o',
+      'reconnect=1,reconnect_streamed=1,reconnect_at_eof=1,reconnect_on_network_error=1,reconnect_delay_max=4',
+    );
+    // Bound how long mpv waits on a dead connection before giving up and
+    // emitting an error, instead of hanging indefinitely.
+    (player.platform as dynamic).setProperty('network-timeout', '20');
 
     // Set initial start position via mpv property (most robust way)
     if (startAt > Duration.zero) {

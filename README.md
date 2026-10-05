@@ -42,7 +42,7 @@ flutter run --flavor prod -t lib/main_prod.dart --profile
 #### 2. Clean Install for Fresh Beta Verification
 Use this procedure when testing fresh database synchronization or clean companion pairing:
 ```bash
-flutter clean && flutter pub get
+flutter clean | flutter pub get |
 flutter run --flavor prod -t lib/main_prod.dart --profile --uninstall-first
 ```
 

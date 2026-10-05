@@ -86,6 +86,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       false; // Tracks if BetterPlayerEventType.initialized has fired
   Duration? _lastKnownPosition;
   DateTime? _sessionStartTime;
+  Timer? _bufferingStallTimer;
+  final List<DateTime> _recentBufferingStarts = [];
+  static const _thrashWindow = Duration(seconds: 20);
+  static const _thrashThreshold = 4;
 
   void _safeSetState(VoidCallback fn) {
     if (!mounted || _isDisposed) return;
@@ -125,19 +129,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Ensure we have focus on start
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _mainFocusNode.requestFocus();
+      _armInitWatchdog();
+    });
+  }
 
-      // Watchdog: The Chromecast Amlogic AVC decoder can stall during initialization.
-      // We relax this to 15s for all media types to ensure the hardware decoder has 
-      // enough time to handshake and report dimensions (width > 0).
-      _initWatchdogTimer = Timer(const Duration(seconds: 15), () {
-        if (!mounted || _isDisposed || _hasInitialized || _isHandlingException) {
-          return;
-        }
-        debugPrint(
-          '[PlayerScreen] ⚠️ Init watchdog fired — player not initialized after 15s, forcing reset',
-        );
-        _forcePlayerReset();
-      });
+  // (Re)arms the one-shot "never got video dimensions" watchdog. Must be
+  // called after every setDataSource() — not just the first one — because a
+  // source can keep decoding AUDIO ONLY indefinitely with no error and no
+  // buffering events at all (confirmed via mpv logs: some vixsrc CDN edges
+  // serve a valid audio rendition while the video rendition comes back
+  // empty). That leaves the loading overlay stuck forever with the movie
+  // audibly playing underneath it, and the mid-playback stall watchdog
+  // (_bufferingStallTimer) never engages since it only tracks
+  // bufferingStart/End events and this case produces neither. Without
+  // re-arming here, only the very first setDataSource() call was ever
+  // protected — a retry that also failed to initialize had nothing left to
+  // catch it.
+  void _armInitWatchdog() {
+    _initWatchdogTimer?.cancel();
+    _initWatchdogTimer = Timer(const Duration(seconds: 15), () {
+      if (!mounted || _isDisposed || _hasInitialized || _isHandlingException) {
+        return;
+      }
+      debugPrint(
+        '[PlayerScreen] ⚠️ Init watchdog fired — player not initialized after 15s, forcing reset',
+      );
+      _forcePlayerReset();
     });
   }
 
@@ -432,6 +449,53 @@ class _PlayerScreenState extends State<PlayerScreen> {
             _lastKnownPosition = progress;
           }
         }
+      } else if (event.type == CaffeinePlayerEventType.bufferingStart) {
+        // Any source — not just live — can stall mid-playback with no error
+        // ever firing (confirmed on scraped VOD sources too, not just
+        // sports). Without a watchdog that's an infinite spinner/black
+        // screen, since nothing else forces a retry once playback started.
+        if (_hasInitialized) {
+          final now = DateTime.now();
+          _recentBufferingStarts.add(now);
+          _recentBufferingStarts.removeWhere(
+            (t) => now.difference(t) > _thrashWindow,
+          );
+
+          if (_recentBufferingStarts.length >= _thrashThreshold) {
+            // Rapid repeated buffering — stable for only a second or two
+            // before re-buffering, over and over — is a distinct failure
+            // mode from one long stall: each individual burst can be short
+            // enough that it never reaches the 18s continuous-stall timer
+            // below, since bufferingEnd keeps cancelling it. Seen in
+            // practice: a flaky CDN connection driving repeated audio
+            // underrun restarts can cascade into the hardware decoder's
+            // buffer/surface pipeline corrupting silently on some Amlogic
+            // TV boxes (mali_gralloc buffer-lock errors, no mpv error ever
+            // fires) — the user is left staring at a black screen. Force a
+            // reset the moment thrashing is detected instead.
+            if (!_isDisposed && mounted && !_isHandlingException && !_isRefreshing) {
+              debugPrint(
+                '[PlayerScreen] ⚠️ Detected rapid re-buffering ($_thrashThreshold+ in ${_thrashWindow.inSeconds}s), forcing player reset',
+              );
+              _bufferingStallTimer?.cancel();
+              _forcePlayerReset();
+            }
+          } else {
+            _bufferingStallTimer?.cancel();
+            _bufferingStallTimer = Timer(const Duration(seconds: 18), () {
+              if (_isDisposed || !mounted || _isHandlingException || _isRefreshing) {
+                return;
+              }
+              debugPrint(
+                '[PlayerScreen] ⚠️ Buffering stall watchdog fired (18s), forcing player reset',
+              );
+              _forcePlayerReset();
+            });
+          }
+        }
+      } else if (event.type == CaffeinePlayerEventType.bufferingEnd) {
+        _bufferingStallTimer?.cancel();
+        _bufferingStallTimer = null;
       }
     });
 
@@ -600,7 +664,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
           if (!_isDisposed && mounted) {
             _isHandlingException = false;
-            _safeSetState(() => _isRefreshing = false);
+            _safeSetState(() {
+              _isRefreshing = false;
+              _hasInitialized = false;
+            });
+            _armInitWatchdog();
           }
         } else {
           _isHandlingException = false;
@@ -1211,6 +1279,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _forcePlayerReset() async {
     if (_controller == null || _isDisposed || !mounted) return;
 
+    _recentBufferingStarts.clear();
     _retryCount++;
     if (_retryCount >= 4) {
       debugPrint(
@@ -1264,6 +1333,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       if (!_isDisposed && mounted) {
         _controller?.play();
+        // Reset so the watchdog can judge THIS attempt on its own merits —
+        // otherwise a stale true (e.g. from a mid-playback thrash reset)
+        // would make the re-armed watchdog below a no-op.
+        _safeSetState(() => _hasInitialized = false);
+        _armInitWatchdog();
         debugPrint('[PlayerScreen] ✅ Forced reset complete');
       }
     } catch (e) {
@@ -1278,6 +1352,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _trackSessionEnd();
     _saveTimer?.cancel();
     _initWatchdogTimer?.cancel();
+    _bufferingStallTimer?.cancel();
     _saveCurrentProgress(); // Best effort save
     _visibilitySubscription?.cancel();
     WakelockManager.disable();

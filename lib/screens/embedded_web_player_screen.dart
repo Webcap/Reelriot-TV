@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:caffeine_core/caffeine_core.dart' as core;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:reelriot_tv/services/player/caffeine_player_controller.dart'
+    show CaffeinePlayerSubtitlesSource;
 import 'package:reelriot_tv/services/watch_history_service.dart';
 import 'package:reelriot_tv/utils/tv_keys.dart';
 import 'package:reelriot_tv/utils/wakelock_manager.dart';
@@ -28,6 +30,7 @@ class EmbeddedWebPlayerScreen extends StatefulWidget {
   final int? episodeId;
   final String? episodeName;
   final Duration? startPosition;
+  final List<CaffeinePlayerSubtitlesSource>? subtitles;
 
   const EmbeddedWebPlayerScreen({
     super.key,
@@ -40,6 +43,7 @@ class EmbeddedWebPlayerScreen extends StatefulWidget {
     this.episodeId,
     this.episodeName,
     this.startPosition,
+    this.subtitles,
   });
 
   @override
@@ -55,6 +59,8 @@ class _EmbeddedWebPlayerScreenState extends State<EmbeddedWebPlayerScreen> {
   final WatchHistoryService _historyService = WatchHistoryService();
   Timer? _saveTimer;
   bool _loading = true;
+  bool _showLimitedControlsNotice = false;
+  Timer? _limitedControlsNoticeTimer;
 
   // Real progress, when the page's own player cooperates by posting
   // {currentTime, duration} via window.postMessage (see _attachProgressJs)
@@ -121,6 +127,17 @@ class _EmbeddedWebPlayerScreenState extends State<EmbeddedWebPlayerScreen> {
     _controller.runJavaScript(js);
   }
 
+  // Shows the "limited controls" disclosure for a few seconds after the
+  // page loads, then fades it out — long enough to read once, not a
+  // permanent fixture sitting over the video for the whole session.
+  void _showLimitedControlsNoticeBriefly() {
+    _limitedControlsNoticeTimer?.cancel();
+    if (mounted) setState(() => _showLimitedControlsNotice = true);
+    _limitedControlsNoticeTimer = Timer(const Duration(seconds: 6), () {
+      if (mounted) setState(() => _showLimitedControlsNotice = false);
+    });
+  }
+
   // Hands the TV remote's D-pad/media keys to the WebView's native Android
   // view so the browser engine can route them into the page's own player
   // (including into nested iframes, since that's native input dispatch, not
@@ -131,6 +148,35 @@ class _EmbeddedWebPlayerScreenState extends State<EmbeddedWebPlayerScreen> {
         .invokeMethod('requestFocus')
         .then((found) => debugPrint('[EmbeddedWebPlayer] requestFocus -> found=$found'))
         .catchError((e) => debugPrint('[EmbeddedWebPlayer] requestFocus error: $e'));
+  }
+
+  // Best-effort data for the injected JS: a one-time resume seek and
+  // subtitle <track> injection for whatever <video> elements our script can
+  // actually reach (same-origin ones — the cross-origin case this screen
+  // primarily exists for can't be helped here; that's fixed upstream by
+  // resolving a direct stream before ever falling back to this screen).
+  // Passed as base64 JSON to sidestep any JS string-escaping concerns with
+  // provider-supplied subtitle labels/URLs.
+  String _buildProgressJs() {
+    final startSeconds =
+        (widget.startPosition?.inMilliseconds ?? 0) / 1000.0;
+    final subsPayload = (widget.subtitles ?? [])
+        .where((s) => s.url != null && s.url!.isNotEmpty)
+        .map((s) => {
+              'url': s.url,
+              'label': s.name ?? 'Subtitle',
+              'isDefault': s.isDefault,
+            })
+        .toList();
+    final payloadJson = jsonEncode({
+      'startSeconds': startSeconds,
+      'subtitles': subsPayload,
+    });
+    final encodedPayload = base64Encode(utf8.encode(payloadJson));
+    return _attachProgressJsTemplate.replaceFirst(
+      '__PAYLOAD_B64__',
+      encodedPayload,
+    );
   }
 
   Future<void> _saveProgress({bool isFinished = false}) async {
@@ -212,16 +258,17 @@ class _EmbeddedWebPlayerScreenState extends State<EmbeddedWebPlayerScreen> {
           onPageStarted: (_) => _runJs(_adBlockJs),
           onPageFinished: (_) {
             if (mounted) setState(() => _loading = false);
+            _showLimitedControlsNoticeBriefly();
             _audioPollTimer ??= Timer.periodic(
               const Duration(seconds: 1),
               (_) => _pollAudioActive(),
             );
             _runJs(_adBlockJs);
-            _runJs(_attachProgressJs);
+            _runJs(_buildProgressJs());
             for (final ms in [500, 1200, 2500, 5000]) {
               Future<void>.delayed(Duration(milliseconds: ms), () {
                 _runJs(_adBlockJs);
-                _runJs(_attachProgressJs);
+                _runJs(_buildProgressJs());
               });
             }
             for (final ms in [300, 1000, 2500]) {
@@ -243,7 +290,12 @@ class _EmbeddedWebPlayerScreenState extends State<EmbeddedWebPlayerScreen> {
     _saveTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!_hasRealProgressSignal && _estimatedPositionMs >= _durationMs) {
         _handleFinished();
-      } else {
+      } else if (_hasRealProgressSignal) {
+        // Only autosave mid-session when we have a real signal (postMessage
+        // or a reachable <video> element). The audio-active heuristic alone
+        // is too noisy to trust for a periodic write — it would repeatedly
+        // overwrite a good resume point with a guess. We still save the
+        // best-available estimate once, on exit/finish, below.
         _saveProgress();
       }
     });
@@ -252,6 +304,7 @@ class _EmbeddedWebPlayerScreenState extends State<EmbeddedWebPlayerScreen> {
   @override
   void dispose() {
     _saveTimer?.cancel();
+    _limitedControlsNoticeTimer?.cancel();
     _audioPollTimer?.cancel();
     _focusChannel.invokeMethod('releaseFocus').catchError((_) {});
     WakelockManager.disable();
@@ -287,6 +340,40 @@ class _EmbeddedWebPlayerScreenState extends State<EmbeddedWebPlayerScreen> {
                 const Center(
                   child: CircularProgressIndicator(color: Colors.white),
                 ),
+              // Honest disclosure: this fallback can't offer a real seek bar
+              // or subtitle toggle (the provider's own on-page controls
+              // aren't reliably reachable via D-pad), so say so instead of
+              // silently doing nothing when the user tries. Shown briefly
+              // after load, then faded out rather than left sitting over
+              // the video for the whole session.
+              if (!_loading)
+                Positioned(
+                  left: 16,
+                  bottom: 16,
+                  child: IgnorePointer(
+                    child: AnimatedOpacity(
+                      opacity: _showLimitedControlsNotice ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 600),
+                      curve: Curves.easeOut,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          child: Text(
+                            'Limited controls on this source — press Back to exit',
+                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -312,15 +399,31 @@ const String _adBlockJs = r'''
   })();
 ''';
 
-/// Reports playback progress back to the app. The actual <video> element is
-/// normally inside an origin-keyed iframe our script can't reach directly
-/// (contentDocument/contentWindow access throws), so this relies on the
-/// provider's own player posting {currentTime, duration} to its parent via
-/// window.postMessage — a channel that's explicitly designed to cross that
-/// isolation boundary, unlike direct DOM/JS access. If a provider's player
-/// doesn't do this, progress simply won't be tracked for it.
-const String _attachProgressJs = r'''
+/// Reports playback progress back to the app, and does what it can for
+/// resume/subtitles on whatever <video> elements it can actually reach.
+///
+/// The actual <video> element is normally inside an origin-keyed iframe our
+/// script can't reach directly (contentDocument/contentWindow access
+/// throws), so progress primarily relies on the provider's own player
+/// posting {currentTime, duration} to its parent via window.postMessage — a
+/// channel explicitly designed to cross that isolation boundary, unlike
+/// direct DOM/JS access. If a provider's player doesn't do this, progress
+/// falls back to a cruder on-device heuristic (see `_pollAudioActive`).
+///
+/// For providers whose <video> IS same-origin reachable (not every provider
+/// that lands on this screen is cross-origin — some land here for other
+/// extraction failures), this also does a one-time seek to resume where the
+/// user left off, and injects <track> elements for our already-resolved
+/// subtitle list, since there's no custom control surface here to toggle
+/// them — see the on-screen "limited controls" notice.
+///
+/// `__PAYLOAD_B64__` is replaced by `_buildProgressJs()` with a base64 JSON
+/// blob of `{startSeconds, subtitles: [{url, label, isDefault}]}`, avoiding
+/// any JS-string-escaping concerns with provider/subtitle text.
+const String _attachProgressJsTemplate = r'''
   (function() {
+    var __rrPayload = JSON.parse(atob('__PAYLOAD_B64__'));
+
     function sendProgress(cur, dur, ended) {
       try {
         if (typeof PlaybackProgress !== 'undefined' && cur > 0) {
@@ -331,6 +434,35 @@ const String _attachProgressJs = r'''
           }));
         }
       } catch(e) {}
+    }
+
+    function applyResumeAndSubtitles(v) {
+      if (!v.__rr_seeked && __rrPayload.startSeconds > 1) {
+        v.__rr_seeked = true;
+        try {
+          if (v.readyState > 0) {
+            v.currentTime = __rrPayload.startSeconds;
+          } else {
+            v.addEventListener('loadedmetadata', function() {
+              try { v.currentTime = __rrPayload.startSeconds; } catch(e) {}
+            }, { once: true });
+          }
+        } catch(e) {}
+      }
+
+      if (!v.__rr_subs_injected && __rrPayload.subtitles && __rrPayload.subtitles.length) {
+        v.__rr_subs_injected = true;
+        try {
+          __rrPayload.subtitles.forEach(function(s) {
+            var track = document.createElement('track');
+            track.kind = 'subtitles';
+            track.label = s.label;
+            track.src = s.url;
+            track.default = !!s.isDefault;
+            v.appendChild(track);
+          });
+        } catch(e) {}
+      }
     }
 
     function hookVideos() {
@@ -347,6 +479,7 @@ const String _attachProgressJs = r'''
               sendProgress(v.duration || v.currentTime, v.duration || 0, true);
             });
           }
+          applyResumeAndSubtitles(v);
           if (v.currentTime > 0) sendProgress(v.currentTime, v.duration || 0, false);
         });
       } catch(e) {}
