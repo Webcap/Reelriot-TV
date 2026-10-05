@@ -73,6 +73,15 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
   // if every provider fails to resolve.
   String? _lastEmbedCandidateUrl;
 
+  // Stream URLs that PlayerScreen already exhausted its retries on. Several
+  // catalog "providers" frequently turn out to be the same embed page under
+  // different names (see _embedResolutionCache below) and therefore resolve
+  // to the literal same manifest URL — without this, falling back to the
+  // "next provider" after one of them fails just replays the identical
+  // doomed attempt (same URL, same headers) for every other provider that
+  // shares it, costing minutes before anything actually different is tried.
+  final Set<String> _failedStreamUrls = {};
+
   // Different "providers" from the API frequently turn out to all wrap the
   // same underlying embed page (e.g. several providers all falling back to
   // vixsrc.to server-side for an older title) — observed as every provider
@@ -353,6 +362,7 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
     }
 
     // Reset provider states for a fresh load (used when transitioning to next episode)
+    _failedStreamUrls.clear();
     setState(() {
       _isDone = false;
       _currentProviderIndex = 0;
@@ -442,6 +452,17 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
             completedCount++;
             if (!resultStream.isClosed) {
                resultStream.add(i);
+               // If every provider has now completed and this happened to be
+               // the last one in (regardless of success/failure), the
+               // consumer below needs the -1 sentinel too — otherwise, once
+               // it's worked through every successful index without finding
+               // one that actually plays, it's left awaiting a stream that
+               // will never emit again (nothing else is still in flight to
+               // push it), hanging forever instead of falling through to the
+               // "all providers failed" handling.
+               if (completedCount == _providers.length) {
+                 resultStream.add(-1);
+               }
             }
             return;
           } else {
@@ -515,6 +536,23 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
       final providerName = _providers[winningIndex]['name']!;
       final response = responses[winningIndex]!;
 
+      // Several catalog "providers" are really the same embed page under
+      // different names, so they can resolve to the literal same manifest
+      // URL. If that exact URL already exhausted PlayerScreen's retries for
+      // another provider, trying it again here is guaranteed to fail the
+      // same way — skip straight to a genuinely different one (or give up).
+      if (_failedStreamUrls.contains(response.links!.first.url)) {
+        debugPrint(
+          '[VideoLoader] ⏭️ Skipping $providerName — same stream URL already failed',
+        );
+        if (mounted) {
+          setState(() {
+            _providerStates[winningIndex].status = ProviderStatus.failed;
+          });
+        }
+        continue;
+      }
+
       setState(() {
         _currentProviderIndex = winningIndex;
       });
@@ -565,13 +603,14 @@ class _VideoLoaderScreenState extends State<VideoLoaderScreen> {
 
       if (result == true) {
         debugPrint('[VideoLoader] 🔄 Player signaled fallback. Retrying...');
+        _failedStreamUrls.add(response.links!.first.url);
         if (mounted) {
           setState(() {
             _providerStates[winningIndex].status = ProviderStatus.failed;
             _isDone = false;
           });
         }
-        continue; 
+        continue;
       } else if (result is Map && result['action'] == 'next') {
         debugPrint('[VideoLoader] ⏭️ Player signaled Next Episode.');
         if (nextEpData != null && mounted) {
